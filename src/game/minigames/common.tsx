@@ -89,7 +89,7 @@ export function drawTimerBar(g: CanvasRenderingContext2D, remain: number, total:
 }
 
 export function hudText(g: CanvasRenderingContext2D, text: string, x: number, y: number, align: CanvasTextAlign = 'left', size = 16, color = '#ffffff') {
-  g.font = `bold ${size}px "Jua", sans-serif`;
+  g.font = `bold ${size}px "Galmuri11", sans-serif`;
   g.textAlign = align;
   g.lineWidth = 4;
   g.strokeStyle = 'rgba(0,0,0,0.6)';

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
+import './fonts.css';
 import './globals.css';
+import './retro.css';
 
 export const metadata: Metadata = {
   title: '포켓몬 이등병',
@@ -14,11 +16,6 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet" />
-      </head>
       <body>{children}</body>
     </html>
   );

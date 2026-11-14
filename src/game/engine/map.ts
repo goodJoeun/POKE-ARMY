@@ -525,7 +525,7 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
       for (let x = x0; x < x0 + wpx; x += 18) g.fillRect(x, y0 + 24, 10, 6);
     }
     // 간판
-    g.font = 'bold 15px "Jua", sans-serif';
+    g.font = 'bold 15px "Galmuri11", sans-serif';
     g.textAlign = 'center';
     const tw = g.measureText(b.name).width + 18;
     const cx = x0 + wpx / 2, cy = (y0 + roofBottom) / 2;

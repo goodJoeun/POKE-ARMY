@@ -693,7 +693,7 @@ export default function World() {
       }
 
       // 라벨
-      g.font = 'bold 13px "Jua", sans-serif';
+      g.font = 'bold 13px "Galmuri11", sans-serif';
       g.textAlign = 'center';
       for (const lb of map.labels) {
         const tw = g.measureText(lb.text).width + 12;
@@ -759,7 +759,7 @@ export default function World() {
           y: n.y,
           draw: () => {
             drawMonster(g, sk.look, n.x * TILE, n.y * TILE + 12, 34, { dir: n.dir, t: t + id.length, walking: n.moving, cap: npcCap(st.branch, id) });
-            g.font = '11px "Jua", sans-serif';
+            g.font = '11px "Galmuri11", sans-serif';
             const nm = sk.name;
             const tw = g.measureText(nm).width + 8;
             g.fillStyle = NPC_ROLES[id].officer ? 'rgba(60,50,20,0.8)' : 'rgba(20,30,40,0.7)';
