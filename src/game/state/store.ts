@@ -14,7 +14,7 @@ import { ITEMS, GIFT_AFFINITY } from '../data/items';
 import { rollcallPool, type RollcallQuestion } from '../data/rollcall';
 import { fmt } from '../engine/text';
 import { teleport } from '../engine/runtime';
-import { buildMap } from '../engine/map';
+import { getWorld } from '../engine/map';
 
 // v2: 포켓몬 종 ID로 변경되어 이전 세이브와 호환되지 않음
 const SAVE_KEY = 'poke-army-save-v2';
@@ -252,7 +252,7 @@ export const useGame = create<Store>((set, get) => ({
     const promoted = day > 1 && rank > prevRank;
     if (promoted) logs.push(`🎖️ ${RANKS[rank]}으로 진급했다!`);
     if (day === 7) logs.push('🪖 생활관 분대장 임무를 맡게 됐다.');
-    teleport(5.5, 6.5);
+    teleportToBed(s.branch);
     set({
       minute: 6 * 60,
       eventIdx: 0,
@@ -338,9 +338,8 @@ export const useGame = create<Store>((set, get) => ({
       get().log(`⏰ ${ev.label}에 늦었다.`);
       set({ lateCount: s.lateCount + 1 });
       if (ev.spot) {
-        const map = buildMap(s.branch, BRANCHES[s.branch].trainArea);
-        const sp = map.spots[ev.spot];
-        teleport(sp.x + 0.5, sp.y + 0.5);
+        const sp = getWorld(s.branch, BRANCHES[s.branch].trainArea).spots[ev.spot];
+        teleport(sp.map, sp.x + 0.5, sp.y + 0.5);
       }
     }
     set({ eventBegun: true });
@@ -632,7 +631,7 @@ export const useGame = create<Store>((set, get) => ({
       if (!raw) return false;
       const data = JSON.parse(raw) as Persist;
       set({ ...initialPersist(), ...data, scene: 'world', minigame: null, rollcall: null, toasts: [], busy: false });
-      teleport(5.5, 6.5);
+      teleportToBed(data.branch);
       return true;
     } catch {
       return false;
@@ -647,6 +646,11 @@ export const useGame = create<Store>((set, get) => ({
     try { localStorage.removeItem(SAVE_KEY); } catch { /* noop */ }
   },
 }));
+
+function teleportToBed(branch: BranchId) {
+  const bed = getWorld(branch, BRANCHES[branch].trainArea).spots.bed;
+  teleport(bed.map, bed.x + 0.5, bed.y + 0.5, 'down');
+}
 
 function buildMapSpotLabel(branch: BranchId, spot: SpotId): string {
   const labels: Record<SpotId, string> = {

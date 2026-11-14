@@ -1,21 +1,26 @@
-import type { BranchId, SpotId } from '../types';
+import type { BranchId, Season, SpotId } from '../types';
+import type { Dir } from './drawMonster';
 
 export const TILE = 32;
-export const MAP_W = 50;
-export const MAP_H = 36;
+
+/** 야외 + 건물 내부 맵 */
+export type MapId = 'outdoor' | 'barracks' | 'admin' | 'mess' | 'px' | 'cyber';
 
 export enum T {
   GRASS, ROAD, SAND, FLOOR, WALL, TREE, FENCE, BED, DESK, TABLE, LOCKER,
   WATER, PIER, RUNWAY, TARGET, COUNTER, PC, GYM, SANDBAG, SHIP, BOOTH, STAGE, DIRT, FLOWER, HANGAR,
+  ROOF, DOOR, SHELF, TV, PLANT, BOARD,
 }
 
 const SOLID = new Set<T>([
   T.WALL, T.TREE, T.FENCE, T.BED, T.DESK, T.TABLE, T.LOCKER, T.WATER, T.TARGET,
   T.COUNTER, T.PC, T.GYM, T.SANDBAG, T.SHIP, T.BOOTH, T.STAGE, T.HANGAR,
+  T.ROOF, T.SHELF, T.TV, T.PLANT, T.BOARD,
 ]);
 
 export interface SpotDef {
   id: SpotId;
+  map: MapId;
   x: number;
   y: number;
   label: string;
@@ -27,74 +32,177 @@ export interface Label {
   y: number;
 }
 
+/** 문: 해당 타일 쪽으로 걸어 들어가면 다른 맵으로 이동 */
+export interface Door {
+  tiles: [number, number][];
+  to: MapId;
+  /** 들어갈 때 눌러야 하는 방향 */
+  enterDir: Dir;
+  /** 도착 위치 (도착 맵 좌표, 타일 단위 실수) */
+  arrive: { x: number; y: number; dir: Dir };
+}
+
+/** 야외 맵에 그려지는 건물 외관 */
+export interface Building {
+  id: MapId;
+  name: string;
+  x0: number; y0: number; x1: number; y1: number;
+  roof: string;
+  door: [number, number][];
+}
+
 export interface GameMap {
+  id: MapId;
+  name: string;
+  indoor: boolean;
+  w: number;
+  h: number;
   tiles: T[][];
-  spots: Record<SpotId, SpotDef>;
   labels: Label[];
+  doors: Door[];
+  buildings: Building[];
   branch: BranchId;
 }
 
-function make(): T[][] {
-  return Array.from({ length: MAP_H }, () => Array.from({ length: MAP_W }, () => T.GRASS));
+export interface WorldDef {
+  maps: Record<MapId, GameMap>;
+  spots: Record<SpotId, SpotDef>;
 }
 
-export function buildMap(branch: BranchId, trainLabel: string): GameMap {
-  const m = make();
+export const MAP_NAMES: Record<MapId, string> = {
+  outdoor: '부대 야외', barracks: '생활관', admin: '행정반', mess: '식당', px: 'PX', cyber: '싸지방',
+};
+
+function grid(w: number, h: number, t: T): T[][] {
+  return Array.from({ length: h }, () => Array.from({ length: w }, () => t));
+}
+
+function painter(m: T[][]) {
   const fill = (x0: number, y0: number, x1: number, y1: number, t: T) => {
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (m[y] && m[y][x] !== undefined) m[y][x] = t;
   };
   const set = (x: number, y: number, t: T) => { if (m[y] && m[y][x] !== undefined) m[y][x] = t; };
-  const room = (x0: number, y0: number, x1: number, y1: number, doors: [number, number][]) => {
-    fill(x0, y0, x1, y1, T.WALL);
-    fill(x0 + 1, y0 + 1, x1 - 1, y1 - 1, T.FLOOR);
-    for (const [dx, dy] of doors) set(dx, dy, T.FLOOR);
-  };
+  return { fill, set };
+}
 
-  // 펜스 & 외곽 나무
-  fill(0, 0, MAP_W - 1, 0, T.FENCE);
-  fill(0, MAP_H - 1, MAP_W - 1, MAP_H - 1, T.FENCE);
-  fill(0, 0, 0, MAP_H - 1, T.FENCE);
-  fill(MAP_W - 1, 0, MAP_W - 1, MAP_H - 1, T.FENCE);
+// ───────────── 건물 외관 (야외 기준 좌표) ─────────────
+interface BuildingSpec {
+  id: Exclude<MapId, 'outdoor'>;
+  x0: number; y0: number; x1: number; y1: number;
+  door: [number, number][];
+  roof: string;
+  /** 밖으로 나왔을 때 위치 */
+  exit: { x: number; y: number };
+}
+
+const BUILDINGS: BuildingSpec[] = [
+  { id: 'barracks', x0: 2, y0: 2, x1: 16, y1: 12, door: [[8, 12], [9, 12]], roof: '#5a7a4a', exit: { x: 9, y: 13.5 } },
+  { id: 'admin', x0: 18, y0: 2, x1: 26, y1: 8, door: [[22, 8]], roof: '#4a6a8a', exit: { x: 22.5, y: 9.5 } },
+  { id: 'mess', x0: 33, y0: 2, x1: 41, y1: 10, door: [[36, 10], [37, 10]], roof: '#a0503a', exit: { x: 37, y: 11.5 } },
+  { id: 'px', x0: 43, y0: 2, x1: 48, y1: 8, door: [[45, 8]], roof: '#c08a3a', exit: { x: 45.5, y: 9.5 } },
+  { id: 'cyber', x0: 2, y0: 17, x1: 7, y1: 22, door: [[4, 22], [5, 22]], roof: '#6a6a7a', exit: { x: 5, y: 23.5 } },
+];
+
+// ───────────── 건물 내부 ─────────────
+interface Interior {
+  map: GameMap;
+  spots: SpotDef[];
+}
+
+function interiorShell(id: Exclude<MapId, 'outdoor'>, w: number, h: number, door: [number, number][], branch: BranchId): { map: GameMap; m: T[][]; p: ReturnType<typeof painter> } {
+  const m = grid(w, h, T.FLOOR);
+  const p = painter(m);
+  p.fill(0, 0, w - 1, 0, T.WALL);
+  p.fill(0, h - 1, w - 1, h - 1, T.WALL);
+  p.fill(0, 0, 0, h - 1, T.WALL);
+  p.fill(w - 1, 0, w - 1, h - 1, T.WALL);
+  for (const [x, y] of door) p.set(x, y, T.DOOR);
+  const spec = BUILDINGS.find((b) => b.id === id)!;
+  const cx = door.reduce((a, d) => a + d[0], 0) / door.length + 0.5;
+  const map: GameMap = {
+    id, name: MAP_NAMES[id], indoor: true, w, h, tiles: m, labels: [], buildings: [], branch,
+    doors: [{ tiles: door, to: 'outdoor', enterDir: 'down', arrive: { x: spec.exit.x, y: spec.exit.y, dir: 'down' } }],
+  };
+  // 입구 바로 안쪽 위치를 건물 외관 문과 연결
+  (map as GameMap & { entry: { x: number; y: number } }).entry = { x: cx, y: h - 1.5 };
+  return { map, m, p };
+}
+
+function buildInteriors(branch: BranchId): Interior[] {
+  const out: Interior[] = [];
+
+  // 생활관 15x11 — 침상 6개 x 2열, 관물대
+  {
+    const { map, p } = interiorShell('barracks', 15, 11, [[6, 10], [7, 10]], branch);
+    for (const x of [1, 3, 5, 9, 11, 13]) {
+      p.set(x, 1, T.LOCKER);
+      p.set(x, 2, T.BED); p.set(x, 3, T.BED);
+      p.set(x, 7, T.BED); p.set(x, 8, T.BED);
+      p.set(x, 9, T.LOCKER);
+    }
+    p.set(7, 1, T.TV);
+    p.set(8, 1, T.BOARD);
+    out.push({ map, spots: [
+      { id: 'bed', map: 'barracks', x: 3, y: 4, label: '내 침상' },
+      { id: 'barracks', map: 'barracks', x: 7, y: 5, label: '생활관' },
+    ] });
+  }
+  // 행정반 11x8
+  {
+    const { map, p } = interiorShell('admin', 11, 8, [[5, 7]], branch);
+    p.fill(1, 1, 9, 1, T.LOCKER);
+    p.set(4, 3, T.DESK); p.set(5, 3, T.DESK); p.set(6, 3, T.DESK);
+    p.set(1, 5, T.DESK); p.set(2, 5, T.DESK);
+    p.set(8, 5, T.DESK); p.set(9, 5, T.DESK);
+    p.set(9, 6, T.PLANT); p.set(1, 6, T.PLANT);
+    out.push({ map, spots: [{ id: 'admin', map: 'admin', x: 5, y: 5, label: '행정반' }] });
+  }
+  // 식당 13x10
+  {
+    const { map, p } = interiorShell('mess', 13, 10, [[6, 9]], branch);
+    p.fill(1, 1, 11, 1, T.COUNTER);
+    p.fill(2, 4, 4, 4, T.TABLE); p.fill(8, 4, 10, 4, T.TABLE);
+    p.fill(2, 7, 4, 7, T.TABLE); p.fill(8, 7, 10, 7, T.TABLE);
+    out.push({ map, spots: [{ id: 'mess', map: 'mess', x: 6, y: 2, label: '식당 배식대' }] });
+  }
+  // PX 9x7
+  {
+    const { map, p } = interiorShell('px', 9, 7, [[4, 6]], branch);
+    p.fill(1, 1, 7, 1, T.COUNTER);
+    p.set(1, 3, T.SHELF); p.set(1, 4, T.SHELF); p.set(7, 3, T.SHELF); p.set(7, 4, T.SHELF);
+    out.push({ map, spots: [{ id: 'px', map: 'px', x: 4, y: 2, label: 'PX 계산대' }] });
+  }
+  // 싸지방 9x7
+  {
+    const { map, p } = interiorShell('cyber', 9, 7, [[4, 6]], branch);
+    p.fill(1, 1, 7, 1, T.PC);
+    p.set(1, 4, T.PC); p.set(7, 4, T.PC);
+    p.set(1, 5, T.PLANT);
+    out.push({ map, spots: [{ id: 'cyber', map: 'cyber', x: 4, y: 2, label: '싸지방 PC' }] });
+  }
+  return out;
+}
+
+// ───────────── 야외 ─────────────
+function buildOutdoor(branch: BranchId, trainLabel: string): { map: GameMap; spots: SpotDef[] } {
+  const W = 50, H = 36;
+  const m = grid(W, H, T.GRASS);
+  const { fill, set } = painter(m);
+
+  fill(0, 0, W - 1, 0, T.FENCE);
+  fill(0, H - 1, W - 1, H - 1, T.FENCE);
+  fill(0, 0, 0, H - 1, T.FENCE);
+  fill(W - 1, 0, W - 1, H - 1, T.FENCE);
 
   // 도로
-  fill(1, 14, MAP_W - 2, 15, T.ROAD);
-  fill(8, 12, 9, MAP_H - 1, T.ROAD);
-  fill(30, 1, 31, MAP_H - 2, T.ROAD);
+  fill(1, 14, W - 2, 15, T.ROAD);
+  fill(8, 12, 9, H - 1, T.ROAD);
+  fill(30, 1, 31, H - 2, T.ROAD);
   fill(22, 9, 22, 13, T.ROAD);
   fill(36, 11, 37, 13, T.ROAD);
   fill(45, 9, 45, 13, T.ROAD);
   fill(10, 30, 29, 30, T.ROAD);
-
-  // 생활관
-  room(2, 2, 16, 12, [[8, 12], [9, 12]]);
-  for (const x of [3, 5, 7, 11, 13, 15]) {
-    set(x, 3, T.LOCKER);
-    set(x, 4, T.BED); set(x, 5, T.BED);
-    set(x, 9, T.BED); set(x, 10, T.BED);
-    set(x, 11, T.LOCKER);
-  }
-
-  // 행정반
-  room(18, 2, 26, 8, [[22, 8]]);
-  fill(19, 3, 25, 3, T.LOCKER);
-  set(20, 5, T.DESK); set(21, 5, T.DESK);
-  set(24, 5, T.DESK); set(25, 5, T.DESK);
-  set(22, 4, T.DESK);
-
-  // 식당
-  room(33, 2, 41, 10, [[36, 10], [37, 10]]);
-  fill(34, 3, 40, 3, T.COUNTER);
-  fill(34, 6, 35, 6, T.TABLE); fill(38, 6, 40, 6, T.TABLE);
-  fill(34, 8, 35, 8, T.TABLE); fill(38, 8, 40, 8, T.TABLE);
-
-  // PX
-  room(43, 2, 48, 8, [[45, 8]]);
-  fill(44, 3, 47, 3, T.COUNTER);
-  set(47, 5, T.LOCKER); set(47, 6, T.LOCKER);
-
-  // 싸지방
-  room(2, 17, 7, 22, [[7, 19], [7, 20]]);
-  fill(3, 18, 6, 18, T.PC);
+  fill(4, 23, 7, 23, T.ROAD);
 
   // 체력단련장 (야외)
   fill(2, 24, 7, 28, T.DIRT);
@@ -106,7 +214,7 @@ export function buildMap(branch: BranchId, trainLabel: string): GameMap {
 
   // 위병소
   set(5, 31, T.BOOTH); set(6, 31, T.BOOTH); set(5, 32, T.BOOTH); set(6, 32, T.BOOTH);
-  set(8, MAP_H - 1, T.ROAD); set(9, MAP_H - 1, T.ROAD);
+  set(8, H - 1, T.ROAD); set(9, H - 1, T.ROAD);
 
   // 나무 / 꽃
   const trees: [number, number][] = [
@@ -140,37 +248,73 @@ export function buildMap(branch: BranchId, trainLabel: string): GameMap {
     trainSpot = [40, 24];
   }
 
-  const spots: Record<SpotId, SpotDef> = {
-    bed: { id: 'bed', x: 5, y: 6, label: '내 침상' },
-    barracks: { id: 'barracks', x: 9, y: 7, label: '생활관' },
-    mess: { id: 'mess', x: 37, y: 4, label: '식당 배식대' },
-    px: { id: 'px', x: 45, y: 4, label: 'PX 계산대' },
-    admin: { id: 'admin', x: 22, y: 6, label: '행정반' },
-    cyber: { id: 'cyber', x: 4, y: 19, label: '싸지방 PC' },
-    gym: { id: 'gym', x: 4, y: 26, label: '체력단련장' },
-    parade: { id: 'parade', x: 20, y: 22, label: '연병장' },
-    train: { id: 'train', x: trainSpot[0], y: trainSpot[1], label: trainLabel },
-    post: { id: 'post', x: 7, y: 32, label: '위병소 초소' },
-    gate: { id: 'gate', x: 9, y: 34, label: '위병소 정문' },
-  };
+  // 건물 외관: 지붕(통과 불가) + 문
+  const buildings: Building[] = [];
+  const doors: Door[] = [];
+  for (const b of BUILDINGS) {
+    fill(b.x0, b.y0, b.x1, b.y1, T.ROOF);
+    for (const [x, y] of b.door) set(x, y, T.DOOR);
+    buildings.push({ id: b.id, name: MAP_NAMES[b.id], x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, roof: b.roof, door: b.door });
+    doors.push({ tiles: b.door, to: b.id, enterDir: 'up', arrive: { x: 0, y: 0, dir: 'up' } }); // arrive는 아래에서 내부 입구로 채움
+  }
 
   const labels: Label[] = [
-    { text: '생활관', x: 9.5, y: 1.6 },
-    { text: '행정반', x: 22.5, y: 1.6 },
-    { text: '식당', x: 37.5, y: 1.6 },
-    { text: 'PX', x: 46, y: 1.6 },
-    { text: '싸지방', x: 5, y: 16.6 },
-    { text: '체력단련장', x: 5, y: 23.6 },
+    { text: '체력단련장', x: 5, y: 29.4 },
     { text: '연병장', x: 20.5, y: 28.6 },
     { text: '위병소', x: 6, y: 30.4 },
     { text: trainLabel, x: 41, y: 16.6 },
   ];
 
-  return { tiles: m, spots, labels, branch };
+  const map: GameMap = { id: 'outdoor', name: MAP_NAMES.outdoor, indoor: false, w: W, h: H, tiles: m, labels, doors, buildings, branch };
+  const spots: SpotDef[] = [
+    { id: 'gym', map: 'outdoor', x: 4, y: 26, label: '체력단련장' },
+    { id: 'parade', map: 'outdoor', x: 20, y: 22, label: '연병장' },
+    { id: 'train', map: 'outdoor', x: trainSpot[0], y: trainSpot[1], label: trainLabel },
+    { id: 'post', map: 'outdoor', x: 7, y: 32, label: '위병소 초소' },
+    { id: 'gate', map: 'outdoor', x: 9, y: 34, label: '위병소 정문' },
+  ];
+  return { map, spots };
+}
+
+const worldCache = new Map<string, WorldDef>();
+
+/** 군별 월드(야외 + 건물 내부)를 만든다. 결과는 캐시된다. */
+export function getWorld(branch: BranchId, trainLabel: string): WorldDef {
+  const key = `${branch}:${trainLabel}`;
+  const cached = worldCache.get(key);
+  if (cached) return cached;
+  const outdoor = buildOutdoor(branch, trainLabel);
+  const interiors = buildInteriors(branch);
+  const maps = { outdoor: outdoor.map } as Record<MapId, GameMap>;
+  const spots = {} as Record<SpotId, SpotDef>;
+  for (const s of outdoor.spots) spots[s.id] = s;
+  for (const it of interiors) {
+    maps[it.map.id] = it.map;
+    for (const s of it.spots) spots[s.id] = s;
+    const entry = (it.map as GameMap & { entry: { x: number; y: number } }).entry;
+    const door = outdoor.map.doors.find((d) => d.to === it.map.id)!;
+    door.arrive = { x: entry.x, y: entry.y, dir: 'up' };
+  }
+  const world = { maps, spots };
+  worldCache.set(key, world);
+  return world;
+}
+
+/** 다른 맵으로 가기 위해 지금 맵에서 향해야 할 문 (야외가 허브) */
+export function doorToward(world: WorldDef, from: MapId, to: MapId): Door | null {
+  if (from === to) return null;
+  const hop: MapId = from === 'outdoor' ? to : 'outdoor';
+  return world.maps[from].doors.find((d) => d.to === hop) ?? null;
+}
+
+export function doorCenter(d: Door): { x: number; y: number } {
+  const x = d.tiles.reduce((a, t) => a + t[0], 0) / d.tiles.length + 0.5;
+  const y = d.tiles[0][1] + 0.5;
+  return { x, y };
 }
 
 export function isSolid(map: GameMap, tx: number, ty: number): boolean {
-  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+  if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return true;
   return SOLID.has(map.tiles[ty][tx]);
 }
 
@@ -191,7 +335,8 @@ export function findPath(map: GameMap, sx: number, sy: number, gx: number, gy: n
     if (!near) return [];
     [sx, sy] = near;
   }
-  const key = (x: number, y: number) => y * MAP_W + x;
+  const W = map.w;
+  const key = (x: number, y: number) => y * W + x;
   const prev = new Map<number, number>();
   const q: number[] = [key(sx, sy)];
   prev.set(key(sx, sy), -1);
@@ -200,7 +345,7 @@ export function findPath(map: GameMap, sx: number, sy: number, gx: number, gy: n
   while (head < q.length) {
     const cur = q[head++];
     if (cur === goal) break;
-    const cx = cur % MAP_W, cy = Math.floor(cur / MAP_W);
+    const cx = cur % W, cy = Math.floor(cur / W);
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = cx + dx, ny = cy + dy;
       if (isSolid(map, nx, ny)) continue;
@@ -214,7 +359,7 @@ export function findPath(map: GameMap, sx: number, sy: number, gx: number, gy: n
   const path: [number, number][] = [];
   let c = goal;
   while (c !== -1) {
-    path.push([c % MAP_W, Math.floor(c / MAP_W)]);
+    path.push([c % W, Math.floor(c / W)]);
     c = prev.get(c)!;
   }
   return path.reverse();
@@ -237,16 +382,32 @@ function hash(x: number, y: number) {
   return ((h ^ (h >> 16)) >>> 0) / 4294967295;
 }
 
-export function renderMapCanvas(map: GameMap, season: 'winter' | 'spring' | 'summer' | 'autumn'): HTMLCanvasElement {
+function shade(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const c = (v: number) => Math.max(0, Math.min(255, v + amt));
+  return `#${((c((n >> 16) & 255) << 16) | (c((n >> 8) & 255) << 8) | c(n & 255)).toString(16).padStart(6, '0')}`;
+}
+
+const FLOOR_COLORS: Record<MapId, [string, string]> = {
+  outdoor: ['#e9d9b8', '#e2d0ac'],
+  barracks: ['#d8c49a', '#cfba8e'],
+  admin: ['#c8ccd2', '#bec3ca'],
+  mess: ['#e6e2d6', '#dcd8cb'],
+  px: ['#e8dcc8', '#dfd2bc'],
+  cyber: ['#b8c4d0', '#aebac7'],
+};
+
+export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement {
   const c = document.createElement('canvas');
-  c.width = MAP_W * TILE;
-  c.height = MAP_H * TILE;
+  c.width = map.w * TILE;
+  c.height = map.h * TILE;
   const g = c.getContext('2d')!;
   const grass = season === 'winter' ? '#e6eef2' : season === 'autumn' ? '#b8a860' : season === 'spring' ? '#8cc46a' : '#6fae54';
   const grassDot = season === 'winter' ? '#cfdde4' : season === 'autumn' ? '#a08a48' : '#5a9a44';
+  const [fa, fb] = FLOOR_COLORS[map.id];
 
-  for (let y = 0; y < MAP_H; y++) {
-    for (let x = 0; x < MAP_W; x++) {
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
       const t = map.tiles[y][x];
       const px = x * TILE, py = y * TILE;
       const r = hash(x, y);
@@ -264,7 +425,8 @@ export function renderMapCanvas(map: GameMap, season: 'winter' | 'spring' | 'sum
         case T.SAND: case T.STAGE: base(season === 'winter' ? '#e8e4dc' : '#dcc89c'); if (r > 0.6) { g.fillStyle = '#cbb488'; g.fillRect(px + r * 28, py + r * 20, 2, 2); } break;
         case T.DIRT: case T.TARGET: case T.SANDBAG: case T.GYM: base(season === 'winter' ? '#dcd6cc' : '#b89a72'); if (r > 0.6) { g.fillStyle = '#a0845e'; g.fillRect(px + r * 26, py + r * 26, 3, 2); } break;
         case T.FLOOR: case T.BED: case T.DESK: case T.TABLE: case T.LOCKER: case T.COUNTER: case T.PC:
-          base((x + y) % 2 === 0 ? '#e9d9b8' : '#e2d0ac');
+        case T.SHELF: case T.TV: case T.PLANT: case T.BOARD:
+          base((x + y) % 2 === 0 ? fa : fb);
           break;
         case T.WALL: base('#7a6a5a'); g.fillStyle = '#9a8a76'; g.fillRect(px, py, TILE, 6); g.fillStyle = '#5e5044'; g.fillRect(px, py + TILE - 3, TILE, 3); break;
         case T.FENCE: base(grass); g.fillStyle = '#6a6a6a'; g.fillRect(px, py + 12, TILE, 4); g.fillRect(px + 4, py + 4, 3, 24); g.fillRect(px + 22, py + 4, 3, 24); break;
@@ -272,6 +434,13 @@ export function renderMapCanvas(map: GameMap, season: 'winter' | 'spring' | 'sum
         case T.PIER: base('#a07850'); g.fillStyle = '#7a5838'; for (let i = 0; i < 4; i++) g.fillRect(px, py + i * 8 + 7, TILE, 1); break;
         case T.RUNWAY: base('#5a5e64'); if (y === 24 && x % 3 === 0) { g.fillStyle = '#f2f2f2'; g.fillRect(px + 4, py + 14, 22, 4); } if (y === 21 || y === 28) { g.fillStyle = '#e8d24a'; g.fillRect(px, y === 21 ? py : py + TILE - 3, TILE, 3); } break;
         case T.BOOTH: case T.HANGAR: base('#c9b38a'); break;
+        case T.DOOR:
+          if (map.indoor) {
+            base('#3a3026');
+            g.fillStyle = '#8a6a4a'; g.fillRect(px + 2, py + 2, TILE - 4, TILE - 6);
+            g.fillStyle = '#c8a878'; g.fillRect(px + 4, py + TILE - 8, TILE - 8, 4);
+          }
+          break;
       }
       // 오브젝트
       switch (t) {
@@ -293,7 +462,7 @@ export function renderMapCanvas(map: GameMap, season: 'winter' | 'spring' | 'sum
         }
         case T.BED: {
           const top = map.tiles[y - 1]?.[x] !== T.BED;
-          g.fillStyle = '#5a7a4a'; g.fillRect(px + 3, py + (top ? 3 : 0), TILE - 6, TILE - (top ? 3 : 3));
+          g.fillStyle = '#5a7a4a'; g.fillRect(px + 3, py + (top ? 3 : 0), TILE - 6, TILE - 3);
           if (top) { g.fillStyle = '#f2f2ea'; g.fillRect(px + 6, py + 5, TILE - 12, 8); }
           g.fillStyle = '#4a6a3a'; g.fillRect(px + 3, py + TILE - 4, TILE - 6, 2);
           break;
@@ -302,6 +471,15 @@ export function renderMapCanvas(map: GameMap, season: 'winter' | 'spring' | 'sum
         case T.DESK: case T.TABLE: g.fillStyle = t === T.DESK ? '#8a6a4a' : '#b08a5a'; g.fillRect(px + 1, py + 6, TILE - 2, TILE - 10); g.fillStyle = '#6a4a2a'; g.fillRect(px + 1, py + TILE - 6, TILE - 2, 2); break;
         case T.COUNTER: g.fillStyle = '#a0a8b0'; g.fillRect(px, py + 4, TILE, TILE - 8); g.fillStyle = '#c8d0d8'; g.fillRect(px, py + 4, TILE, 5); break;
         case T.PC: g.fillStyle = '#8a6a4a'; g.fillRect(px + 1, py + 14, TILE - 2, 14); g.fillStyle = '#2a2e38'; g.fillRect(px + 7, py + 3, 18, 13); g.fillStyle = '#5ac0f2'; g.fillRect(px + 9, py + 5, 14, 9); break;
+        case T.SHELF: {
+          g.fillStyle = '#7a5a3a'; g.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          const cols = ['#e04a4a', '#f2c230', '#4a90d8', '#5ab04a', '#f28a3a'];
+          for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { g.fillStyle = cols[(i * 3 + j + x) % cols.length]; g.fillRect(px + 5 + j * 8, py + 5 + i * 8, 6, 6); }
+          break;
+        }
+        case T.TV: g.fillStyle = '#2a2a30'; g.fillRect(px + 2, py + 4, TILE - 4, TILE - 12); g.fillStyle = '#6ab0e0'; g.fillRect(px + 5, py + 7, TILE - 10, TILE - 18); break;
+        case T.BOARD: g.fillStyle = '#5a7a5a'; g.fillRect(px + 2, py + 4, TILE - 4, TILE - 10); g.fillStyle = '#f2f2ea'; g.fillRect(px + 6, py + 8, 8, 6); g.fillRect(px + 17, py + 10, 8, 6); break;
+        case T.PLANT: g.fillStyle = '#8a5a3a'; g.fillRect(px + 10, py + 18, 12, 11); g.fillStyle = '#3f9a4a'; g.beginPath(); g.arc(px + 16, py + 13, 10, 0, Math.PI * 2); g.fill(); break;
         case T.GYM: g.fillStyle = '#4a4a52'; g.fillRect(px + 4, py + 14, 24, 4); g.fillRect(px + 2, py + 8, 6, 16); g.fillRect(px + 24, py + 8, 6, 16); break;
         case T.TARGET: g.fillStyle = '#6a4a2a'; g.fillRect(px + 15, py + 18, 3, 12); g.fillStyle = '#f2f2ea'; g.beginPath(); g.arc(px + 16, py + 13, 10, 0, Math.PI * 2); g.fill(); g.fillStyle = '#d03a3a'; g.beginPath(); g.arc(px + 16, py + 13, 6, 0, Math.PI * 2); g.fill(); g.fillStyle = '#f2f2ea'; g.beginPath(); g.arc(px + 16, py + 13, 2.5, 0, Math.PI * 2); g.fill(); break;
         case T.SANDBAG: g.fillStyle = '#a89a6a'; for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { g.beginPath(); g.ellipse(px + 8 + j * 16 - (i % 2) * 4, py + 12 + i * 10, 8, 5, 0, 0, Math.PI * 2); g.fill(); } break;
@@ -311,8 +489,52 @@ export function renderMapCanvas(map: GameMap, season: 'winter' | 'spring' | 'sum
       }
     }
   }
+
+  // 건물 외관 (지붕 + 정면 벽 + 문)
+  for (const b of map.buildings) {
+    const x0 = b.x0 * TILE, y0 = b.y0 * TILE, wpx = (b.x1 - b.x0 + 1) * TILE;
+    const facadeTop = (b.y1 - 1) * TILE;
+    const bottom = (b.y1 + 1) * TILE;
+    // 그림자
+    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x0 + 6, y0 + 8, wpx, bottom - y0);
+    // 정면 벽
+    g.fillStyle = '#e8dcc0'; g.fillRect(x0, facadeTop, wpx, bottom - facadeTop);
+    g.fillStyle = '#c8b898'; g.fillRect(x0, bottom - 4, wpx, 4);
+    for (let x = b.x0; x <= b.x1; x++) {
+      if (b.door.some(([dx]) => dx === x) || x === b.x0 || x === b.x1) continue;
+      if ((x - b.x0) % 2 === 1) {
+        g.fillStyle = '#5a7a9a'; g.fillRect(x * TILE + 6, facadeTop + 10, TILE - 12, 18);
+        g.fillStyle = '#a8c8e8'; g.fillRect(x * TILE + 8, facadeTop + 12, TILE - 16, 6);
+      }
+    }
+    // 문
+    const dx0 = Math.min(...b.door.map((d) => d[0])) * TILE;
+    const dx1 = (Math.max(...b.door.map((d) => d[0])) + 1) * TILE;
+    g.fillStyle = '#5a3e2a'; g.fillRect(dx0 + 3, facadeTop + 14, dx1 - dx0 - 6, bottom - facadeTop - 14);
+    g.fillStyle = '#8a6040'; g.fillRect(dx0 + 6, facadeTop + 18, dx1 - dx0 - 12, bottom - facadeTop - 20);
+    g.fillStyle = '#f2c230'; g.fillRect(dx1 - 12, facadeTop + 38, 3, 4);
+    // 지붕
+    const roofBottom = facadeTop + 4;
+    g.fillStyle = b.roof; g.fillRect(x0 - 4, y0, wpx + 8, roofBottom - y0);
+    g.fillStyle = shade(b.roof, -25);
+    for (let y = y0 + 10; y < roofBottom - 4; y += 12) g.fillRect(x0 - 4, y, wpx + 8, 2);
+    g.fillStyle = shade(b.roof, -45); g.fillRect(x0 - 4, roofBottom - 6, wpx + 8, 6);
+    if (season === 'winter') {
+      g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(x0 - 4, y0, wpx + 8, Math.min(26, (roofBottom - y0) * 0.4));
+      g.fillStyle = 'rgba(255,255,255,0.6)';
+      for (let x = x0; x < x0 + wpx; x += 18) g.fillRect(x, y0 + 24, 10, 6);
+    }
+    // 간판
+    g.font = 'bold 15px "Jua", sans-serif';
+    g.textAlign = 'center';
+    const tw = g.measureText(b.name).width + 18;
+    const cx = x0 + wpx / 2, cy = (y0 + roofBottom) / 2;
+    g.fillStyle = 'rgba(40,30,20,0.8)'; g.fillRect(cx - tw / 2, cy - 12, tw, 24);
+    g.fillStyle = '#fff6dc'; g.fillText(b.name, cx, cy + 5);
+  }
+
   // 함정 (해군)
-  if (map.branch === 'navy') {
+  if (map.id === 'outdoor' && map.branch === 'navy') {
     const sx = 42 * TILE, sy = 25 * TILE, sw = 6 * TILE, sh = 7 * TILE;
     g.fillStyle = '#7a8692';
     g.beginPath();
@@ -326,7 +548,9 @@ export function renderMapCanvas(map: GameMap, season: 'winter' | 'spring' | 'sum
     g.fillStyle = '#5a6670'; g.fillRect(sx + 60, sy + 80, sw - 120, 40);
     g.fillStyle = '#ffffff'; g.font = 'bold 14px sans-serif'; g.textAlign = 'center'; g.fillText('PKG-999', sx + sw / 2, sy + 190);
   }
-  // 위병소 지붕
-  g.fillStyle = '#5a6a4a'; g.fillRect(5 * TILE - 4, 31 * TILE - 6, 2 * TILE + 8, 8);
+  if (map.id === 'outdoor') {
+    // 위병소 지붕
+    g.fillStyle = '#5a6a4a'; g.fillRect(5 * TILE - 4, 31 * TILE - 6, 2 * TILE + 8, 8);
+  }
   return c;
 }

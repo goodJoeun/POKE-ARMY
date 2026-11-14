@@ -188,6 +188,17 @@ button.big:not(.primary) { background: #fff8e6; color: var(--ink); box-shadow: 0
 }
 .prompt.urgent { border-color: var(--bad); background: #ffe8e0; }
 .rank-hint { display: none; }
+.location-badge {
+  position: absolute; left: 10px; bottom: 10px; background: rgba(40, 50, 30, 0.9); color: #fff8e6;
+  border-radius: 99px; padding: 6px 14px; font-family: 'Jua', sans-serif; font-size: 14px; pointer-events: none;
+}
+.location-banner {
+  position: absolute; top: 36%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;
+  font-family: 'Jua', sans-serif; font-size: 34px; color: #fff8e6; text-shadow: 0 3px 0 #0008, 0 0 18px #0006;
+  animation: banner 1.6s ease forwards;
+}
+@keyframes banner { 0% { opacity: 0; transform: translate(-50%, -40%); } 20%, 70% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; } }
+@media (max-width: 760px) { .location-badge { bottom: auto; top: 120px; left: auto; right: 10px; } }
 
 .touchpad { display: none; }
 @media (pointer: coarse) {

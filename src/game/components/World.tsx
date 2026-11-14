@@ -9,7 +9,10 @@ import { FAREWELL_LINES, SMALL_TALK } from '../data/dialogues';
 import { ITEMS } from '../data/items';
 import { QUESTS } from '../data/quests';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
-import { MAP_H, MAP_W, TILE, buildMap, collides, findPath, renderMapCanvas, type GameMap } from '../engine/map';
+import {
+  MAP_NAMES, TILE, collides, doorCenter, doorToward, findPath, getWorld, renderMapCanvas,
+  type Door, type MapId, type WorldDef,
+} from '../engine/map';
 import { drawMonster, type Dir } from '../engine/drawMonster';
 import { runtime } from '../engine/runtime';
 import { npcCap } from '../engine/speakers';
@@ -21,13 +24,19 @@ import Notebook from './Notebook';
 import RollcallModal from './RollcallModal';
 
 interface NpcRt {
+  map: MapId;
   x: number;
   y: number;
   dir: Dir;
   moving: boolean;
   path: [number, number][];
   targetKey: string;
+  /** 경로 끝에 도착하면 통과할 문 (다른 건물로 이동 중) */
+  viaDoor: Door | null;
 }
+
+/** 맵 + 타일 좌표 */
+type Pos = [MapId, number, number];
 
 type Overlay =
   | { type: 'dialogue'; script: DialogueScript; onChoice?: (c: Choice) => void; onDone?: () => void }
@@ -43,15 +52,18 @@ interface Interactable {
   spot?: SpotId;
 }
 
-const FREE_POS: Record<NpcId, [number, number]> = {
-  sgt: [12, 7], senior: [5, 26], buddy: [5, 19], junior: [14, 7], junior2: [24, 25],
-  lt: [21, 6], sgm: [16, 21], cpt: [23, 4],
+/** 자유 시간에 머무는 곳 */
+const FREE_POS: Record<NpcId, Pos> = {
+  sgt: ['barracks', 10, 5], senior: ['outdoor', 5, 26], buddy: ['cyber', 2, 2], junior: ['barracks', 12, 5], junior2: ['outdoor', 24, 25],
+  lt: ['admin', 1, 4], sgm: ['outdoor', 16, 21], cpt: ['admin', 5, 2],
 };
-const MEAL_POS: Partial<Record<NpcId, [number, number]>> = {
-  sgt: [34, 7], senior: [35, 7], buddy: [38, 7], junior: [39, 7], junior2: [40, 9],
+/** 식사 시간 식당 자리 */
+const MEAL_POS: Partial<Record<NpcId, Pos>> = {
+  sgt: ['mess', 2, 5], senior: ['mess', 3, 5], buddy: ['mess', 8, 5], junior: ['mess', 9, 5], junior2: ['mess', 10, 8],
 };
-const NIGHT_POS: Partial<Record<NpcId, [number, number]>> = {
-  sgt: [12, 7], senior: [13, 8], buddy: [6, 7], junior: [14, 6], junior2: [11, 8],
+/** 취침 전 생활관 자리 */
+const NIGHT_POS: Partial<Record<NpcId, Pos>> = {
+  sgt: ['barracks', 10, 5], senior: ['barracks', 11, 6], buddy: ['barracks', 4, 5], junior: ['barracks', 12, 4], junior2: ['barracks', 9, 6],
 };
 const FORMATION: [number, number][] = [[-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2]];
 
@@ -62,14 +74,18 @@ export default function World() {
   const rollcall = useGame((s) => s.rollcall);
   const b = BRANCHES[branch];
   const season = seasonForDay(day);
-  const map = useMemo<GameMap>(() => buildMap(branch, b.trainArea), [branch, b.trainArea]);
+  const world = useMemo<WorldDef>(() => getWorld(branch, b.trainArea), [branch, b.trainArea]);
   const look = findSpecies(speciesId)!.look;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const mapCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const mapCanvasRef = useRef<Partial<Record<MapId, HTMLCanvasElement>>>({});
+  const [location, setLocation] = useState<MapId>(runtime.player.map);
   const keys = useRef<Record<string, boolean>>({});
   const npcs = useRef<Partial<Record<NpcId, NpcRt>>>({});
+  if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+    (window as unknown as Record<string, unknown>).__npcs = npcs; // 개발용 디버그 핸들
+  }
   const [overlay, setOverlayState] = useState<Overlay>(null);
   const overlayRef = useRef<Overlay>(null);
   const [prompt, setPrompt] = useState<Interactable | null>(null);
@@ -85,10 +101,12 @@ export default function World() {
 
   useEffect(() => { fastRef.current = fast; }, [fast]);
 
-  // 정적 맵 렌더
+  // 정적 맵 렌더 (야외 + 모든 건물 내부)
   useEffect(() => {
-    mapCanvasRef.current = renderMapCanvas(map, season);
-  }, [map, season]);
+    const out: Partial<Record<MapId, HTMLCanvasElement>> = {};
+    for (const m of Object.values(world.maps)) out[m.id] = renderMapCanvas(m, season);
+    mapCanvasRef.current = out;
+  }, [world, season]);
 
   // 시간 흐름
   useEffect(() => {
@@ -120,41 +138,41 @@ export default function World() {
   }, [b.unit, setOverlay]);
 
   // NPC 목표 위치
-  const npcTarget = useCallback((id: NpcId): [number, number] => {
+  const npcTarget = useCallback((id: NpcId): Pos => {
     const st = useGame.getState();
     const m = st.minute;
     const ev = st.currentEvent();
     const officer = NPC_ROLES[id].officer;
     if (st.day >= TOTAL_DAYS) {
-      const pos = FREE_POS[id];
-      return id === 'lt' || id === 'cpt' || id === 'sgm' ? [map.spots.gate.x + (id === 'lt' ? -2 : id === 'cpt' ? 2 : 3), map.spots.gate.y - 2] : pos;
+      const gate = world.spots.gate;
+      return id === 'lt' || id === 'cpt' || id === 'sgm' ? ['outdoor', gate.x + (id === 'lt' ? -2 : id === 'cpt' ? 2 : 3), gate.y - 2] : FREE_POS[id];
     }
     if (ev && !st.eventBegun && m >= ev.start && ev.spot) {
-      const sp = map.spots[ev.spot];
+      const sp = world.spots[ev.spot];
       if (!officer) {
         const soldiers = presentNpcs(st.day).filter((n) => !NPC_ROLES[n].officer);
         const i = soldiers.indexOf(id);
         const [dx, dy] = FORMATION[i % FORMATION.length];
-        return [sp.x + dx, sp.y + dy];
+        return [sp.map, sp.x + dx, sp.y + dy];
       }
-      if (id === 'lt' || (id === 'cpt' && ev.kind === 'rollcall_am')) return [sp.x + (id === 'cpt' ? 1 : -1), sp.y - 4];
+      if (id === 'lt' || (id === 'cpt' && ev.kind === 'rollcall_am')) return [sp.map, sp.x + (id === 'cpt' ? 1 : -1), sp.y - 4];
     }
     if (!officer) {
       if (isMealTime(m) && MEAL_POS[id]) return MEAL_POS[id]!;
       if (m >= 21 * 60 && NIGHT_POS[id]) return NIGHT_POS[id]!;
     }
     return FREE_POS[id];
-  }, [map]);
+  }, [world]);
 
-  // 상호작용 찾기
+  // 상호작용 찾기 (같은 맵에 있는 것만)
   const findInteractable = useCallback((): Interactable | null => {
     const st = useGame.getState();
     const p = runtime.player;
     const ev = st.currentEvent();
     const dist = (x: number, y: number) => Math.hypot(p.x - x, p.y - y);
     if (ev && !st.eventBegun && ev.spot && (st.minute >= ev.start || ev.kind === 'farewell')) {
-      const sp = map.spots[ev.spot];
-      if (dist(sp.x + 0.5, sp.y + 0.5) < 2.2) {
+      const sp = world.spots[ev.spot];
+      if (sp.map === p.map && dist(sp.x + 0.5, sp.y + 0.5) < 2.2) {
         return { key: `ev_${ev.id}`, kind: 'event', label: ev.kind === 'farewell' ? '위병소를 나선다 (전역!)' : `집합 완료 보고: ${ev.label}`, spot: ev.spot };
       }
     }
@@ -162,7 +180,7 @@ export default function World() {
     let bd = 1.5;
     for (const id of presentNpcs(st.day)) {
       const n = npcs.current[id];
-      if (!n) continue;
+      if (!n || n.map !== p.map) continue;
       const d = dist(n.x, n.y);
       if (d < bd) {
         bd = d;
@@ -172,11 +190,11 @@ export default function World() {
     if (best) return best;
     const spotNames: Partial<Record<SpotId, string>> = { bed: '내 침상', mess: '식당 배식대', px: 'PX', admin: '행정반', cyber: '싸지방 PC', gym: '체력단련 기구' };
     for (const [id, label] of Object.entries(spotNames) as [SpotId, string][]) {
-      const sp = map.spots[id];
-      if (dist(sp.x + 0.5, sp.y + 0.5) < 1.4) return { key: `spot_${id}`, kind: 'spot', spot: id, label };
+      const sp = world.spots[id];
+      if (sp.map === p.map && dist(sp.x + 0.5, sp.y + 0.5) < 1.4) return { key: `spot_${id}`, kind: 'spot', spot: id, label };
     }
     return null;
-  }, [map]);
+  }, [world]);
 
   // ───── 상호작용 핸들러 ─────
   const openNpc = useCallback((id: NpcId) => {
@@ -406,11 +424,35 @@ export default function World() {
     const ro = new ResizeObserver(resize);
     ro.observe(wrapRef.current!);
 
-    // NPC 초기 배치
+    // NPC 경로 설정: 같은 맵이면 바로, 다른 맵이면 문을 거쳐서 (야외가 허브)
+    const route = (n: NpcRt, target: Pos) => {
+      const [tm, tx, ty] = target;
+      n.targetKey = `${tm}:${tx},${ty}`;
+      const map = world.maps[n.map];
+      if (n.map === tm) {
+        n.viaDoor = null;
+        n.path = findPath(map, Math.floor(n.x), Math.floor(n.y), tx, ty).slice(1);
+        return;
+      }
+      const door = doorToward(world, n.map, tm);
+      if (!door) return;
+      n.viaDoor = door;
+      const [dx, dy] = door.tiles[0];
+      n.path = findPath(map, Math.floor(n.x), Math.floor(n.y), dx, dy).slice(1);
+    };
+
+    // NPC 초기 배치 (목표 위치에 바로)
     for (const id of presentNpcs(useGame.getState().day)) {
-      const [tx, ty] = npcTarget(id);
-      npcs.current[id] = { x: tx + 0.5, y: ty + 0.5, dir: 'down', moving: false, path: [], targetKey: `${tx},${ty}` };
+      const [tm, tx, ty] = npcTarget(id);
+      npcs.current[id] = { map: tm, x: tx + 0.5, y: ty + 0.5, dir: 'down', moving: false, path: [], targetKey: `${tm}:${tx},${ty}`, viaDoor: null };
     }
+
+    // 문 전환 페이드: 0 → 1(검정) 사이 맵 교체 → 0
+    let fade = 0;
+    let fading: { door: Door; phase: 'out' | 'in' } | null = null;
+    let doorCooldown = 0;
+    let shownMap: MapId = runtime.player.map;
+    setLocation(shownMap);
 
     let npcRetarget = 0;
     const loop = (now: number) => {
@@ -420,10 +462,30 @@ export default function World() {
       const st = useGame.getState();
       const p = runtime.player;
       const blocked = !!overlayRef.current || !!st.rollcall;
+      const map = world.maps[p.map];
+
+      // 문 전환 진행
+      if (fading) {
+        if (fading.phase === 'out') {
+          fade = Math.min(1, fade + dt * 6);
+          if (fade >= 1) {
+            const d = fading.door;
+            p.map = d.to; p.x = d.arrive.x; p.y = d.arrive.y; p.dir = d.arrive.dir;
+            fading.phase = 'in';
+            doorCooldown = 0.4;
+          }
+        } else {
+          fade = Math.max(0, fade - dt * 5);
+          if (fade <= 0) fading = null;
+        }
+      }
+      doorCooldown = Math.max(0, doorCooldown - dt);
+      // 문 이동·지각 순간이동 등으로 맵이 바뀌면 위치 표시 갱신
+      if (p.map !== shownMap) { shownMap = p.map; setLocation(p.map); }
 
       // 플레이어 이동
       let vx = 0, vy = 0;
-      if (!blocked) {
+      if (!blocked && !fading) {
         const k = keys.current;
         if (k['arrowleft'] || k['a']) vx -= 1;
         if (k['arrowright'] || k['d']) vx += 1;
@@ -441,6 +503,15 @@ export default function World() {
         p.moving = true;
       } else p.moving = false;
 
+      // 문으로 걸어 들어가면 다른 맵으로
+      if (!fading && !blocked && doorCooldown <= 0 && p.moving) {
+        for (const d of map.doors) {
+          if (p.dir !== d.enterDir) continue;
+          const hit = d.tiles.some(([tx, ty]) => Math.abs(p.x - (tx + 0.5)) < 0.9 && Math.abs(p.y - (ty + 0.5)) < 1.0);
+          if (hit) { fading = { door: d, phase: 'out' }; break; }
+        }
+      }
+
       // NPC 갱신
       npcRetarget -= dt;
       const present = presentNpcs(st.day);
@@ -448,13 +519,13 @@ export default function World() {
         npcRetarget = 0.5;
         for (const id of present) {
           let n = npcs.current[id];
-          const [tx, ty] = npcTarget(id);
-          const key = `${tx},${ty}`;
-          if (!n) { n = npcs.current[id] = { x: tx + 0.5, y: ty + 0.5, dir: 'down', moving: false, path: [], targetKey: key }; continue; }
-          if (n.targetKey !== key) {
-            n.targetKey = key;
-            n.path = findPath(map, Math.floor(n.x), Math.floor(n.y), tx, ty).slice(1);
+          const target = npcTarget(id);
+          const key = `${target[0]}:${target[1]},${target[2]}`;
+          if (!n) {
+            n = npcs.current[id] = { map: target[0], x: target[1] + 0.5, y: target[2] + 0.5, dir: 'down', moving: false, path: [], targetKey: key, viaDoor: null };
+            continue;
           }
+          if (n.targetKey !== key) route(n, target);
         }
         for (const id of Object.keys(npcs.current) as NpcId[]) if (!present.includes(id)) delete npcs.current[id];
       }
@@ -471,9 +542,15 @@ export default function World() {
           else { n.x += (dx / d) * sp; n.y += (dy / d) * sp; }
           n.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
           n.moving = true;
+        } else if (n.viaDoor && !blocked) {
+          // 문에 도착 → 다음 맵으로 넘어가서 다시 경로 설정
+          const d = n.viaDoor;
+          n.map = d.to; n.x = d.arrive.x; n.y = d.arrive.y; n.dir = d.arrive.dir;
+          n.viaDoor = null;
+          route(n, npcTarget(id));
         } else {
           n.moving = false;
-          if (!blocked) {
+          if (!blocked && n.map === p.map) {
             const dd = Math.hypot(p.x - n.x, p.y - n.y);
             if (dd < 2.5) n.dir = Math.abs(p.x - n.x) > Math.abs(p.y - n.y) ? (p.x > n.x ? 'right' : 'left') : p.y > n.y ? 'down' : 'up';
           }
@@ -481,7 +558,7 @@ export default function World() {
       }
 
       // 상호작용 프롬프트
-      const it = blocked ? null : findInteractable();
+      const it = blocked || fading ? null : findInteractable();
       if ((it?.key ?? null) !== (promptRef.current?.key ?? null)) {
         promptRef.current = it;
         setPrompt(it);
@@ -489,20 +566,28 @@ export default function World() {
 
       // ── 그리기 ──
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
-      g.fillStyle = '#2a2a2a';
+      g.fillStyle = map.indoor ? '#14110e' : '#2a2a2a';
       g.fillRect(0, 0, w, h);
-      const zoom = w < 700 ? 0.8 : 1;
+      const mw = map.w * TILE, mh = map.h * TILE;
+      // 실내는 화면에 맞게 확대
+      const zoom = map.indoor
+        ? Math.max(1, Math.min(1.7, Math.min(w / mw, (h - 60) / mh) * 0.92))
+        : w < 700 ? 0.8 : 1;
       const vw = w / zoom, vh = h / zoom;
       let camX = p.x * TILE - vw / 2;
       let camY = p.y * TILE - vh / 2;
-      camX = Math.max(0, Math.min(MAP_W * TILE - vw, camX));
-      camY = Math.max(0, Math.min(MAP_H * TILE - vh, camY));
-      if (MAP_W * TILE < vw) camX = (MAP_W * TILE - vw) / 2;
-      if (MAP_H * TILE < vh) camY = (MAP_H * TILE - vh) / 2;
+      camX = Math.max(0, Math.min(mw - vw, camX));
+      camY = Math.max(0, Math.min(mh - vh, camY));
+      if (mw < vw) camX = (mw - vw) / 2;
+      if (mh < vh) camY = (mh - vh) / 2;
       g.save();
       g.scale(zoom, zoom);
       g.translate(-Math.round(camX), -Math.round(camY));
-      if (mapCanvasRef.current) g.drawImage(mapCanvasRef.current, 0, 0);
+      const mc = mapCanvasRef.current[p.map];
+      if (mc) {
+        if (map.indoor) { g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(6, 10, mw, mh); }
+        g.drawImage(mc, 0, 0);
+      }
 
       // 라벨
       g.font = 'bold 13px "Jua", sans-serif';
@@ -515,19 +600,36 @@ export default function World() {
         g.fillText(lb.text, lb.x * TILE, lb.y * TILE + 3);
       }
 
+      // 다른 맵에 있는 목표는 그쪽으로 가는 문을 가리킨다
+      const guide = (tm: MapId, x: number, y: number): { x: number; y: number; viaDoor: boolean } | null => {
+        if (tm === p.map) return { x, y, viaDoor: false };
+        const d = doorToward(world, p.map, tm);
+        if (!d) return null;
+        const c = doorCenter(d);
+        return { x: c.x, y: c.y + (map.indoor ? 0 : 0.3), viaDoor: true };
+      };
+
       // 목표 지점 표시
       const ev = st.currentEvent();
-      let target: { x: number; y: number } | null = null;
+      let target: { x: number; y: number; viaDoor: boolean } | null = null;
       if (ev && !st.eventBegun && ev.spot && (st.minute >= ev.start || ev.kind === 'farewell')) {
-        const sp = map.spots[ev.spot];
-        target = { x: sp.x + 0.5, y: sp.y + 0.5 };
+        const sp = world.spots[ev.spot];
+        target = guide(sp.map, sp.x + 0.5, sp.y + 0.5);
       }
       const qTargets: { x: number; y: number }[] = [];
       for (const q of st.quests) {
         const step = (QUEST_STEPS[q.id] ?? [])[q.step];
         if (!step) continue;
-        if (step.spot) qTargets.push({ x: map.spots[step.spot].x + 0.5, y: map.spots[step.spot].y + 0.5 });
-        if (step.npc && npcs.current[step.npc]) qTargets.push({ x: npcs.current[step.npc]!.x, y: npcs.current[step.npc]!.y - 1.3 });
+        if (step.spot) {
+          const sp = world.spots[step.spot];
+          const gd = guide(sp.map, sp.x + 0.5, sp.y + 0.5);
+          if (gd) qTargets.push({ x: gd.x, y: gd.y - (gd.viaDoor ? 0.6 : 0) });
+        }
+        if (step.npc && npcs.current[step.npc]) {
+          const n = npcs.current[step.npc]!;
+          const gd = guide(n.map, n.x, n.y - 1.3);
+          if (gd) qTargets.push({ x: gd.x, y: gd.y - (gd.viaDoor ? 0.6 : 0) });
+        }
       }
       for (const qt of qTargets) {
         g.fillStyle = '#f2c230';
@@ -536,18 +638,19 @@ export default function World() {
       }
       if (target) {
         const pulse = (Math.sin(t * 5) + 1) / 2;
+        const r0 = target.viaDoor ? 18 : 26;
         g.strokeStyle = `rgba(255,80,60,${0.5 + pulse * 0.5})`;
         g.lineWidth = 3;
-        g.beginPath(); g.arc(target.x * TILE, target.y * TILE, 26 + pulse * 10, 0, Math.PI * 2); g.stroke();
+        g.beginPath(); g.arc(target.x * TILE, target.y * TILE, r0 + pulse * 10, 0, Math.PI * 2); g.stroke();
         g.fillStyle = 'rgba(255,80,60,0.18)';
-        g.beginPath(); g.arc(target.x * TILE, target.y * TILE, 26, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.arc(target.x * TILE, target.y * TILE, r0, 0, Math.PI * 2); g.fill();
       }
 
-      // 엔티티 (y 정렬)
+      // 엔티티 (y 정렬, 같은 맵만)
       const ents: { y: number; draw: () => void }[] = [];
       for (const id of present) {
         const n = npcs.current[id];
-        if (!n) continue;
+        if (!n || n.map !== p.map) continue;
         const sk = NPC_SKINS[st.branch][id];
         ents.push({
           y: n.y,
@@ -557,9 +660,9 @@ export default function World() {
             const nm = sk.name;
             const tw = g.measureText(nm).width + 8;
             g.fillStyle = NPC_ROLES[id].officer ? 'rgba(60,50,20,0.8)' : 'rgba(20,30,40,0.7)';
-            g.fillRect(n.x * TILE - tw / 2, n.y * TILE - 38, tw, 14);
+            g.fillRect(n.x * TILE - tw / 2, n.y * TILE - 44, tw, 14);
             g.fillStyle = NPC_ROLES[id].officer ? '#ffe08a' : '#ffffff';
-            g.fillText(nm, n.x * TILE, n.y * TILE - 27);
+            g.fillText(nm, n.x * TILE, n.y * TILE - 33);
           },
         });
       }
@@ -569,20 +672,21 @@ export default function World() {
           drawMonster(g, look, p.x * TILE, p.y * TILE + 12, 36, { dir: p.dir, t, walking: p.moving, cap: b.cap });
           g.fillStyle = '#ffe14a';
           g.beginPath();
-          g.moveTo(p.x * TILE - 5, p.y * TILE - 40 + Math.sin(t * 4) * 2);
-          g.lineTo(p.x * TILE + 5, p.y * TILE - 40 + Math.sin(t * 4) * 2);
-          g.lineTo(p.x * TILE, p.y * TILE - 33 + Math.sin(t * 4) * 2);
+          g.moveTo(p.x * TILE - 5, p.y * TILE - 46 + Math.sin(t * 4) * 2);
+          g.lineTo(p.x * TILE + 5, p.y * TILE - 46 + Math.sin(t * 4) * 2);
+          g.lineTo(p.x * TILE, p.y * TILE - 39 + Math.sin(t * 4) * 2);
           g.fill();
         },
       });
       ents.sort((a, c) => a.y - c.y).forEach((e) => e.draw());
       g.restore();
 
-      // 밤 조명
+      // 밤 조명 (실내는 조명이 켜져 있어 덜 어둡다)
       const m = st.minute;
       let dark = 0;
       if (m < 7 * 60) dark = 0.28 * (1 - (m - 360) / 60);
       if (m > 18 * 60 + 30) dark = Math.min(0.42, ((m - (18 * 60 + 30)) / 150) * 0.42);
+      if (map.indoor) dark *= 0.35;
       if (dark > 0) {
         g.fillStyle = `rgba(20,24,60,${dark})`;
         g.fillRect(0, 0, w, h);
@@ -605,11 +709,17 @@ export default function World() {
         }
       }
 
+      // 페이드
+      if (fade > 0) {
+        g.fillStyle = `rgba(0,0,0,${fade})`;
+        g.fillRect(0, 0, w, h);
+      }
+
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
-  }, [map, look, b.cap, npcTarget, findInteractable]);
+  }, [world, look, b.cap, npcTarget, findInteractable]);
 
   const closeOverlay = useCallback(() => {
     const o = overlayRef.current;
@@ -626,6 +736,8 @@ export default function World() {
         <canvas ref={canvasRef} />
       </div>
       <Hud onNotebook={() => setOverlay({ type: 'notebook' })} fast={fast} onToggleFast={() => setFast((v) => !v)} />
+      <div className="location-badge">📍 {location === 'outdoor' ? `${b.unit} 야외` : MAP_NAMES[location]}</div>
+      {location !== 'outdoor' && <div key={location} className="location-banner">{MAP_NAMES[location]}</div>}
       {prompt && !overlay && !rollcall && (
         <div className={`prompt ${prompt.kind === 'event' ? 'urgent' : ''}`} onClick={interact}>
           <kbd>E</kbd> {fmt(prompt.label, ctx)}
