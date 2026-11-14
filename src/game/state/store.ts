@@ -71,6 +71,8 @@ interface Store extends Persist {
   scene: Scene;
   minigame: MinigameRequest | null;
   rollcall: RollcallState | null;
+  /** 지각해서 혼나는 중 (월드가 꾸중 대화를 띄운다) */
+  lateCall: { eventId: string; who: NpcId; label: string } | null;
   toasts: Toast[];
   busy: boolean;
 
@@ -85,6 +87,12 @@ interface Store extends Persist {
   schedule: () => ScheduleEvent[];
   currentEvent: () => ScheduleEvent | null;
   beginEvent: (late?: boolean) => void;
+  /** 집합 시간 초과: 장소로 이동 + 페널티, 꾸중 대화 대기 */
+  handleLate: () => void;
+  /** 꾸중 대화가 끝나면 호출 → 일정 시작 */
+  resolveLate: () => void;
+  /** 1일차 늦잠 장면 종료 → 연병장으로 끌려가 아침 점호 */
+  oversleep: () => void;
   completeEvent: () => void;
   answerRollcall: (choice: number) => boolean;
   closeRollcall: () => void;
@@ -111,6 +119,8 @@ interface Store extends Persist {
   load: () => boolean;
   hasSave: () => boolean;
   wipe: () => void;
+  /** 저장 데이터를 지우고 타이틀로 (새로 시작) */
+  resetAll: () => void;
 }
 
 const zeroAff = (): Record<NpcId, number> =>
@@ -207,13 +217,14 @@ export const useGame = create<Store>((set, get) => ({
   scene: 'title',
   minigame: null,
   rollcall: null,
+  lateCall: null,
   toasts: [],
   busy: false,
 
   go: (s) => set({ scene: s }),
 
   newGame: (name) => {
-    set({ ...initialPersist(), name: name.trim() || '김몬스', scene: 'home', minigame: null, rollcall: null, toasts: [], busy: false });
+    set({ ...initialPersist(), name: name.trim() || '김몬스', scene: 'home', minigame: null, rollcall: null, lateCall: null, toasts: [], busy: false });
   },
 
   chooseBranch: (b) => set({ branch: b, scene: 'quiz' }),
@@ -267,6 +278,7 @@ export const useGame = create<Store>((set, get) => ({
       scene: promoted ? 'promotion' : 'world',
       minigame: null,
       rollcall: null,
+      lateCall: null,
       busy: false,
     });
     for (const l of logs) get().toast(l, 'info');
@@ -295,7 +307,9 @@ export const useGame = create<Store>((set, get) => ({
 
   tick: (mins) => {
     const s = get();
-    if (s.busy || s.scene !== 'world') return;
+    if (s.busy || s.scene !== 'world' || s.lateCall) return;
+    // 1일차: 늦잠 장면이 끝나기 전에는 시간이 흐르지 않는다
+    if (s.day === 1 && !s.flags.wokeUp) return;
     const minute = s.minute + mins;
     set({ minute });
     const ev = get().currentEvent();
@@ -322,26 +336,45 @@ export const useGame = create<Store>((set, get) => ({
       return;
     }
     ann(`call_${ev.id}`, ev.start, `📢 집합! ${ev.label} — ${ev.spot ? buildMapSpotLabel(get().branch, ev.spot) : ''}`, 'alert');
-    if (minute > ev.start + ev.window) get().beginEvent(true);
+    if (minute > ev.start + ev.window) get().handleLate();
+  },
+
+  handleLate: () => {
+    const s = get();
+    const ev = s.currentEvent();
+    if (!ev || s.eventBegun || s.lateCall) return;
+    const leader = currentSquadLeader(s.day);
+    const who: NpcId = leader === 'me' ? 'lt' : leader;
+    // 집합 장소로 끌려가서 혼난다 → 월드에서 꾸중 대화 후 일정 시작(resolveLate)
+    if (ev.spot) {
+      const sp = getWorld(s.branch, BRANCHES[s.branch].trainArea).spots[ev.spot];
+      teleport(sp.map, sp.x + 0.5, sp.y + 1.5, 'up');
+    }
+    get().applyEffects({ discipline: -8, mental: -3, affinity: { [who]: -5 } }, '지각');
+    get().log(`⏰ ${ev.label}에 늦어서 ${NPC_SKINS[s.branch][who].name}에게 혼났다.`);
+    set({ lateCount: s.lateCount + 1, lateCall: { eventId: ev.id, who, label: ev.label } });
+  },
+
+  resolveLate: () => {
+    set({ lateCall: null });
+    get().beginEvent(true);
+  },
+
+  oversleep: () => {
+    const s = get();
+    const sp = getWorld(s.branch, BRANCHES[s.branch].trainArea).spots.parade;
+    teleport(sp.map, sp.x + 0.5, sp.y + 1.5, 'up');
+    get().applyEffects({ discipline: -5, mental: -2, flag: 'wokeUp' }, '전입 첫날 늦잠');
+    get().log('😱 눈을 떠 보니 포켓몬이 되어 있었다. 게다가 전입 첫날부터 늦잠…');
+    get().markSeen('sgt_first');
+    set({ lateCount: s.lateCount + 1, minute: Math.max(s.minute, 6 * 60 + 25) });
+    get().beginEvent(true);
   },
 
   beginEvent: (late = false) => {
     const s = get();
     const ev = s.currentEvent();
     if (!ev || s.eventBegun) return;
-    if (late) {
-      const leader = currentSquadLeader(s.day);
-      const who: NpcId = leader === 'me' ? 'lt' : leader;
-      const nm = NPC_SKINS[s.branch][who].name;
-      get().applyEffects({ discipline: -8, mental: -3, affinity: { [who]: -5 } }, '지각');
-      get().toast(`⏰ 지각! ${nm}: "집합 시간은 생명이다!"`, 'bad');
-      get().log(`⏰ ${ev.label}에 늦었다.`);
-      set({ lateCount: s.lateCount + 1 });
-      if (ev.spot) {
-        const sp = getWorld(s.branch, BRANCHES[s.branch].trainArea).spots[ev.spot];
-        teleport(sp.map, sp.x + 0.5, sp.y + 0.5);
-      }
-    }
     set({ eventBegun: true });
     switch (ev.kind) {
       case 'rollcall_am':
@@ -630,7 +663,7 @@ export const useGame = create<Store>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return false;
       const data = JSON.parse(raw) as Persist;
-      set({ ...initialPersist(), ...data, scene: 'world', minigame: null, rollcall: null, toasts: [], busy: false });
+      set({ ...initialPersist(), ...data, scene: 'world', minigame: null, rollcall: null, lateCall: null, toasts: [], busy: false });
       teleportToBed(data.branch);
       return true;
     } catch {
@@ -644,6 +677,11 @@ export const useGame = create<Store>((set, get) => ({
 
   wipe: () => {
     try { localStorage.removeItem(SAVE_KEY); } catch { /* noop */ }
+  },
+
+  resetAll: () => {
+    get().wipe();
+    set({ ...initialPersist(), scene: 'title', minigame: null, rollcall: null, lateCall: null, toasts: [], busy: false });
   },
 }));
 

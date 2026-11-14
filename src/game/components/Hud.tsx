@@ -1,5 +1,6 @@
 'use client';
 import { useGame, spotLabel, fatigueOf } from '../state/store';
+import { useSettings } from '../state/settings';
 import { BRANCHES, RANKS, SEASON_LABEL, TOTAL_DAYS, fmtMoney, fmtTime, rankIdxForDay, seasonForDay, serviceMonth } from '../data/branches';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
 
@@ -35,7 +36,7 @@ export default function Hud({ onNotebook, fast, onToggleFast }: { onNotebook: ()
   let objective = '';
   if (ev) {
     if (ev.kind === 'farewell') objective = `🎊 모두에게 작별 인사 후 ${spotLabel(s.branch, 'gate')}으로!`;
-    else if (called) objective = `📢 ${ev.label} → ${ev.spot ? spotLabel(s.branch, ev.spot) : ''} (${fmtTime(ev.start + ev.window)}까지)`;
+    else if (called) objective = `📢 ${ev.label} → ${ev.spot ? spotLabel(s.branch, ev.spot) : ''} (${fmtTime(ev.start + ev.window)}까지 · ${Math.max(0, ev.start + ev.window - s.minute)}분 남음)`;
     else objective = `⏭ ${fmtTime(ev.start)} ${ev.label}${ev.spot ? ` @ ${spotLabel(s.branch, ev.spot)}` : ''}`;
   }
   let period = '이동 시간';
@@ -75,6 +76,7 @@ export default function Hud({ onNotebook, fast, onToggleFast }: { onNotebook: ()
       <div className="hud-buttons">
         <button onClick={onNotebook}>📒 수첩 <kbd>Tab</kbd></button>
         <button className={fast ? 'on' : ''} onClick={onToggleFast}>⏩ 빨리감기 <kbd>F</kbd></button>
+        <button onClick={() => useSettings.getState().openMenu()}>⚙️ 설정 <kbd>Esc</kbd></button>
       </div>
     </>
   );

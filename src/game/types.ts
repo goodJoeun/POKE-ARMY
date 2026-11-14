@@ -52,6 +52,8 @@ export interface Species {
   name: string;
   type: string;
   desc: string;
+  /** 잠에서 깨어 자기 몸을 처음 깨닫는 순간의 묘사 */
+  wake: string;
   /** 성격 분석 결과와의 궁합 가중치 */
   weights: Partial<Record<Archetype, number>>;
   look: MonsterLook;

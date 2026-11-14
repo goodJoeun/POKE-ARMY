@@ -9,6 +9,7 @@ import { FAREWELL_LINES, SMALL_TALK } from '../data/dialogues';
 import { ITEMS } from '../data/items';
 import { QUESTS } from '../data/quests';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
+import { MS_PER_MINUTE, useSettings } from '../state/settings';
 import {
   MAP_NAMES, TILE, collides, doorCenter, doorToward, findPath, getWorld, renderMapCanvas,
   type Door, type MapId, type WorldDef,
@@ -109,34 +110,134 @@ export default function World() {
     mapCanvasRef.current = out;
   }, [world, season]);
 
-  // 시간 흐름
+  // 시간 흐름 (게임 1분 = 설정의 시간 흐름 속도, 설정 창이 열려 있으면 정지)
+  const timeSpeed = useSettings((s) => s.timeSpeed);
   useEffect(() => {
     const iv = setInterval(() => {
       const st = useGame.getState();
-      if (st.rollcall) return;
+      if (st.rollcall || useSettings.getState().open) return;
       if (!overlayRef.current) st.tick(fastRef.current ? 5 : 1);
-    }, 250);
+    }, MS_PER_MINUTE[timeSpeed]);
     return () => clearInterval(iv);
-  }, []);
+  }, [timeSpeed]);
 
-  // 첫날 튜토리얼
+  // 1일차: 눈을 떠 보니 늦잠 → 분대장에게 혼나고 연병장으로
   useEffect(() => {
     const st = useGame.getState();
-    if (st.day === 1 && !st.flags.tutorial) {
-      st.applyEffects({ flag: 'tutorial' }, undefined, true);
-      setOverlay({
-        type: 'dialogue',
-        script: {
-          lines: [
-            { who: 'narr', text: `${b.unit}에 전입 온 첫날 아침. 기상 나팔 소리가 울린다!` },
-            { who: 'narr', text: '[조작] WASD/방향키 이동 · E/Space 상호작용 · Tab 수첩 · F 빨리감기' },
-            { who: 'narr', text: '상단의 일정을 확인하고, 집합 시간까지 표시된 장소로 이동해 E를 눌러 보고하자. 늦으면 지각!' },
-            { who: 'narr', text: '쉬는 시간엔 선후임·간부와 대화하고, PX·싸지방·체력단련장을 이용할 수 있다. 체력·멘탈이 25 미만이면 훈련 점수가 깎이니 밥과 휴식도 챙기자. 첫 집합: 06:15 연병장 아침 점호!' },
-          ],
-        },
-      });
-    }
-  }, [b.unit, setOverlay]);
+    if (st.day !== 1 || st.flags.wokeUp) return;
+    const sgt = 'sgt' as NpcId;
+    setOverlay({
+      type: 'dialogue',
+      script: {
+        npc: sgt,
+        lines: [
+          { who: 'narr', text: '쾅! 생활관 문이 벌컥 열렸다. 기상나팔은 이미 끝난 지 오래였다.' },
+          { who: 'npc', text: '야!!! 신병!!! 지금 몇 시인 줄 알아?!' },
+          { who: 'npc', text: '전입 첫날부터 늦잠이냐? 다들 연병장에 집합해 있다!' },
+          { who: 'me', text: '(군대…? 진짜 군대야? 그것도 포켓몬들의 군대…?!)' },
+          { who: 'me', text: '(…침착하자. 입대 전에 본 군대 유튜브만 수백 편이다. 「전입 신병 생존 가이드」에서 이럴 땐 분명…)' },
+          { who: 'npc', text: '뭘 멍하니 있어! 관등성명!' },
+        ],
+        choices: [
+          {
+            text: '"{S}! 이병 {me}! 늦어서 죄송합니다! 바로 집합하겠습니다!"', grade: 'good',
+            effects: { affinity: { sgt: 6 }, discipline: 2 },
+            reply: [
+              { who: 'npc', text: '…목소리는 합격이다. 3초 준다. 튀어나와!' },
+              { who: 'me', text: '(휴… 유튜브에서 본 그대로다. 관등성명, 사과, 그리고 즉시 행동.)' },
+            ],
+            tip: '관등성명 = 계급 + 성명. 늦었을 땐 변명보다 "죄송합니다 + 바로 하겠습니다"가 먼저다.',
+          },
+          {
+            text: '"저… 저 사실 사람인데요…?"', grade: 'ok',
+            effects: { affinity: { sgt: -1 } },
+            reply: [
+              { who: 'npc', text: '잠이 덜 깼구먼. 여기 다 그런 사연 하나씩은 있다. 빨리 일어나!' },
+              { who: 'me', text: '(…다들 그런 사연이 있다고?)' },
+            ],
+            tip: '상급자가 부르면 "{S}! 이병 ○○○!"처럼 경례 구호와 관등성명으로 답한다.',
+          },
+          {
+            text: '(모포를 머리끝까지 뒤집어쓴다)', grade: 'bad',
+            effects: { affinity: { sgt: -5 }, discipline: -3 },
+            reply: [
+              { who: 'narr', text: '……모포가 거칠게 걷혔다.' },
+              { who: 'npc', text: '연병장으로. 지. 금. 당. 장.' },
+            ],
+          },
+        ],
+      },
+      onChoice: (c) => {
+        const s2 = useGame.getState();
+        if (c.effects) s2.applyEffects(c.effects, '첫 만남');
+        if (c.tip) s2.addTip(c.tip);
+      },
+      onDone: () => useGame.getState().oversleep(),
+    });
+  }, [setOverlay]);
+
+  // 1일차 첫 점호가 끝나면: 밀덕 주인공의 다짐 + 조작 안내
+  const prevRollcall = useRef(rollcall);
+  useEffect(() => {
+    const was = prevRollcall.current;
+    prevRollcall.current = rollcall;
+    const st = useGame.getState();
+    if (!was || rollcall || st.day !== 1 || st.flags.tutorial) return;
+    st.applyEffects({ flag: 'tutorial' }, undefined, true);
+    setOverlay({
+      type: 'dialogue',
+      script: {
+        lines: [
+          { who: 'me', text: '(휴… 첫 점호는 어떻게든 넘겼다. 포켓몬 몸이라도 군대는 군대구나.)' },
+          { who: 'me', text: '(유튜브에서 배운 대로만 하자. 집합은 무조건 5분 전, 대답은 크게, 모르면 솔직하게 물어보기!)' },
+          { who: 'narr', text: '[조작] WASD/방향키 이동 · E/Space 상호작용 · Tab 수첩 · F 빨리감기' },
+          { who: 'narr', text: '상단에 다음 일정이 뜬다. 집합 시간 안에 표시된 장소로 가서 E로 보고하자. 늦으면 그 자리로 끌려가 혼난다!' },
+          { who: 'narr', text: '건물 문으로 드나들 수 있다. 쉬는 시간엔 선후임·간부와 대화하고 PX·싸지방·체력단련장을 이용하자. 체력·멘탈이 25 미만이면 훈련 점수가 깎인다.' },
+        ],
+      },
+    });
+  }, [rollcall, setOverlay]);
+
+  // 지각: 집합 장소로 끌려와 혼난 뒤 일정 시작
+  useEffect(() => useGame.subscribe((st, prev) => {
+    if (!st.lateCall || prev.lateCall) return;
+    const { who, label } = st.lateCall;
+    setOverlay({
+      type: 'dialogue',
+      script: {
+        npc: who,
+        lines: [
+          { who: 'narr', text: `집합 시간이 지났다… 「${label}」 집합 장소로 헐레벌떡 끌려왔다.` },
+          { who: 'npc', text: '{me}! 지금이 몇 시야? 다들 기다리고 있었다!' },
+          { who: 'npc', text: '집합 시간은 생명이다. 할 말 있나?' },
+        ],
+        choices: [
+          {
+            text: '"죄송합니다! 다음부터 5분 전에 도착하겠습니다. 시정하겠습니다!"', grade: 'good',
+            effects: { affinity: { [who]: 3 }, discipline: 1 },
+            reply: [{ who: 'npc', text: '…좋아. 말한 대로 해라. 바로 시작한다.' }],
+            tip: '집합은 "5분 전 도착"이 기본. 늦었다면 변명보다 사과와 시정 의지를 먼저 보이자.',
+          },
+          {
+            text: '"길을 잃었습니다…"', grade: 'ok',
+            effects: {},
+            reply: [{ who: 'npc', text: '부대 지도는 머릿속에 넣어 둬라. 다음엔 없다.' }],
+          },
+          {
+            text: '"아직 시간 남은 줄 알았는데요?"', grade: 'bad',
+            effects: { affinity: { [who]: -3 }, discipline: -2 },
+            reply: [{ who: 'npc', text: '…시계 볼 줄 모르나? 일단 시작해. 끝나고 따로 보자.' }],
+          },
+        ],
+      },
+      onChoice: (c) => {
+        const s2 = useGame.getState();
+        if (c.effects) s2.applyEffects(c.effects, '지각');
+        if (c.tip) s2.addTip(c.tip);
+      },
+      onDone: () => useGame.getState().resolveLate(),
+    });
+  }), [setOverlay]);
 
   // NPC 목표 위치
   const npcTarget = useCallback((id: NpcId): Pos => {
@@ -389,6 +490,7 @@ export default function World() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (overlayRef.current || useGame.getState().rollcall) return;
+      if (e.key === 'Escape') { e.preventDefault(); keys.current = {}; useSettings.getState().openMenu(); return; }
       keys.current[e.key.toLowerCase()] = true;
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'tab'].includes(e.key.toLowerCase())) e.preventDefault();
       if (e.key === 'e' || e.key === 'E' || e.key === ' ' || e.key === 'Enter') interact();
@@ -462,7 +564,7 @@ export default function World() {
       const t = now / 1000;
       const st = useGame.getState();
       const p = runtime.player;
-      const blocked = !!overlayRef.current || !!st.rollcall;
+      const blocked = !!overlayRef.current || !!st.rollcall || useSettings.getState().open;
       const map = world.maps[p.map];
 
       // 문 전환 진행

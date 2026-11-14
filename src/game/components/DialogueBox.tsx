@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Choice, Line, NpcId } from '../types';
 import { useGame } from '../state/store';
+import { TEXT_SPEED, useSettings } from '../state/settings';
 import { fmt } from '../engine/text';
 import { npcSpeaker, playerSpeaker, type SpeakerInfo } from '../engine/speakers';
 import MonsterCanvas from './MonsterCanvas';
@@ -32,12 +33,15 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
   const line = lines[idx];
   const text = line ? fmt(line.text, ctx) : '';
 
+  const [typeMs, typeStep] = TEXT_SPEED[useSettings((st) => st.textSpeed)];
+  const showTips = useSettings((st) => st.showTips);
   useEffect(() => {
+    if (!text) { setTyped(0); return; }
+    if (typeMs === 0) { setTyped(text.length); return; } // 즉시 표시
     setTyped(0);
-    if (!text) return;
-    const iv = setInterval(() => setTyped((t) => (t >= text.length ? t : t + 2)), 18);
+    const iv = setInterval(() => setTyped((t) => (t >= text.length ? t : t + typeStep)), typeMs);
     return () => clearInterval(iv);
-  }, [text, idx, phase]);
+  }, [text, idx, phase, typeMs, typeStep]);
 
   const speaker: SpeakerInfo | null = useMemo(() => {
     if (!line) return null;
@@ -79,14 +83,14 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
 
   return (
     <div className="dialogue-wrap" onClick={advance}>
-      {phase === 'reply' && picked?.tip && (
+      {phase === 'reply' && picked?.tip && showTips && (
         <div className="tip-card" onClick={(e) => e.stopPropagation()}>
           <div className={`grade grade-${picked.grade}`}>{GRADE_LABEL[picked.grade]}</div>
           <div className="tip-title">📘 군대 상식</div>
           <div>{fmt(picked.tip, ctx)}</div>
         </div>
       )}
-      {phase === 'reply' && picked && !picked.tip && (
+      {phase === 'reply' && picked && (!picked.tip || !showTips) && (
         <div className="tip-card small" onClick={(e) => e.stopPropagation()}>
           <div className={`grade grade-${picked.grade}`}>{GRADE_LABEL[picked.grade]}</div>
         </div>

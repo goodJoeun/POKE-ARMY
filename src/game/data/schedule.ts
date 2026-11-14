@@ -1,5 +1,6 @@
 ﻿import type { BranchId, GameId, ScheduleEvent, SpotId } from '../types';
 import { BRANCHES, TOTAL_DAYS } from './branches';
+import { GATHER_MINUTES, useSettings } from '../state/settings';
 
 type WorkGame = Exclude<GameId, 'overlock' | 'night'>;
 
@@ -20,8 +21,10 @@ export const GAME_SPOT: Record<WorkGame, SpotId> = {
   sandbag: 'train',
 };
 
-/** 집합 허용 시간(분). 이 시간을 넘기면 지각 */
-export const GATHER_WINDOW = 20;
+/** 집합 허용 시간(분). 이 시간을 넘기면 지각 — 설정 메뉴에서 조절 */
+export function gatherWindow(): number {
+  return GATHER_MINUTES[useSettings.getState().gatherWindow];
+}
 
 export function hasNightDuty(day: number) {
   return day % 2 === 0 && day < TOTAL_DAYS;
@@ -29,7 +32,7 @@ export function hasNightDuty(day: number) {
 
 export function buildSchedule(day: number, branch: BranchId): ScheduleEvent[] {
   const b = BRANCHES[branch];
-  const W = GATHER_WINDOW;
+  const W = gatherWindow();
   if (day >= TOTAL_DAYS) {
     return [
       { id: 'rollcall_am', kind: 'rollcall_am', label: '마지막 아침 점호', start: 6 * 60 + 15, window: W, end: 8 * 60, spot: 'parade' },

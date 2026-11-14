@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGame } from '../state/store';
+import { useSettings } from '../state/settings';
 import { drawHuman } from '../engine/drawHuman';
 import type { Dir } from '../engine/drawMonster';
 import DialogueBox, { type DialogueScript } from './DialogueBox';
@@ -61,9 +62,10 @@ const TEXTS: Record<Exclude<ObjId, 'bed'>, Line[]> = {
     '……진짜 내일이구나.',
   ),
   pc: narr(
-    '모니터에 「입대 전날 해야 할 일 TOP 3」 검색 결과가 떠 있다.',
-    '1위 가족과 저녁 먹기 ✔  2위 친구들에게 연락하기 ✔  3위 일찍 자기 ✘',
-    '…3위는 지금부터 하면 된다.',
+    '유튜브 시청 기록이 빼곡하다.',
+    '「전입 신병 생존 가이드」 「선임한테 예쁨받는 법」 「관등성명 제대로 대는 법」 「전투준비태세 10분 컷」…',
+    '밀리터리 채널 구독만 30개. 이 정도면 이론은 거의 병장급이다.',
+    '…문제는 실전이 내일이라는 것.',
   ),
   phone: narr(
     '📱 단톡방 「우리 아직 젊다」 (안 읽은 메시지 23개)',
@@ -93,8 +95,8 @@ const TEXTS: Record<Exclude<ObjId, 'bed'>, Line[]> = {
     '나도 모르게 중얼거렸다. "군대 가기 싫다…"',
   ),
   shelf: narr(
-    '책장 한 칸을 「입대 전에 읽을 책」들이 차지하고 있다.',
-    '한 권도 못 읽었다.',
+    '밀리터리 잡지 과월호가 한 칸을 꽉 채우고 있다. 그 옆엔 「입대 전에 읽을 책」들.',
+    '잡지는 다 읽었고, 책은 한 권도 못 읽었다.',
   ),
   plant: narr(
     '엄마가 키우는 화분. 내가 없는 동안 물 좀 잘 받아먹어라.',
@@ -148,6 +150,7 @@ export default function Bedroom() {
         lines: narr(
           '입대 하루 전날 밤, 22시.',
           '{me}의 방. 내일이면 이 방도 한동안 안녕이다.',
+          '군대 유튜브와 밀리터리 잡지로 단련된 자칭 "준비된 신병". …그래도 가기 싫은 건 싫다.',
           '[조작] WASD/방향키로 이동, E/Space로 조사. 방을 둘러보고, 입영통지서를 확인한 뒤 침대에서 잠들자.',
         ),
       },
@@ -206,6 +209,7 @@ export default function Bedroom() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (overlayRef.current || sleepingRef.current) return;
+      if (e.key === 'Escape') { e.preventDefault(); keys.current = {}; useSettings.getState().openMenu(); return; }
       const k = e.key.toLowerCase();
       keys.current[k] = true;
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
@@ -252,7 +256,7 @@ export default function Bedroom() {
       last = now;
       const t = now / 1000;
       const p = player.current;
-      const stop = !!overlayRef.current || sleepingRef.current;
+      const stop = !!overlayRef.current || sleepingRef.current || useSettings.getState().open;
 
       let vx = 0, vy = 0;
       if (!stop) {

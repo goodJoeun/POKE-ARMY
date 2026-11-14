@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { GameId, MinigameCtx, MinigameProps } from '../types';
 import { useGame, gradeEffects, gradeOf, fatigueOf } from '../state/store';
 import { cdMul } from './common';
+import { DIFFICULTY_MUL, useSettings } from '../state/settings';
 import { BRANCHES, rankIdxForDay, seasonForDay } from '../data/branches';
 import EnvCleanup from './EnvCleanup';
 import NightWatch from './NightWatch';
@@ -158,8 +159,14 @@ export default function MinigameHost() {
           <Comp
             ctx={ctx}
             onFinish={(raw, summary) => {
-              const score = Math.max(0, Math.min(100, raw * fatigue.mul));
-              const note = fatigue.mul < 1 ? ` (지침 페널티: ${fatigue.reasons.join(', ')})` : '';
+              const diff = useSettings.getState().difficulty;
+              const dMul = DIFFICULTY_MUL[diff];
+              const score = Math.max(0, Math.min(100, raw * fatigue.mul * dMul));
+              const notes = [
+                fatigue.mul < 1 ? `지침 페널티: ${fatigue.reasons.join(', ')}` : '',
+                dMul !== 1 ? `난이도 ${diff === 'easy' ? '쉬움 +15%' : '어려움 -10%'}` : '',
+              ].filter(Boolean);
+              const note = notes.length ? ` (${notes.join(' · ')})` : '';
               setResult({ score, summary: summary + note });
               setPhase('result');
               s.addTip(inf.fact);

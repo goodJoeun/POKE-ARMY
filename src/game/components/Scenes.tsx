@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Archetype, BranchId, NpcId } from '../types';
 import { useGame, presentNpcs, fmtDelta, fatigueOf } from '../state/store';
+import { useSettings } from '../state/settings';
 import { hasNightDuty } from '../data/schedule';
 import { BRANCHES, RANKS, TOTAL_DAYS, fmtMoney, rankIdxForDay, serviceMonth } from '../data/branches';
 import { ARCHETYPE_INFO, PLAYER_SPECIES, findSpecies } from '../data/monsters';
@@ -16,7 +17,9 @@ export function Title() {
   const s = useGame();
   const [name, setName] = useState('');
   const [hasSave, setHasSave] = useState(false);
-  useEffect(() => setHasSave(s.hasSave()), [s]);
+  const settingsOpen = useSettings((st) => st.open);
+  // 설정에서 저장 데이터를 지운 경우를 반영하기 위해 설정 창이 닫힐 때도 다시 확인
+  useEffect(() => setHasSave(s.hasSave()), [s, settingsOpen]);
   const demo = PLAYER_SPECIES.army[0].look;
   const demo2 = PLAYER_SPECIES.navy[0].look;
   const demo3 = PLAYER_SPECIES.air[0].look;
@@ -39,6 +42,7 @@ export function Title() {
         />
         <button className="primary big" onClick={() => s.newGame(name)}>새 게임</button>
         {hasSave && <button className="big" onClick={() => s.load()}>이어하기</button>}
+        <button className="big" onClick={() => useSettings.getState().openMenu()}>⚙️ 설정</button>
       </div>
       <div className="title-foot">프로토타입 v0.1 · WASD/방향키 이동 · E 상호작용 · Tab 수첩</div>
     </div>
@@ -148,35 +152,58 @@ export function Quiz() {
   );
 }
 
-// ───────── 변신 ─────────
+// ───────── 잠에서 깨어 변신을 깨닫는 장면 ─────────
 export function Transform() {
   const s = useGame();
   const sp = findSpecies(s.speciesId)!;
   const b = BRANCHES[s.branch];
+  // 단계별 연출: 0~3 어둠 속 독백 → 4 첫 모습 → 5 패닉 → 6 결과 카드
+  const lines = [
+    '……',
+    '눈꺼풀 너머로 희미한 빛이 들어온다.',
+    '눈을 떴다. 낯선 천장. 꿉꿉한 모포 냄새. 여긴… 내 방이 아니다.',
+    '기지개를 켜려고 팔을 쭉 뻗었는데…',
+    sp.wake,
+    '"으아아아악?!"',
+  ];
   const [stage, setStage] = useState(0);
+  const last = lines.length; // 결과 카드 단계
+  const next = () => setStage((v) => Math.min(last, v + 1));
   useEffect(() => {
-    const t1 = setTimeout(() => setStage(1), 1400);
-    const t2 = setTimeout(() => setStage(2), 2600);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'e') {
+        e.preventDefault();
+        if (stage < last) next(); else s.startDay();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const revealed = stage >= 4;
+  const shakeOn = useSettings((st) => st.screenShake);
   return (
-    <div className={`scene transform-scene stage-${stage}`}>
-      {stage === 0 && <div className="flash-text">눈을 떠보니…</div>}
-      {stage >= 1 && (
-        <div className="transform-reveal">
-          <div className="sparkle" />
-          <MonsterCanvas look={sp.look} size={220} cap={stage >= 2 ? b.cap : null} />
+    <div className={`scene transform-scene ${revealed ? 'stage-2' : 'stage-0'} ${stage === 5 && shakeOn ? 'shake' : ''}`} onClick={() => stage < last && next()}>
+      {revealed && (
+        <div className={`transform-reveal ${stage === 4 ? 'peek' : ''}`}>
+          {stage >= last && <div className="sparkle" />}
+          <MonsterCanvas look={sp.look} size={220} cap={stage >= last ? b.cap : null} />
         </div>
       )}
-      {stage >= 2 && (
-        <div className="transform-info fade-in">
+      {stage < last && (
+        <div className="wake-text">
+          <p key={stage} className={`fade-in ${stage === 5 ? 'scream' : ''}`}>{lines[stage]}</p>
+          <div className="hud-dim">클릭 또는 Enter</div>
+        </div>
+      )}
+      {stage >= last && (
+        <div className="transform-info fade-in" onClick={(e) => e.stopPropagation()}>
           <h2>"내가… 포켓몬?!"</h2>
           <p><b className="species-name">{sp.name}</b> <span className="bc-type" style={{ background: b.typeColor }}>{sp.type} 타입</span></p>
           <p>{sp.desc}</p>
           <p>성격 분석 결과: <b>{ARCHETYPE_INFO[s.archetype].name}</b> — {ARCHETYPE_INFO[s.archetype].desc}<br />
             <span className="perk">✨ {ARCHETYPE_INFO[s.archetype].perk}</span></p>
-          <p className="hud-dim">…그런데 더 당황스러운 건, 이 세계에서도 입대 날이라는 것. 머리 위에는 이미 {b.name} 모자가 씌워져 있다.</p>
-          <button className="primary big" onClick={() => s.startDay()}>{b.unit}(으)로 전입! ▶</button>
+          <p className="hud-dim">꿈이 아니다. 머리 위에는 {b.name} 모자까지 얹혀 있다. 그리고 그 순간, 문이 벌컥 열리며 누군가 소리쳤다—</p>
+          <button className="primary big" onClick={() => s.startDay()}>▶ 다음 (Enter)</button>
         </div>
       )}
     </div>

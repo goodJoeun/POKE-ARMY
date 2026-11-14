@@ -1,0 +1,130 @@
+'use client';
+import { useEffect, useState } from 'react';
+import { useGame } from '../state/store';
+import { useSettings, type Settings } from '../state/settings';
+
+interface Option<V> { value: V; label: string }
+
+function Segmented<K extends keyof Settings>({ k, options }: { k: K; options: Option<Settings[K]>[] }) {
+  const value = useSettings((s) => s[k]);
+  const set = useSettings((s) => s.set);
+  return (
+    <div className="seg">
+      {options.map((o) => (
+        <button key={String(o.value)} className={value === o.value ? 'on' : ''} onClick={() => set(k, o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const ON_OFF: Option<boolean>[] = [{ value: true, label: '켜기' }, { value: false, label: '끄기' }];
+
+/** 설정 메뉴: 게임 설정 + 저장/새 게임 */
+export default function SettingsMenu() {
+  const open = useSettings((s) => s.open);
+  const close = useSettings((s) => s.closeMenu);
+  const resetSettings = useSettings((s) => s.reset);
+  const scene = useGame((s) => s.scene);
+  const [confirm, setConfirm] = useState<null | 'new' | 'wipe'>(null);
+  const [notice, setNotice] = useState('');
+  const inGame = scene !== 'title';
+  const canSave = scene === 'world' || scene === 'dayEnd' || scene === 'promotion';
+
+  // 열려 있는 동안 다른 키 입력(대화 넘기기, 이동 등)을 막는다
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.stopImmediatePropagation();
+      if (e.key === 'Escape') { e.preventDefault(); if (confirm) setConfirm(null); else close(); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open, confirm, close]);
+
+  useEffect(() => { if (!open) { setConfirm(null); setNotice(''); } }, [open]);
+
+  if (!open) return null;
+
+  const g = useGame.getState();
+  const save = () => { g.save(); setNotice('💾 저장했습니다. (다음에 불러오면 그날 아침 침상에서 시작합니다)'); };
+  const toTitle = () => { if (canSave) g.save(); close(); g.go('title'); };
+  const startNew = () => { g.resetAll(); close(); };
+  const wipe = () => { g.wipe(); setConfirm(null); setNotice('🗑️ 저장 데이터를 삭제했습니다.'); };
+
+  return (
+    <div className="modal-backdrop settings-backdrop" onClick={close}>
+      <div className="settings" onClick={(e) => e.stopPropagation()}>
+        <div className="settings-head">
+          <div className="menu-title">⚙️ 설정</div>
+          <button className="nb-close" onClick={close}>✕</button>
+        </div>
+
+        <div className="settings-body">
+          <section>
+            <h4>게임 진행</h4>
+            <div className="set-row">
+              <div><b>시간 흐름</b><div className="hud-dim">실제 1초에 흐르는 게임 시간</div></div>
+              <Segmented k="timeSpeed" options={[{ value: 'slow', label: '느리게 (1.7분)' }, { value: 'normal', label: '보통 (2.5분)' }, { value: 'fast', label: '빠르게 (4분)' }]} />
+            </div>
+            <div className="set-row">
+              <div><b>집합 허용 시간</b><div className="hud-dim">집합 호출 후 지각 처리까지의 여유</div></div>
+              <Segmented k="gatherWindow" options={[{ value: 'relaxed', label: '넉넉 (30분)' }, { value: 'normal', label: '보통 (20분)' }, { value: 'strict', label: '엄격 (15분)' }]} />
+            </div>
+            <div className="set-row">
+              <div><b>미니게임 난이도</b><div className="hud-dim">훈련·작업 점수 보정</div></div>
+              <Segmented k="difficulty" options={[{ value: 'easy', label: '쉬움 (+15%)' }, { value: 'normal', label: '보통' }, { value: 'hard', label: '어려움 (-10%)' }]} />
+            </div>
+          </section>
+
+          <section>
+            <h4>화면 · 대사</h4>
+            <div className="set-row">
+              <div><b>대사 속도</b></div>
+              <Segmented k="textSpeed" options={[{ value: 'slow', label: '느리게' }, { value: 'normal', label: '보통' }, { value: 'fast', label: '빠르게' }, { value: 'instant', label: '즉시' }]} />
+            </div>
+            <div className="set-row">
+              <div><b>화면 흔들림</b><div className="hud-dim">놀라는 장면 등의 흔들림 연출</div></div>
+              <Segmented k="screenShake" options={ON_OFF} />
+            </div>
+            <div className="set-row">
+              <div><b>군대 상식 카드</b><div className="hud-dim">꺼도 수첩의 '군대 상식'에는 모입니다</div></div>
+              <Segmented k="showTips" options={ON_OFF} />
+            </div>
+            <div className="set-row end">
+              <button className="link-btn" onClick={resetSettings}>설정 기본값으로</button>
+            </div>
+          </section>
+
+          <section>
+            <h4>게임 데이터</h4>
+            {notice && <div className="set-notice">{notice}</div>}
+            {confirm === null && (
+              <div className="set-actions">
+                {inGame && <button disabled={!canSave} onClick={save} title={canSave ? '' : '부대 생활 중에만 저장할 수 있어요'}>💾 지금 저장</button>}
+                {inGame && <button onClick={toTitle}>🏠 {canSave ? '저장하고 ' : ''}타이틀로</button>}
+                <button className="warn" onClick={() => setConfirm('new')}>🔄 새로 시작</button>
+                <button className="danger" onClick={() => setConfirm('wipe')}>🗑️ 저장 데이터 삭제</button>
+              </div>
+            )}
+            {confirm && (
+              <div className="set-confirm">
+                <div>
+                  {confirm === 'new'
+                    ? '정말 처음부터 새로 시작할까요? 진행 중인 게임과 저장 데이터가 모두 사라집니다.'
+                    : '저장 데이터를 삭제할까요? 지금 진행 중인 화면은 그대로지만, 이어하기는 할 수 없게 됩니다.'}
+                </div>
+                <div className="set-actions">
+                  <button className="danger" onClick={confirm === 'new' ? startNew : wipe}>{confirm === 'new' ? '새로 시작' : '삭제'}</button>
+                  <button onClick={() => setConfirm(null)}>취소</button>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+        <div className="menu-foot">Esc 닫기 · 설정은 자동 저장됩니다</div>
+      </div>
+    </div>
+  );
+}
