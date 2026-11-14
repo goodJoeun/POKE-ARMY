@@ -98,7 +98,7 @@ export function BranchSelect() {
               <div className="bc-tag">{b.tagline}</div>
               <div className="bc-mons">
                 {sp.map((x) => (
-                  <MonsterCanvas key={x.id} look={{ ...x.look, sprite: undefined, body: '#2a2a3a', belly: '#3a3a4a', accent: '#4a4a5a' }} size={54} animate={false} />
+                  <MonsterCanvas key={x.id} look={{ ...x.look, body: '#2a2a3a', belly: '#3a3a4a', accent: '#4a4a5a' }} silhouette="#2a2a3a" size={54} animate={false} />
                 ))}
               </div>
               <div className="bc-cands">{sp.map((x) => x.name).join(' · ')}</div>

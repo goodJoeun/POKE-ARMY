@@ -4,6 +4,10 @@ import type { MinigameProps, MonsterLook } from '../types';
 import { BRANCHES } from '../data/branches';
 import { NPC_SKINS } from '../data/npcs';
 import { drawMonster } from '../engine/drawMonster';
+import { getSprite } from '../engine/sprites';
+
+/** 군별 야생 포켓몬 스프라이트 키 */
+const WILD_SPRITE = { army: 'rattata', navy: 'wingull', air: 'meowth' } as const;
 import { GH, GW, GameCanvas, cdMul, hudText, useCanvasLoop } from './common';
 
 const PAIRS: [string, string][] = [
@@ -22,10 +26,10 @@ export default function GuardDuty({ ctx, onFinish }: MinigameProps) {
   const encounters = useRef<Enc[]>(
     ([
       { kind: 'friend', look: skins.buddy.look, reply: pair[1] },
-      { kind: 'stranger', look: { ...skins.senior.look, body: '#5a5a5a', belly: '#8a8a8a' }, reply: DECOYS[Math.floor(Math.random() * DECOYS.length)] },
+      { kind: 'stranger', look: { ...skins.senior.look, sprite: 'ekans', body: '#5a5a5a', belly: '#8a8a8a' }, reply: DECOYS[Math.floor(Math.random() * DECOYS.length)] },
       { kind: 'animal', look: null, reply: '' },
       { kind: 'officer', look: skins.lt.look, reply: pair[1] },
-      { kind: 'stranger', look: { ...skins.junior.look, body: '#4a4a5a' }, reply: '…어, 그게… 뭐더라?' },
+      { kind: 'stranger', look: { ...skins.junior.look, sprite: 'koffing', body: '#4a4a5a' }, reply: '…어, 그게… 뭐더라?' },
       { kind: 'friend', look: skins.junior2?.look ?? skins.buddy.look, reply: pair[1] },
     ] as Enc[]).sort(() => Math.random() - 0.5),
   );
@@ -110,7 +114,10 @@ export default function GuardDuty({ ctx, onFinish }: MinigameProps) {
       const scale = 0.15 + s.dist * 0.95;
       const y = 215 + s.dist * 200;
       const lit = s.skill > 0 || s.phase === 'decide';
-      if (enc.kind === 'animal') {
+      const wildLook: MonsterLook = { sprite: WILD_SPRITE[ctx.branch], body: '#8a6a4a', belly: '#c8a87a', accent: '#5a4a3a', shape: 'wide', ears: 'pointy', tail: 'none', eyes: 'dot', mouth: 'cat' };
+      if (enc.kind === 'animal' && getSprite(wildLook.sprite, 'front')) {
+        drawMonster(g, wildLook, GW / 2, y, 120 * scale, { t, walking: s.phase === 'approach', art: false, silhouette: lit ? undefined : '#0a0a12' });
+      } else if (enc.kind === 'animal') {
         g.fillStyle = lit ? '#8a6a4a' : '#151515';
         g.beginPath(); g.ellipse(GW / 2, y - 30 * scale, 50 * scale, 26 * scale, 0, 0, Math.PI * 2); g.fill();
         g.beginPath(); g.ellipse(GW / 2 + 45 * scale, y - 55 * scale, 18 * scale, 16 * scale, 0, 0, Math.PI * 2); g.fill();
@@ -118,6 +125,8 @@ export default function GuardDuty({ ctx, onFinish }: MinigameProps) {
         g.fillRect(GW / 2 + 25 * scale, y - 15 * scale, 8 * scale, 20 * scale);
         g.fillStyle = '#ffe14a';
         g.beginPath(); g.arc(GW / 2 + 50 * scale, y - 58 * scale, 3 * scale + 1, 0, Math.PI * 2); g.fill();
+      } else if (enc.look && getSprite(enc.look.sprite, 'art')) {
+        drawMonster(g, enc.look, GW / 2, y, 170 * scale, { t, walking: s.phase === 'approach', silhouette: lit ? undefined : '#0a0a12' });
       } else if (enc.look) {
         drawMonster(g, enc.look, GW / 2, y, 170 * scale, { t, walking: s.phase === 'approach', cap: enc.kind === 'officer' ? `officer-${b.cap}` : enc.kind === 'friend' ? b.cap : null });
         if (!lit) { g.fillStyle = 'rgba(5,5,10,0.88)'; g.fillRect(GW / 2 - 100 * scale, y - 180 * scale, 200 * scale, 185 * scale); }

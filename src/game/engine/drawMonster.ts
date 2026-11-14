@@ -1,5 +1,5 @@
 import type { MonsterLook } from '../types';
-import { getSprite } from './sprites';
+import { getSilhouette, getSprite } from './sprites';
 
 export type Dir = 'down' | 'up' | 'left' | 'right';
 export type CapType = 'army' | 'navy' | 'air' | 'officer-army' | 'officer-navy' | 'officer-air' | null;
@@ -11,6 +11,10 @@ export interface DrawOpts {
   cap?: CapType;
   sleeping?: boolean;
   shadow?: boolean;
+  /** 실루엣 색 (지정 시 이미지를 단색으로) */
+  silhouette?: string;
+  /** 공식 일러스트 강제 사용 여부 (기본: 크기 70px 이상이면 일러스트) */
+  art?: boolean;
 }
 
 function shade(hex: string, amt: number): string {
@@ -39,16 +43,24 @@ export function drawMonster(g: CanvasRenderingContext2D, look: MonsterLook, cx: 
   const s = size;
   const bob = o.walking ? Math.abs(Math.sin(t * 12)) * s * 0.05 : Math.sin(t * 2.5) * s * 0.015;
 
-  // 등록된 스프라이트가 있으면 이미지로 그린다
-  const img = getSprite(look.sprite);
-  if (img) {
+  // 등록된 포켓몬 이미지가 있으면 이미지로 그린다
+  // 큰 화면(초상화 등)은 공식 일러스트, 맵에서는 도트 스프라이트(위로 걸을 땐 뒷모습)
+  const useArt = o.art ?? s >= 70;
+  const kind = useArt ? 'art' : dir === 'up' ? 'back' : 'front';
+  const src = getSprite(look.sprite, kind);
+  if (src) {
+    const img = o.silhouette ? getSilhouette(look.sprite!, kind, src, o.silhouette) : src;
     if (o.shadow !== false) ellipse(g, cx, baseY - s * 0.02, s * 0.3, s * 0.06, 'rgba(0,0,0,0.22)');
-    const h = s * 1.05;
-    const w = (img.naturalWidth / img.naturalHeight) * h;
+    // 높이 기준으로 맞추되 너무 넓은 포켓몬(갸라도스 등)은 폭을 제한
+    const hMul = kind === 'art' ? 1.0 : 1.25; // 도트 스프라이트는 맵 타일 대비 조금 크게
+    const scale = Math.min((s * hMul) / img.height, (s * 1.5) / img.width);
+    const w = img.width * scale, h = img.height * scale;
+    const hop = o.walking ? bob * 1.5 : bob;
     g.save();
-    g.translate(cx, baseY - bob);
-    if (dir === 'left') g.scale(-1, 1);
-    g.imageSmoothingEnabled = img.naturalWidth > 128;
+    g.translate(cx, baseY - hop);
+    // 도트 스프라이트는 왼쪽을 바라보므로 오른쪽으로 걸을 때 뒤집는다
+    if (dir === 'right' && kind !== 'art') g.scale(-1, 1);
+    g.imageSmoothingEnabled = w < img.width; // 축소는 부드럽게, 확대는 도트 그대로
     g.drawImage(img, -w / 2, -h, w, h);
     g.restore();
     if (o.sleeping) {

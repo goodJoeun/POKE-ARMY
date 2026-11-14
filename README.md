@@ -10,6 +10,7 @@ Next.js + TypeScript + React로 만든 2D 군 생활 시뮬레이션 프로토�
 
 ```bash
 npm install
+npm run sprites # 포켓몬 이미지 받기 (최초 1회, 저장소에는 포함하지 않음)
 npm run dev     # http://localhost:3000
 ```
 
@@ -84,8 +85,9 @@ src/game/
   - 플레이어: 육군(불꽃) 파이리·브케인·아차모·파이숭이 / 해군(물) 꼬부기·리아코·물짱이·팽도리 / 공군(비행) 구구·찌르꼬·불화살빈
   - 성격 분석 점수(리더·성실·분위기메이커)와 각 포켓몬의 성향 가중치를 비교해 가장 잘 맞는 포켓몬이 선택됩니다.
   - NPC(선후임·간부)와 경계근무의 야생 동물도 포켓몬입니다. 목록은 `src/game/data/monsters.ts`, `src/game/data/npcs.ts`에서 바꿀 수 있습니다.
-- 기본은 캔버스로 그린 근사치 외형입니다. 라이선스를 확보한 공식 스프라이트를 `public/sprites/`에 넣고
-  `manifest.json`에 등록하면 해당 포켓몬이 이미지로 대체됩니다 (키 목록은 `public/sprites/README.md`).
+- 포켓몬 이미지는 `npm run sprites`로 PokeAPI에서 받아 `public/sprites/`에 저장합니다 (저작권 때문에 git에는 올리지 않음).
+  맵은 도트 스프라이트(정면/뒷모습), 대화 초상화·연출은 공식 일러스트를 씁니다. 이미지가 없으면 캔버스 근사치로 동작합니다.
+  공식 에셋으로 교체하는 방법과 키 목록은 `public/sprites/README.md`를 참고하세요.
 - 저장은 브라우저 localStorage(하루 시작 시 자동, 침상에서 수동).
 - 개발 모드에서는 콘솔에서 `__game.getState()`로 상태를 확인할 수 있습니다.
 

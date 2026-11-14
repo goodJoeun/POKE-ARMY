@@ -2,12 +2,13 @@
   "name": "poke-army",
   "version": "0.1.0",
   "private": true,
-  "description": "몬스터 이등병 - 몬스터가 되어 군생활을 하는 생활 시뮬레이션 프로토타입",
+  "description": "포켓몬 이등병 - 포켓몬이 되어 군생활을 하는 생활 시뮬레이션 프로토타입",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sprites": "node scripts/fetch-sprites.mjs"
   },
   "dependencies": {
     "next": "^15.5.29",

@@ -3,3 +3,9 @@ node_modules
 out
 next-env.d.ts
 *.tsbuildinfo
+
+# 포켓몬 이미지 (저작권: Nintendo/Creatures/GAME FREAK) — npm run sprites 로 로컬에 받는다
+public/sprites/front/
+public/sprites/back/
+public/sprites/art/
+public/sprites/manifest.json
