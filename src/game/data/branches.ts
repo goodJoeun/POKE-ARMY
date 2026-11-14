@@ -19,6 +19,10 @@ export interface BranchInfo {
   skillName: string;
   skillDesc: string;
   wildlife: string;
+  /** 입영통지서의 입영 부대 */
+  noticePlace: string;
+  /** 통지서를 보고 떠올리는 밀덕 주인공의 기억 */
+  recall: string[];
   cptTitle: string;
   sgmTitle: string;
 }
@@ -46,6 +50,11 @@ export const BRANCHES: Record<BranchId, BranchInfo> = {
     skillName: '불꽃 기술',
     skillDesc: '뜨거운 불꽃으로 눈을 녹이고, 집중력을 끌어올린다.',
     wildlife: '야생 꼬렛',
+    noticePlace: '육군훈련소 (논산)',
+    recall: [
+      '맞다, 육군이었지. 논산 육군훈련소.',
+      '경례 구호는 "충성!", 복무 기간 18개월. 유튜브에서 수백 번 본 그 연병장이다.',
+    ],
     cptTitle: '중대장',
     sgmTitle: '행정보급관',
   },
@@ -71,6 +80,11 @@ export const BRANCHES: Record<BranchId, BranchInfo> = {
     skillName: '물 기술',
     skillDesc: '물줄기를 다루고, 넘치는 물을 흡수한다.',
     wildlife: '야생 갈모매',
+    noticePlace: '해군 교육사령부 (진해)',
+    recall: [
+      '맞다, 해군이었지. 진해 해군 교육사령부.',
+      '경례 구호는 "필승!", 복무 기간 20개월. 벌써부터 바다 냄새가 나는 것 같다.',
+    ],
     cptTitle: '부서장',
     sgmTitle: '주임원사',
   },
@@ -96,6 +110,11 @@ export const BRANCHES: Record<BranchId, BranchInfo> = {
     skillName: '바람 기술',
     skillDesc: '날갯짓으로 돌풍을 일으키고, 하늘에서 넓게 내려다본다.',
     wildlife: '야생 나옹',
+    noticePlace: '공군 교육사령부 (진주)',
+    recall: [
+      '맞다, 공군이었지. 진주 공군 교육사령부.',
+      '경례 구호는 "필승!", 복무 기간 21개월… 길지만, 하늘을 지키는 거니까.',
+    ],
     cptTitle: '중대장',
     sgmTitle: '주임원사',
   },

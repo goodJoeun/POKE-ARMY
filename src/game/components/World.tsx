@@ -2,14 +2,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Choice, Dialogue, NpcId, SpotId } from '../types';
 import { useGame, presentNpcs } from '../state/store';
-import { BRANCHES, TOTAL_DAYS, rankIdxForDay, seasonForDay } from '../data/branches';
+import { BRANCHES, TOTAL_DAYS, fmtTime, rankIdxForDay, seasonForDay } from '../data/branches';
 import { findSpecies } from '../data/monsters';
 import { NPC_ROLES, NPC_SKINS, npcDisplayName, npcRoleTitle } from '../data/npcs';
 import { FAREWELL_LINES, SMALL_TALK } from '../data/dialogues';
 import { ITEMS } from '../data/items';
 import { QUESTS } from '../data/quests';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
-import { MS_PER_MINUTE, useSettings } from '../state/settings';
+import { MS_PER_MINUTE, clampMapZoom, useSettings } from '../state/settings';
 import {
   MAP_NAMES, TILE, collides, doorCenter, doorToward, findPath, getWorld, renderMapCanvas,
   type Door, type MapId, type WorldDef,
@@ -56,8 +56,9 @@ interface Interactable {
 
 /** 자유 시간에 머무는 곳 */
 const FREE_POS: Record<NpcId, Pos> = {
-  sgt: ['barracks', 10, 5], senior: ['outdoor', 5, 26], buddy: ['cyber', 2, 2], junior: ['barracks', 12, 5], junior2: ['outdoor', 24, 25],
-  lt: ['admin', 1, 4], sgm: ['outdoor', 16, 21], cpt: ['admin', 5, 2],
+  sgt: ['room1', 10, 5], senior: ['lounge', 3, 3], buddy: ['cyber', 2, 2], junior: ['room1', 12, 5], junior2: ['outdoor', 24, 25],
+  // 소대장은 지휘통제실 당직사관, 중대장은 행정반, 행보관은 부대를 돌아다닌다
+  lt: ['command', 5, 2], sgm: ['outdoor', 16, 21], cpt: ['admin', 5, 2],
 };
 /** 식사 시간 식당 자리 */
 const MEAL_POS: Partial<Record<NpcId, Pos>> = {
@@ -65,7 +66,8 @@ const MEAL_POS: Partial<Record<NpcId, Pos>> = {
 };
 /** 취침 전 생활관 자리 */
 const NIGHT_POS: Partial<Record<NpcId, Pos>> = {
-  sgt: ['barracks', 10, 5], senior: ['barracks', 11, 6], buddy: ['barracks', 4, 5], junior: ['barracks', 12, 4], junior2: ['barracks', 9, 6],
+  sgt: ['room1', 10, 5], buddy: ['room1', 4, 5], junior: ['room1', 12, 4],
+  senior: ['room2', 10, 5], junior2: ['room2', 4, 5],
 };
 const FORMATION: [number, number][] = [[-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2]];
 
@@ -290,7 +292,10 @@ export default function World() {
       }
     }
     if (best) return best;
-    const spotNames: Partial<Record<SpotId, string>> = { bed: '내 침상', mess: '식당 배식대', px: 'PX', admin: '행정반', cyber: '싸지방 PC', gym: '체력단련 기구' };
+    const spotNames: Partial<Record<SpotId, string>> = {
+      bed: '내 침상', mess: '식당 배식대', px: 'PX', admin: '행정반', command: '지휘통제실 상황판', tv: '휴게실 TV',
+      cyber: '싸지방 PC', gym: '체력단련 기구',
+    };
     for (const [id, label] of Object.entries(spotNames) as [SpotId, string][]) {
       const sp = world.spots[id];
       if (sp.map === p.map && dist(sp.x + 0.5, sp.y + 0.5) < 1.4) return { key: `spot_${id}`, kind: 'spot', spot: id, label };
@@ -471,6 +476,43 @@ export default function World() {
         if (!q) opts.push({ label: '간부님들이 업무 중이시다.', disabled: true, onSelect: () => {} });
         break;
       }
+      case 'command': {
+        title = '📡 지휘통제실';
+        const sc = st.schedule();
+        const night = sc.some((e) => e.kind === 'night');
+        opts.push({
+          label: '오늘 근무표 확인', hint: '5분',
+          onSelect: () => {
+            useGame.getState().spend(5);
+            setOverlay({
+              type: 'dialogue',
+              script: {
+                lines: [
+                  { who: 'narr', text: `📋 오늘 일정: ${sc.map((e) => `${fmtTime(e.start)} ${e.label}`).join(' / ')}` },
+                  { who: 'narr', text: night ? '🌙 오늘 밤 불침번 명단에 내 이름이 있다…' : '🌙 오늘 밤 불침번 명단에는 내 이름이 없다. 휴~' },
+                  { who: 'narr', text: '암구호는 근무 투입 직전에만 공지된다. 보안!' },
+                ],
+              },
+            });
+          },
+        });
+        opts.push({
+          label: '상황판 살펴보기', hint: '5분',
+          onSelect: () => {
+            useGame.getState().spend(5);
+            setOverlay({ type: 'dialogue', script: { lines: [
+              { who: 'narr', text: '부대 배치도, 비상 연락망, 오늘의 기상 정보가 빼곡하다.' },
+              { who: 'me', text: '(유튜브에서 본 그 상황판이다… 실물은 처음 본다.)' },
+            ] } });
+          },
+        });
+        break;
+      }
+      case 'tv': {
+        title = '📺 휴게실 TV';
+        act('TV 보기', free ? '20분 · 멘탈+5 (1일 1회)' : '개인정비 시간에만', 20, { mental: 5 }, '오랜만에 보는 예능 프로그램. 다 같이 깔깔 웃었다.', 'tv', !free);
+        break;
+      }
       default:
         return;
     }
@@ -496,6 +538,10 @@ export default function World() {
       if (e.key === 'e' || e.key === 'E' || e.key === ' ' || e.key === 'Enter') interact();
       if (e.key === 'Tab') setOverlay({ type: 'notebook' });
       if (e.key === 'f' || e.key === 'F') setFast((v) => !v);
+      if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') {
+        const st = useSettings.getState();
+        st.set('mapZoom', clampMapZoom(st.mapZoom * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)));
+      }
     };
     const up = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false; };
     const blur = () => { keys.current = {}; };
@@ -527,6 +573,17 @@ export default function World() {
     const ro = new ResizeObserver(resize);
     ro.observe(wrapRef.current!);
 
+    // 마우스 휠로 확대/축소 (설정에 저장, 화면에는 부드럽게 반영)
+    let shownZoom = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (overlayRef.current || useSettings.getState().open) return;
+      e.preventDefault();
+      const cur = useSettings.getState().mapZoom;
+      const next = clampMapZoom(cur * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+      if (next !== cur) useSettings.getState().set('mapZoom', next);
+    };
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+
     // NPC 경로 설정: 같은 맵이면 바로, 다른 맵이면 문을 거쳐서 (야외가 허브)
     const route = (n: NpcRt, target: Pos) => {
       const [tm, tx, ty] = target;
@@ -554,6 +611,9 @@ export default function World() {
     let fade = 0;
     let fading: { door: Door; phase: 'out' | 'in' } | null = null;
     let doorCooldown = 0;
+    // 문을 지나온 직후엔 키를 떼거나 한 칸 이상 벗어나야 다음 문이 동작 (계단 왕복 방지)
+    let doorArmed = true;
+    let arrivedAt = { x: 0, y: 0 };
     let shownMap: MapId = runtime.player.map;
     setLocation(shownMap);
 
@@ -576,6 +636,8 @@ export default function World() {
             p.map = d.to; p.x = d.arrive.x; p.y = d.arrive.y; p.dir = d.arrive.dir;
             fading.phase = 'in';
             doorCooldown = 0.4;
+            doorArmed = false;
+            arrivedAt = { x: p.x, y: p.y };
           }
         } else {
           fade = Math.max(0, fade - dt * 5);
@@ -607,7 +669,8 @@ export default function World() {
       } else p.moving = false;
 
       // 문으로 걸어 들어가면 다른 맵으로
-      if (!fading && !blocked && doorCooldown <= 0 && p.moving) {
+      if (!doorArmed && (!p.moving || Math.hypot(p.x - arrivedAt.x, p.y - arrivedAt.y) > 1.2)) doorArmed = true;
+      if (!fading && !blocked && doorArmed && doorCooldown <= 0 && p.moving) {
         for (const d of map.doors) {
           if (p.dir !== d.enterDir) continue;
           const hit = d.tiles.some(([tx, ty]) => Math.abs(p.x - (tx + 0.5)) < 0.9 && Math.abs(p.y - (ty + 0.5)) < 1.0);
@@ -673,9 +736,13 @@ export default function World() {
       g.fillRect(0, 0, w, h);
       const mw = map.w * TILE, mh = map.h * TILE;
       // 실내는 화면에 맞게 확대
-      const zoom = map.indoor
-        ? Math.max(1, Math.min(1.7, Math.min(w / mw, (h - 60) / mh) * 0.92))
-        : w < 700 ? 0.8 : 1;
+      // 기본: 화면에 가로 약 20타일·세로 약 12.5타일이 보이도록 확대 (카메라는 주인공을 따라간다)
+      // 여기에 마우스 휠로 조절한 배율(설정의 mapZoom)을 곱하고, 바뀔 땐 부드럽게 따라간다
+      const baseZoom = Math.max(1.1, Math.min(2.2, Math.min(w / (20 * TILE), h / (12.5 * TILE))));
+      const targetZoom = baseZoom * useSettings.getState().mapZoom;
+      shownZoom = shownZoom === 0 ? targetZoom : shownZoom + (targetZoom - shownZoom) * Math.min(1, dt * 12);
+      const zoom = shownZoom;
+      g.imageSmoothingEnabled = false; // 확대해도 도트 느낌 유지
       const vw = w / zoom, vh = h / zoom;
       let camX = p.x * TILE - vw / 2;
       let camY = p.y * TILE - vh / 2;
@@ -821,7 +888,7 @@ export default function World() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); canvas.removeEventListener('wheel', onWheel); };
   }, [world, look, b.cap, npcTarget, findInteractable]);
 
   const closeOverlay = useCallback(() => {

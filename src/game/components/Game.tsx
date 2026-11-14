@@ -8,7 +8,7 @@ import SettingsMenu from './SettingsMenu';
 import { useSettings } from '../state/settings';
 import { runtime } from '../engine/runtime';
 import { initSprites } from '../engine/sprites';
-import { BranchSelect, DayEnd, Ending, Intro, Promotion, Quiz, Title, Transform } from './Scenes';
+import { DayEnd, Ending, Intro, Promotion, Quiz, Title, Transform } from './Scenes';
 
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   // 개발용 디버그 핸들 (콘솔에서 __game.getState() 등)
@@ -26,7 +26,6 @@ export default function Game() {
       {scene === 'title' && <Title />}
       {scene === 'home' && <Bedroom />}
       {scene === 'intro' && <Intro />}
-      {scene === 'branch' && <BranchSelect />}
       {scene === 'quiz' && <Quiz />}
       {scene === 'transform' && <Transform />}
       {scene === 'world' && <World key={`world-${day}`} />}

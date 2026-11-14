@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Archetype, BranchId, NpcId } from '../types';
 import { useGame, presentNpcs, fmtDelta, fatigueOf } from '../state/store';
-import { useSettings } from '../state/settings';
+import { TEXT_SPEED, useSettings } from '../state/settings';
 import { hasNightDuty } from '../data/schedule';
 import { BRANCHES, RANKS, TOTAL_DAYS, fmtMoney, rankIdxForDay, serviceMonth } from '../data/branches';
 import { ARCHETYPE_INFO, PLAYER_SPECIES, findSpecies } from '../data/monsters';
@@ -49,21 +49,19 @@ export function Title() {
   );
 }
 
-// ───────── 잠든 뒤 → 꿈 (방 오프닝 다음) ─────────
+// ───────── 잠든 뒤 (방 오프닝 다음) ─────────
 const INTRO_LINES = [
   '불을 끄고 침대에 누웠다.',
   '스물두 살 {me}은(는) 천장을 보며 중얼거렸다.',
   '"군대 가기 싫다… 군대 가기 싫다… 군대 가기 싫다…"',
   '그렇게 중얼거리다 스르륵 잠이 들었고…',
-  '꿈속에서 누군가 말을 걸어왔다.',
-  '"그렇게 가기 싫다면… 다른 세계의 군대는 어떠냐?"',
 ];
 
 export function Intro() {
   const s = useGame();
   const [i, setI] = useState(0);
   const lines = INTRO_LINES.map((l) => l.replace('{me}', s.name));
-  const next = () => (i < lines.length - 1 ? setI(i + 1) : s.go('branch'));
+  const next = () => (i < lines.length - 1 ? setI(i + 1) : s.go('quiz'));
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'e') { e.preventDefault(); next(); } };
     window.addEventListener('keydown', onKey);
@@ -83,70 +81,107 @@ export function Intro() {
   );
 }
 
-// ───────── 군 선택 ─────────
-export function BranchSelect() {
-  const s = useGame();
-  const ids: BranchId[] = ['army', 'navy', 'air'];
-  return (
-    <div className="scene branch-scene">
-      <h2>📜 입영 통지서</h2>
-      <p className="hud-dim">꿈속의 목소리: "어느 군으로 가겠느냐? 선택한 곳에 따라 너의 모습도 달라질 것이다…"</p>
-      <div className="branch-cards">
-        {ids.map((id) => {
-          const b = BRANCHES[id];
-          const sp = PLAYER_SPECIES[id];
-          return (
-            <button key={id} className={`branch-card b-${id}`} onClick={() => s.chooseBranch(id)}>
-              <div className="bc-name">{b.name}</div>
-              <div className="bc-type" style={{ background: b.typeColor }}>{b.type} 타입</div>
-              <div className="bc-tag">{b.tagline}</div>
-              <div className="bc-mons">
-                {sp.map((x) => (
-                  <MonsterCanvas key={x.id} look={{ ...x.look, body: '#2a2a3a', belly: '#3a3a4a', accent: '#4a4a5a' }} silhouette="#2a2a3a" size={54} animate={false} />
-                ))}
-              </div>
-              <div className="bc-cands">{sp.map((x) => x.name).join(' · ')}</div>
-              <ul>
-                <li>복무 {b.months}개월 · 경례 "{b.salute}!"</li>
-                <li>주특기: {b.games.specialty.replace('주특기: ', '')}</li>
-                <li>{b.unit}</li>
-              </ul>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+// ───────── 꿈: 수수께끼의 목소리가 묻고 답한다 (성격 분석) ─────────
+type DreamLine = { who: 'voice' | 'narr'; text: string };
 
-// ───────── 성격 분석 ─────────
+const REACTIONS: Record<Archetype, string[]> = {
+  leader: ['"…앞에 서는 걸 두려워하지 않는구나."', '"흠. 남을 이끄는 자의 대답이군."', '"책임을 피하지 않는다라… 좋다."'],
+  diligent: ['"…묵묵히 해내는 쪽이로군."', '"흠. 꼼꼼한 자의 대답이다."', '"끝까지 버티는 힘이 느껴지는구나."'],
+  social: ['"…사람을 좋아하는구나."', '"흠. 주위를 밝게 만드는 자의 대답이군."', '"함께라면 버틸 수 있다라… 좋다."'],
+};
+
 export function Quiz() {
   const s = useGame();
-  const [i, setI] = useState(0);
+  const b = BRANCHES[s.branch];
+  const opening: DreamLine[] = [
+    { who: 'narr', text: '……' },
+    { who: 'narr', text: '끝없는 어둠 속에서, 희미한 빛 하나가 떠올랐다.' },
+    { who: 'voice', text: `"…그렇게도 가기 싫으냐, ${s.name}."` },
+    { who: 'voice', text: `"걱정 마라. 내일 네가 가는 곳은 여전히 ${b.name}이다. 다만… 조금 다른 세계의 ${b.name}이지."` },
+    { who: 'voice', text: '"그 전에 몇 가지만 묻겠다. 솔직하게 답하거라."' },
+  ];
+  const closing: DreamLine[] = [
+    { who: 'voice', text: '"…그래, 잘 들었다."' },
+    { who: 'voice', text: '"네 대답에 어울리는 모습을 정해 두마."' },
+    { who: 'voice', text: '"눈을 뜨면 알게 될 것이다. 잘 해 보거라, 신병."' },
+    { who: 'narr', text: '빛이 점점 커지더니… 눈앞이 새하얘졌다.' },
+  ];
+  const [phase, setPhase] = useState<'opening' | 'q' | 'react' | 'closing'>('opening');
+  const [idx, setIdx] = useState(0); // opening/closing 줄 번호
+  const [qi, setQi] = useState(0);
+  const [reaction, setReaction] = useState('');
   const [score, setScore] = useState<Record<Archetype, number>>({ leader: 0, diligent: 0, social: 0 });
-  const q = PERSONALITY_QUIZ[i];
-  const pick = (a: Archetype) => {
-    const ns = { ...score, [a]: score[a] + 1 };
-    setScore(ns);
-    if (i < PERSONALITY_QUIZ.length - 1) setI(i + 1);
-    else s.finishQuiz(ns);
-  };
+  const [typeMs, typeStep] = TEXT_SPEED[useSettings((st) => st.textSpeed)];
+  const q = PERSONALITY_QUIZ[qi];
+
+  const line: DreamLine =
+    phase === 'opening' ? opening[idx]
+      : phase === 'closing' ? closing[idx]
+        : phase === 'react' ? { who: 'voice', text: reaction }
+          : { who: 'voice', text: `"${q.q}"` };
+
+  const [typed, setTyped] = useState(0);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { const n = parseInt(e.key, 10); if (n >= 1 && n <= 3) pick(q.options[n - 1].type); };
+    if (typeMs === 0) { setTyped(line.text.length); return; }
+    setTyped(0);
+    const iv = setInterval(() => setTyped((t) => (t >= line.text.length ? t : t + typeStep)), typeMs);
+    return () => clearInterval(iv);
+  }, [line.text, typeMs, typeStep]);
+  const done = typed >= line.text.length;
+
+  const advance = () => {
+    if (!done) { setTyped(line.text.length); return; }
+    if (phase === 'opening') {
+      if (idx < opening.length - 1) setIdx(idx + 1); else { setPhase('q'); setIdx(0); }
+    } else if (phase === 'react') {
+      if (qi < PERSONALITY_QUIZ.length - 1) { setQi(qi + 1); setPhase('q'); } else { setPhase('closing'); setIdx(0); }
+    } else if (phase === 'closing') {
+      if (idx < closing.length - 1) setIdx(idx + 1); else s.finishQuiz(score);
+    }
+  };
+  const pick = (a: Archetype) => {
+    if (phase !== 'q' || !done) return;
+    setScore({ ...score, [a]: score[a] + 1 });
+    const pool = REACTIONS[a];
+    setReaction(pool[qi % pool.length]);
+    setPhase('react');
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (phase === 'q') {
+        const n = parseInt(e.key, 10);
+        if (n >= 1 && n <= q.options.length) { e.preventDefault(); pick(q.options[n - 1].type); return; }
+        if (!done && (e.key === 'Enter' || e.key === ' ' || e.key === 'e')) { e.preventDefault(); setTyped(line.text.length); }
+        return;
+      }
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'e') { e.preventDefault(); advance(); }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+
+  const bright = phase === 'closing' && idx === closing.length - 1;
   return (
-    <div className="scene quiz-scene">
-      <div className="quiz-progress">{PERSONALITY_QUIZ.map((_, k) => <span key={k} className={k <= i ? 'on' : ''} />)}</div>
-      <div className="quiz-voice">🌀 꿈속의 목소리가 묻는다… ({i + 1}/{PERSONALITY_QUIZ.length})</div>
-      <h2 className="quiz-q">{q.q}</h2>
-      <div className="quiz-options">
-        {q.options.map((o, k) => (
-          <button key={k} className="choice big" onClick={() => pick(o.type)}>
-            <span className="choice-num">{k + 1}</span> {o.text}
-          </button>
-        ))}
+    <div className={`scene dream-scene ${bright ? 'whiteout' : ''}`} onClick={() => phase !== 'q' && advance()}>
+      <div className="dream-particles" />
+      <div className={`dream-orb ${phase === 'q' ? 'asking' : ''}`}><span>?</span></div>
+      {(phase === 'q' || phase === 'react') && <div className="dream-progress">질문 {qi + 1} / {PERSONALITY_QUIZ.length}</div>}
+      <div className="dream-box" onClick={(e) => { if (phase === 'q') e.stopPropagation(); }}>
+        {line.who === 'voice' && <div className="speaker">???</div>}
+        <div className={`dialogue-text ${line.who === 'narr' ? 'narr' : ''}`}>
+          {line.text.slice(0, typed)}
+          {done && phase !== 'q' && <span className="next-indicator">▼</span>}
+        </div>
+        {phase === 'q' && done && (
+          <div className="choices">
+            {q.options.map((o, k) => (
+              <button key={k} className="choice" onClick={() => pick(o.type)}>
+                <span className="choice-num">{k + 1}</span> {o.text}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

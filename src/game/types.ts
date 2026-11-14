@@ -2,14 +2,14 @@ export type BranchId = 'army' | 'navy' | 'air';
 export type Archetype = 'leader' | 'diligent' | 'social';
 export type NpcId = 'sgt' | 'senior' | 'buddy' | 'junior' | 'junior2' | 'lt' | 'sgm' | 'cpt';
 export type SpotId =
-  | 'bed' | 'barracks' | 'mess' | 'px' | 'admin' | 'cyber' | 'gym'
+  | 'bed' | 'barracks' | 'mess' | 'px' | 'admin' | 'command' | 'tv' | 'cyber' | 'gym'
   | 'parade' | 'train' | 'post' | 'gate';
 export type GameId =
   | 'env' | 'night' | 'combat' | 'guard' | 'specialty' | 'sandbag' | 'overlock';
 export type Season = 'winter' | 'spring' | 'summer' | 'autumn';
 
 export type Scene =
-  | 'title' | 'home' | 'intro' | 'branch' | 'quiz' | 'transform'
+  | 'title' | 'home' | 'intro' | 'quiz' | 'transform'
   | 'world' | 'minigame' | 'promotion' | 'dayEnd' | 'ending';
 
 export interface Stats {

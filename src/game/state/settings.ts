@@ -15,7 +15,13 @@ export interface Settings {
   screenShake: boolean;
   /** 대화 후 군대 상식 카드 표시 (끄더라도 수첩에는 모인다) */
   showTips: boolean;
+  /** 부대 맵 확대 배율 (마우스 휠로 조절, 1 = 기본) */
+  mapZoom: number;
 }
+
+export const MAP_ZOOM_MIN = 0.6;
+export const MAP_ZOOM_MAX = 1.8;
+export const clampMapZoom = (v: number) => Math.max(MAP_ZOOM_MIN, Math.min(MAP_ZOOM_MAX, Math.round(v * 100) / 100));
 
 export const DEFAULT_SETTINGS: Settings = {
   timeSpeed: 'normal',
@@ -24,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   difficulty: 'normal',
   screenShake: true,
   showTips: true,
+  mapZoom: 1,
 };
 
 /** 실제 시간으로 게임 1분이 흐르는 데 걸리는 시간(ms) */
@@ -60,7 +67,7 @@ function persist(s: Settings) {
   try {
     const data: Settings = {
       timeSpeed: s.timeSpeed, textSpeed: s.textSpeed, gatherWindow: s.gatherWindow,
-      difficulty: s.difficulty, screenShake: s.screenShake, showTips: s.showTips,
+      difficulty: s.difficulty, screenShake: s.screenShake, showTips: s.showTips, mapZoom: s.mapZoom,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch { /* noop */ }

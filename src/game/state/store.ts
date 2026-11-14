@@ -227,7 +227,7 @@ export const useGame = create<Store>((set, get) => ({
     set({ ...initialPersist(), name: name.trim() || '김몬스', scene: 'home', minigame: null, rollcall: null, lateCall: null, toasts: [], busy: false });
   },
 
-  chooseBranch: (b) => set({ branch: b, scene: 'quiz' }),
+  chooseBranch: (b) => set({ branch: b }),
 
   finishQuiz: (scores) => {
     const sp = pickSpecies(get().branch, scores);
@@ -692,7 +692,8 @@ function teleportToBed(branch: BranchId) {
 
 function buildMapSpotLabel(branch: BranchId, spot: SpotId): string {
   const labels: Record<SpotId, string> = {
-    bed: '생활관 침상', barracks: '생활관', mess: '식당', px: 'PX', admin: '행정반', cyber: '싸지방',
+    bed: '1생활관 내 침상', barracks: '막사 1층 1생활관', mess: '식당', px: 'PX', admin: '막사 1층 행정반',
+    command: '막사 1층 지휘통제실', tv: '막사 2층 휴게실', cyber: '싸지방',
     gym: '체력단련장', parade: '연병장', train: BRANCHES[branch].trainArea, post: '위병소 초소', gate: '위병소 정문',
   };
   return labels[spot];

@@ -2,21 +2,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGame } from '../state/store';
 import { useSettings } from '../state/settings';
-import { drawHuman } from '../engine/drawHuman';
 import type { Dir } from '../engine/drawMonster';
+import { PX, SPRITE_H, drawExclaim, drawPixelHuman, drawRoomAnimated, renderRoomStatic } from '../engine/pixelArt';
 import DialogueBox, { type DialogueScript } from './DialogueBox';
 import Menu, { type MenuOption } from './Menu';
 import TouchPad from './TouchPad';
-import type { Line } from '../types';
+import type { BranchId, Line } from '../types';
+import { BRANCHES } from '../data/branches';
 
 /**
- * 오프닝: 입대 전날 밤, 주인공의 방.
- * 방 안을 돌아다니며 물건을 조사하고, 입영통지서를 확인한 뒤 침대에서 잠들면 꿈(군 선택)으로 넘어간다.
+ * 오프닝: 입대 전날 밤, 주인공의 방 (2D 휴대용 게임기 시절 느낌).
+ * - 자유 이동, 가까이 있는 물건을 E/Space로 조사한다.
+ * - 그래픽은 도트(타일 16px)로 그린 뒤 정수 배율로 확대한다.
+ * - 입영통지서를 확인한 뒤 침대에서 잠들면 꿈(군 선택)으로 넘어간다.
  */
 
-const T = 32;
 const W = 13;
 const H = 10;
+const SPEED = 4.2; // 초당 칸 수
 
 type ObjId =
   | 'notice' | 'pc' | 'phone' | 'tv' | 'console' | 'bed' | 'mirror' | 'calendar'
@@ -53,13 +56,14 @@ const OBJECTS: RoomObj[] = [
   { id: 'door', label: '방문', at: [6.5, 9.4] },
 ];
 
+
 const narr = (...texts: string[]): Line[] => texts.map((text) => ({ who: 'narr', text }));
 
 const TEXTS: Record<Exclude<ObjId, 'bed'>, Line[]> = {
   notice: narr(
     '📜 입영통지서 — {me} 귀하',
-    '입영 일시: 내일 14:00 / 입영 장소: ○○ 신병교육대 / 지참물: 신분증, 통지서, 개인 상비약',
-    '……진짜 내일이구나.',
+    '입영 일시: 내일 14:00 / 지참물: 신분증, 통지서, 개인 상비약',
+    '……진짜 내일이구나. 그런데 입영 부대가… 어디였더라?',
   ),
   pc: narr(
     '유튜브 시청 기록이 빼곡하다.',
@@ -113,12 +117,13 @@ type Overlay =
   | { type: 'menu'; title: string; subtitle?: string; options: MenuOption[] }
   | null;
 
+
 export default function Bedroom() {
   const s = useGame();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const keys = useRef<Record<string, boolean>>({});
-  const player = useRef({ x: 6.5, y: 5.6, dir: 'down' as Dir, moving: false });
+  const player = useRef({ x: 6.5, y: 5.6, dir: 'down' as Dir, moving: false, walkT: 0 });
   const [overlay, setOverlayState] = useState<Overlay>(null);
   const overlayRef = useRef<Overlay>(null);
   const [prompt, setPrompt] = useState<RoomObj | null>(null);
@@ -151,7 +156,7 @@ export default function Bedroom() {
           '입대 하루 전날 밤, 22시.',
           '{me}의 방. 내일이면 이 방도 한동안 안녕이다.',
           '군대 유튜브와 밀리터리 잡지로 단련된 자칭 "준비된 신병". …그래도 가기 싫은 건 싫다.',
-          '[조작] WASD/방향키로 이동, E/Space로 조사. 방을 둘러보고, 입영통지서를 확인한 뒤 침대에서 잠들자.',
+          '[조작] WASD/방향키로 이동, 물건 가까이에서 E/Space로 조사. 입영통지서를 확인한 뒤 침대에서 잠들자.',
         ),
       },
     });
@@ -182,11 +187,44 @@ export default function Bedroom() {
       markSeen('bed');
       return;
     }
+    if (o.id === 'notice') {
+      // 입영 부대(육·해·공)를 떠올린다 — 어떤 포켓몬이 될지는 아직 모른다
+      const chooseMenu = () => setOverlay({
+        type: 'menu',
+        title: '📜 입영통지서 — 입영 부대',
+        subtitle: '통지서의 "입영 부대" 칸을 자세히 들여다본다…',
+        options: (['army', 'navy', 'air'] as BranchId[]).map((id) => ({
+          label: `${BRANCHES[id].name} — ${BRANCHES[id].noticePlace}`,
+          hint: `복무 ${BRANCHES[id].months}개월`,
+          onSelect: () => {
+            useGame.getState().chooseBranch(id);
+            markSeen('notice');
+            setOverlay({ type: 'dialogue', script: { lines: narr(...BRANCHES[id].recall, '…좋아, 마음의 준비는 됐다. (거의)') } });
+          },
+        })),
+      });
+      if (!seenRef.current.includes('notice')) {
+        setOverlay({ type: 'dialogue', script: { lines: TEXTS.notice }, onDone: chooseMenu });
+      } else {
+        const b = BRANCHES[useGame.getState().branch];
+        setOverlay({
+          type: 'menu',
+          title: '📜 입영통지서',
+          subtitle: `입영 부대: ${b.name} · ${b.noticePlace} · 내일 14:00`,
+          options: [
+            { label: '틀림없다. 확인 끝!', onSelect: () => setOverlay(null) },
+            { label: '입영 부대를 다시 확인한다', hint: '군 다시 고르기', onSelect: chooseMenu },
+          ],
+        });
+      }
+      return;
+    }
     markSeen(o.id);
     setOverlay({ type: 'dialogue', script: { lines: TEXTS[o.id] } });
   }, [setOverlay, goToSleep, markSeen]);
 
-  const findNear = useCallback((): RoomObj | null => {
+  /** 가까이 있는 물건 (가장 가까운 것) */
+  const facing = useCallback((): RoomObj | null => {
     const p = player.current;
     let best: RoomObj | null = null;
     let bd = Infinity;
@@ -199,9 +237,9 @@ export default function Bedroom() {
 
   const interact = useCallback(() => {
     if (overlayRef.current || sleepingRef.current) return;
-    const o = promptRef.current ?? findNear();
+    const o = facing();
     if (o) inspect(o);
-  }, [findNear, inspect]);
+  }, [facing, inspect]);
   const interactRef = useRef(interact);
   interactRef.current = interact;
 
@@ -211,8 +249,8 @@ export default function Bedroom() {
       if (overlayRef.current || sleepingRef.current) return;
       if (e.key === 'Escape') { e.preventDefault(); keys.current = {}; useSettings.getState().openMenu(); return; }
       const k = e.key.toLowerCase();
-      keys.current[k] = true;
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+      keys.current[k] = true;
       if (k === 'e' || k === ' ' || k === 'enter') interactRef.current();
     };
     const up = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false; };
@@ -227,7 +265,7 @@ export default function Bedroom() {
     };
   }, []);
 
-  // 루프: 이동 + 그리기
+  // 루프: 타일 이동 + 도트 렌더
   useEffect(() => {
     const canvas = canvasRef.current!;
     const g = canvas.getContext('2d')!;
@@ -236,12 +274,17 @@ export default function Bedroom() {
     const resize = () => {
       const r = wrapRef.current!.getBoundingClientRect();
       w = r.width; h = r.height;
-      canvas.width = w * dpr; canvas.height = h * dpr;
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
       canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
     };
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(wrapRef.current!);
+
+    const roomStatic = renderRoomStatic(W, H);
+    const low = document.createElement('canvas');
+    low.width = W * PX; low.height = H * PX;
+    const lg = low.getContext('2d')!;
 
     const blocked = (x: number, y: number) => {
       const r = 0.28;
@@ -268,50 +311,54 @@ export default function Bedroom() {
       }
       if (vx || vy) {
         const len = Math.hypot(vx, vy);
-        const nx = p.x + (vx / len) * 4.2 * dt;
-        const ny = p.y + (vy / len) * 4.2 * dt;
+        const nx = p.x + (vx / len) * SPEED * dt;
+        const ny = p.y + (vy / len) * SPEED * dt;
         if (!blocked(nx, p.y)) p.x = nx;
         if (!blocked(p.x, ny)) p.y = ny;
         p.dir = Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? 'right' : 'left') : vy > 0 ? 'down' : 'up';
         p.moving = true;
-      } else p.moving = false;
+        p.walkT += dt;
+      } else { p.moving = false; p.walkT = 0; }
 
-      const near = stop ? null : findNear();
+      const near = stop ? null : facing();
       if ((near?.id ?? null) !== (promptRef.current?.id ?? null)) {
         promptRef.current = near;
         setPrompt(near);
       }
 
-      // ── 그리기 ──
-      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // ── 저해상도 캔버스에 그리기 ──
+      lg.imageSmoothingEnabled = false;
+      lg.drawImage(roomStatic, 0, 0);
+      drawRoomAnimated(lg, t, seenRef.current.includes('notice'));
+      const cx = p.x * PX;
+      const footY = p.y * PX + 5;
+      // 걷는 동안 서기 → 왼발 → 서기 → 오른발 순으로 반복
+      const phase = Math.floor(p.walkT * 8) % 4;
+      const frame = p.moving ? [1, 0, 2, 0][phase] : 0;
+      drawPixelHuman(lg, cx, footY - (frame ? 1 : 0), p.dir, frame);
+      if (near) drawExclaim(lg, cx, footY - SPRITE_H);
+
+      // ── 정수 배율로 확대 ──
+      const W2 = w * dpr, H2 = h * dpr;
+      const scale = Math.max(1, Math.floor(Math.min(W2 / low.width, (H2 - 60 * dpr) / low.height)));
+      const ox = Math.floor((W2 - low.width * scale) / 2), oy = Math.floor((H2 - low.height * scale) / 2 + 10 * dpr);
+      g.setTransform(1, 0, 0, 1, 0, 0);
       g.fillStyle = '#0e0c12';
-      g.fillRect(0, 0, w, h);
-      const zoom = Math.max(1, Math.min(2.2, Math.min(w / (W * T), (h - 40) / (H * T)) * 0.95));
-      const ox = (w - W * T * zoom) / 2, oy = (h - H * T * zoom) / 2 + 10;
-      g.save();
-      g.translate(ox, oy);
-      g.scale(zoom, zoom);
-      drawRoom(g, t, seenRef.current);
-      drawHuman(g, p.x * T, p.y * T + 12, 44, { dir: p.dir, t, walking: p.moving });
-      if (near && !stop) {
-        g.fillStyle = '#ffe14a';
-        g.font = 'bold 16px sans-serif';
-        g.textAlign = 'center';
-        g.fillText('!', near.at[0] * T, near.at[1] * T - 18 + Math.sin(t * 5) * 2);
-      }
-      g.restore();
-      // 밤 분위기 (스탠드 조명)
-      const lg = g.createRadialGradient(ox + 2.5 * T * zoom, oy + 2.5 * T * zoom, 20, ox + 6 * T * zoom, oy + 5 * T * zoom, Math.max(w, h));
-      lg.addColorStop(0, 'rgba(255,220,150,0)');
-      lg.addColorStop(1, 'rgba(10,12,40,0.45)');
-      g.fillStyle = lg;
-      g.fillRect(0, 0, w, h);
+      g.fillRect(0, 0, W2, H2);
+      g.imageSmoothingEnabled = false;
+      g.drawImage(low, ox, oy, low.width * scale, low.height * scale);
+      // 밤 분위기 (스탠드 쪽이 밝다)
+      const grd = g.createRadialGradient(ox + 2.6 * PX * scale, oy + 2 * PX * scale, 10, ox + 6 * PX * scale, oy + 5 * PX * scale, Math.max(W2, H2) * 0.8);
+      grd.addColorStop(0, 'rgba(255,220,150,0)');
+      grd.addColorStop(1, 'rgba(10,12,40,0.35)');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, W2, H2);
 
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
-  }, [findNear]);
+  }, [facing]);
 
   const closeOverlay = useCallback(() => {
     const o = overlayRef.current;
@@ -327,13 +374,14 @@ export default function Bedroom() {
       <div className="world-canvas" ref={wrapRef}>
         <canvas ref={canvasRef} />
       </div>
+      <div className="place-sign">{s.name}의 방</div>
       <div className="hud-top">
         <div className="hud-box">
           <div className="hud-day">입대 D-1</div>
-          <div className="hud-dim">22:00 · {s.name}의 방</div>
+          <div className="hud-dim">22:00 · 밤</div>
         </div>
         <div className="hud-box bedroom-todo">
-          <div>{seen.includes('notice') ? '✔' : '□'} 입영통지서 확인하기</div>
+          <div>{seen.includes('notice') ? `✔ 입영통지서 확인 (${BRANCHES[s.branch].name})` : '□ 입영통지서 확인하기'}</div>
           <div>□ 침대에서 잠들기</div>
           <div className="hud-dim">방 둘러보기 {explored}/{explorable}</div>
         </div>
@@ -351,111 +399,4 @@ export default function Bedroom() {
       {sleeping && <div className="sleep-fade"><span>딸깍. 불을 껐다…</span></div>}
     </div>
   );
-}
-
-// ───────────── 방 그리기 ─────────────
-function drawRoom(g: CanvasRenderingContext2D, t: number, seen: ObjId[]) {
-  // 바닥 (마루)
-  for (let y = 2; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
-    g.fillStyle = (x + y) % 2 ? '#c8945a' : '#c08c52';
-    g.fillRect(x * T, y * T, T, T);
-    g.fillStyle = 'rgba(90,50,20,0.18)';
-    g.fillRect(x * T, y * T + T - 2, T, 2);
-    if ((x * 7 + y * 3) % 5 === 0) g.fillRect(x * T + 10, y * T + 12, 10, 1);
-  }
-  // 벽 (벽지)
-  g.fillStyle = '#e8e0cc'; g.fillRect(T, 0, (W - 2) * T, 2 * T);
-  g.fillStyle = '#d8ccb0';
-  for (let x = T; x < (W - 1) * T; x += 16) g.fillRect(x, 0, 2, 2 * T);
-  g.fillStyle = '#a07a50'; g.fillRect(T, 2 * T - 6, (W - 2) * T, 6); // 걸레받이
-  // 테두리 벽
-  g.fillStyle = '#5a4a3e';
-  g.fillRect(0, 0, T, H * T); g.fillRect((W - 1) * T, 0, T, H * T);
-  g.fillRect(0, (H - 1) * T, W * T, T);
-  g.fillStyle = '#6e5c4c'; g.fillRect(0, (H - 1) * T, W * T, 5);
-
-  // 러그
-  g.fillStyle = '#7a8ac0'; g.beginPath(); g.roundRect(4.6 * T, 4.6 * T, 3.8 * T, 2.4 * T, 10); g.fill();
-  g.strokeStyle = '#f2f2f2'; g.lineWidth = 2; g.beginPath(); g.roundRect(4.8 * T, 4.8 * T, 3.4 * T, 2.0 * T, 8); g.stroke();
-
-  // 거울
-  g.fillStyle = '#8a6a4a'; g.fillRect(4 * T + 6, 0.3 * T, T - 12, 1.4 * T);
-  g.fillStyle = '#bfe0f0'; g.fillRect(4 * T + 9, 0.3 * T + 3, T - 18, 1.4 * T - 6);
-  g.fillStyle = 'rgba(255,255,255,0.6)'; g.fillRect(4 * T + 11, 0.3 * T + 6, 3, 1.4 * T - 16);
-  // 달력
-  g.fillStyle = '#ffffff'; g.fillRect(5 * T + 4, 0.5 * T, T - 8, T);
-  g.fillStyle = '#d03a3a'; g.fillRect(5 * T + 4, 0.5 * T, T - 8, 7);
-  g.fillStyle = '#9a9a9a';
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 4; j++) g.fillRect(5 * T + 7 + j * 5, 0.5 * T + 11 + i * 6, 3, 3);
-  g.strokeStyle = '#e03a3a'; g.lineWidth = 1.5; g.beginPath(); g.arc(5 * T + 17, 0.5 * T + 18, 4, 0, Math.PI * 2); g.stroke();
-  // 창문 + 밤하늘 + 별똥별
-  const wx = 8 * T - 6, wy = 0.25 * T, ww = T + 12, wh = 1.3 * T;
-  g.fillStyle = '#6a4a30'; g.fillRect(wx - 3, wy - 3, ww + 6, wh + 6);
-  g.fillStyle = '#16204a'; g.fillRect(wx, wy, ww, wh);
-  g.fillStyle = '#f2ecc8'; g.beginPath(); g.arc(wx + ww - 9, wy + 9, 5, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#ffffff';
-  for (let i = 0; i < 6; i++) g.fillRect(wx + ((i * 13) % (ww - 4)) + 2, wy + ((i * 17) % (wh - 6)) + 3, 1.5, 1.5);
-  const ph = (t * 0.35) % 1;
-  if (ph < 0.35) {
-    const k = ph / 0.35;
-    g.strokeStyle = `rgba(255,250,200,${1 - k})`; g.lineWidth = 1.5;
-    g.beginPath(); g.moveTo(wx + 4 + k * ww, wy + 4 + k * wh * 0.6); g.lineTo(wx + k * ww - 6, wy + k * wh * 0.6 - 2); g.stroke();
-  }
-  g.fillStyle = '#6a4a30'; g.fillRect(wx + ww / 2 - 1, wy, 2, wh); g.fillRect(wx, wy + wh / 2 - 1, ww, 2);
-
-  // 책상 + 컴퓨터 + 입영통지서
-  g.fillStyle = '#8a5a3a'; g.fillRect(1 * T, 2 * T + 4, 3 * T, T - 8);
-  g.fillStyle = '#6a4228'; g.fillRect(1 * T, 3 * T - 6, 3 * T, 4);
-  g.fillStyle = '#2a2e38'; g.fillRect(1 * T + 4, 1.6 * T, T - 6, 0.75 * T);
-  g.fillStyle = '#5ac0f2'; g.fillRect(1 * T + 7, 1.6 * T + 3, T - 12, 0.75 * T - 7);
-  g.fillStyle = '#3a3e48'; g.fillRect(1.5 * T - 3, 2.35 * T, 6, 4);
-  g.fillStyle = '#f2f2ea'; g.save(); g.translate(3.5 * T, 2.45 * T); g.rotate(-0.15); g.fillRect(-9, -7, 18, 13); g.restore();
-  g.fillStyle = '#d03a3a'; g.fillRect(3.5 * T - 6, 2.45 * T - 5, 7, 2);
-  if (!seen.includes('notice')) {
-    const glow = (Math.sin(t * 4) + 1) / 2;
-    g.strokeStyle = `rgba(255,225,74,${0.4 + glow * 0.5})`; g.lineWidth = 2;
-    g.beginPath(); g.arc(3.5 * T, 2.45 * T, 13 + glow * 3, 0, Math.PI * 2); g.stroke();
-  }
-  // 스탠드
-  g.fillStyle = '#e8d8a0'; g.beginPath(); g.moveTo(2.3 * T, 1.75 * T); g.lineTo(2.75 * T, 1.75 * T); g.lineTo(2.62 * T, 1.5 * T); g.lineTo(2.43 * T, 1.5 * T); g.fill();
-  g.fillStyle = '#5a5a5a'; g.fillRect(2.5 * T, 1.75 * T, 2, 0.6 * T);
-  // 의자
-  g.fillStyle = '#4a4a58'; g.beginPath(); g.roundRect(2 * T + 6, 3 * T + 2, T - 12, T - 10, 5); g.fill();
-
-  // TV 장 + TV + 게임기
-  g.fillStyle = '#6a4a30'; g.fillRect(6 * T, 2 * T + 8, 2 * T, T - 12);
-  g.fillStyle = '#1a1a20'; g.fillRect(6 * T + 2, 1.35 * T, T + 6, 0.95 * T);
-  const flick = 0.75 + Math.sin(t * 9) * 0.05;
-  g.fillStyle = `rgba(110,170,230,${flick})`; g.fillRect(6 * T + 5, 1.35 * T + 3, T, 0.95 * T - 7);
-  g.fillStyle = '#f2f2f2'; g.fillRect(7.25 * T, 2.2 * T, 14, 6);
-  g.fillStyle = '#e04a4a'; g.fillRect(7.25 * T, 2.2 * T, 3, 6);
-  g.fillStyle = '#4a7ae0'; g.fillRect(7.25 * T + 11, 2.2 * T, 3, 6);
-
-  // 협탁 + 휴대폰
-  g.fillStyle = '#8a5a3a'; g.fillRect(9 * T + 3, 2 * T + 4, T - 6, T - 8);
-  g.fillStyle = '#2a2a30'; g.fillRect(9.5 * T - 4, 2.4 * T, 8, 12);
-  if (Math.sin(t * 3) > 0.3) { g.fillStyle = '#6af2a0'; g.fillRect(9.5 * T - 2, 2.4 * T + 2, 4, 3); }
-
-  // 침대
-  g.fillStyle = '#7a5030'; g.fillRect(10 * T, 2 * T, 2 * T, 2 * T);
-  g.fillStyle = '#f2f2ea'; g.fillRect(10 * T + 4, 2 * T + 4, 2 * T - 8, 2 * T - 6);
-  g.fillStyle = '#ffffff'; g.beginPath(); g.roundRect(10 * T + 8, 2 * T + 6, 2 * T - 16, 14, 5); g.fill();
-  g.fillStyle = '#5a8ad0'; g.fillRect(10 * T + 4, 2.75 * T, 2 * T - 8, 1.25 * T - 2);
-  g.fillStyle = '#4a7ac0'; g.fillRect(10 * T + 4, 2.75 * T, 2 * T - 8, 4);
-
-  // 책장
-  g.fillStyle = '#7a5030'; g.fillRect(1 * T + 2, 6 * T - 6, T - 4, 2 * T + 6);
-  const bookCols = ['#d04a4a', '#4a8ad0', '#e8b030', '#5ab05a', '#9a5ad0', '#f28a3a'];
-  for (let r = 0; r < 4; r++) {
-    g.fillStyle = '#5a3a20'; g.fillRect(1 * T + 2, 6 * T - 6 + r * 17 + 15, T - 4, 2);
-    for (let i = 0; i < 4; i++) { g.fillStyle = bookCols[(r * 4 + i) % bookCols.length]; g.fillRect(1 * T + 5 + i * 6, 6 * T - 6 + r * 17 + 2, 5, 13); }
-  }
-  // 화분
-  g.fillStyle = '#b06a3a'; g.fillRect(11 * T + 9, 8 * T + 14, 14, 14);
-  g.fillStyle = '#3f9a4a'; g.beginPath(); g.arc(11.5 * T, 8 * T + 10, 10, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#5ab05a'; g.beginPath(); g.arc(11.5 * T - 5, 8 * T + 6, 5, 0, Math.PI * 2); g.fill();
-  // 방문
-  g.fillStyle = '#6a4228'; g.fillRect(6 * T + 1, (H - 1) * T - 2, T - 2, T + 2);
-  g.fillStyle = '#8a5a3a'; g.fillRect(6 * T + 4, (H - 1) * T + 2, T - 8, T - 4);
-  g.fillStyle = '#f2c230'; g.fillRect(6 * T + T - 10, (H - 1) * T + 14, 3, 3);
 }
