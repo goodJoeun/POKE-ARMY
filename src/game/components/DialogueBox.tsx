@@ -1,0 +1,127 @@
+'use client';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Choice, Line, NpcId } from '../types';
+import { useGame } from '../state/store';
+import { fmt } from '../engine/text';
+import { npcSpeaker, playerSpeaker, type SpeakerInfo } from '../engine/speakers';
+import MonsterCanvas from './MonsterCanvas';
+
+export interface DialogueScript {
+  npc?: NpcId;
+  lines: Line[];
+  choices?: Choice[];
+}
+
+interface Props {
+  script: DialogueScript;
+  onChoice?: (c: Choice) => void;
+  onClose: () => void;
+}
+
+const GRADE_LABEL = { good: '👍 훌륭한 대응', ok: '🙂 무난한 대응', bad: '👎 아쉬운 대응' } as const;
+
+export default function DialogueBox({ script, onChoice, onClose }: Props) {
+  const { branch, name, day, speciesId } = useGame();
+  const ctx = { branch, name, day };
+  const [lines, setLines] = useState<Line[]>(script.lines);
+  const [idx, setIdx] = useState(0);
+  const [phase, setPhase] = useState<'lines' | 'choices' | 'reply'>('lines');
+  const [picked, setPicked] = useState<Choice | null>(null);
+  const [typed, setTyped] = useState(0);
+
+  const line = lines[idx];
+  const text = line ? fmt(line.text, ctx) : '';
+
+  useEffect(() => {
+    setTyped(0);
+    if (!text) return;
+    const iv = setInterval(() => setTyped((t) => (t >= text.length ? t : t + 2)), 18);
+    return () => clearInterval(iv);
+  }, [text, idx, phase]);
+
+  const speaker: SpeakerInfo | null = useMemo(() => {
+    if (!line) return null;
+    if (line.who === 'narr') return null;
+    if (line.who === 'me') return playerSpeaker(branch, speciesId, name, day);
+    const id = (line.who === 'npc' ? script.npc : line.who) as NpcId | undefined;
+    if (!id) return null;
+    return npcSpeaker(branch, id, day);
+  }, [line, branch, speciesId, name, day, script.npc]);
+
+  const advance = useCallback(() => {
+    if (phase === 'choices') return;
+    if (typed < text.length) { setTyped(text.length); return; }
+    if (idx < lines.length - 1) { setIdx(idx + 1); return; }
+    if (phase === 'lines' && script.choices && script.choices.length > 0) { setPhase('choices'); return; }
+    onClose();
+  }, [phase, typed, text.length, idx, lines.length, script.choices, onClose]);
+
+  const choose = useCallback((c: Choice) => {
+    setPicked(c);
+    onChoice?.(c);
+    setLines(c.reply.length ? c.reply : [{ who: 'narr', text: '…' }]);
+    setIdx(0);
+    setPhase('reply');
+  }, [onChoice]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (phase === 'choices' && script.choices) {
+        const n = parseInt(e.key, 10);
+        if (n >= 1 && n <= script.choices.length) { e.preventDefault(); choose(script.choices[n - 1]); }
+        return;
+      }
+      if (e.key === ' ' || e.key === 'Enter' || e.key === 'e' || e.key === 'E') { e.preventDefault(); advance(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, script.choices, choose, advance]);
+
+  return (
+    <div className="dialogue-wrap" onClick={advance}>
+      {phase === 'reply' && picked?.tip && (
+        <div className="tip-card" onClick={(e) => e.stopPropagation()}>
+          <div className={`grade grade-${picked.grade}`}>{GRADE_LABEL[picked.grade]}</div>
+          <div className="tip-title">📘 군대 상식</div>
+          <div>{fmt(picked.tip, ctx)}</div>
+        </div>
+      )}
+      {phase === 'reply' && picked && !picked.tip && (
+        <div className="tip-card small" onClick={(e) => e.stopPropagation()}>
+          <div className={`grade grade-${picked.grade}`}>{GRADE_LABEL[picked.grade]}</div>
+        </div>
+      )}
+      <div className="dialogue">
+        {speaker?.look && (
+          <div className="portrait">
+            <MonsterCanvas look={speaker.look} size={110} cap={speaker.cap} />
+          </div>
+        )}
+        <div className="dialogue-body">
+          {speaker ? (
+            <div className="speaker">
+              {speaker.name} <span className="speaker-sub">{speaker.sub}</span>
+            </div>
+          ) : (
+            <div className="speaker narr">　</div>
+          )}
+          {phase === 'choices' && script.choices ? (
+            <div className="choices" onClick={(e) => e.stopPropagation()}>
+              <div className="choice-prompt">{fmt(lines[lines.length - 1]?.text ?? '', ctx)}</div>
+              {script.choices.map((c, i) => (
+                <button key={i} className="choice" onClick={() => choose(c)}>
+                  <span className="choice-num">{i + 1}</span> {fmt(c.text, ctx)}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className={`dialogue-text ${line?.who === 'narr' ? 'narr' : ''}`}>
+              {text.slice(0, typed)}
+              {typed >= text.length && <span className="next-indicator">▼</span>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,332 @@
+import type { MonsterLook } from '../types';
+import { getSprite } from './sprites';
+
+export type Dir = 'down' | 'up' | 'left' | 'right';
+export type CapType = 'army' | 'navy' | 'air' | 'officer-army' | 'officer-navy' | 'officer-air' | null;
+
+export interface DrawOpts {
+  dir?: Dir;
+  t?: number;
+  walking?: boolean;
+  cap?: CapType;
+  sleeping?: boolean;
+  shadow?: boolean;
+}
+
+function shade(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  r = Math.max(0, Math.min(255, r + amt));
+  g = Math.max(0, Math.min(255, g + amt));
+  b = Math.max(0, Math.min(255, b + amt));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+function ellipse(g: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, fill: string, stroke?: string, lw = 1) {
+  g.beginPath();
+  g.ellipse(x, y, Math.max(0.1, rx), Math.max(0.1, ry), 0, 0, Math.PI * 2);
+  g.fillStyle = fill;
+  g.fill();
+  if (stroke) { g.lineWidth = lw; g.strokeStyle = stroke; g.stroke(); }
+}
+
+/**
+ * 몬스터를 (cx, baseY) 발 위치 기준으로 그린다. size = 대략적인 전체 높이(px)
+ */
+export function drawMonster(g: CanvasRenderingContext2D, look: MonsterLook, cx: number, baseY: number, size: number, o: DrawOpts = {}) {
+  const dir = o.dir ?? 'down';
+  const t = o.t ?? 0;
+  const s = size;
+  const bob = o.walking ? Math.abs(Math.sin(t * 12)) * s * 0.05 : Math.sin(t * 2.5) * s * 0.015;
+
+  // 등록된 스프라이트가 있으면 이미지로 그린다
+  const img = getSprite(look.sprite);
+  if (img) {
+    if (o.shadow !== false) ellipse(g, cx, baseY - s * 0.02, s * 0.3, s * 0.06, 'rgba(0,0,0,0.22)');
+    const h = s * 1.05;
+    const w = (img.naturalWidth / img.naturalHeight) * h;
+    g.save();
+    g.translate(cx, baseY - bob);
+    if (dir === 'left') g.scale(-1, 1);
+    g.imageSmoothingEnabled = img.naturalWidth > 128;
+    g.drawImage(img, -w / 2, -h, w, h);
+    g.restore();
+    if (o.sleeping) {
+      g.fillStyle = '#4a5a8a';
+      g.font = `bold ${Math.round(s * 0.18)}px sans-serif`;
+      const zz = (t * 0.8) % 1;
+      g.globalAlpha = 1 - zz;
+      g.fillText('z', cx + s * 0.3, baseY - h - zz * s * 0.3);
+      g.globalAlpha = 1;
+    }
+    return;
+  }
+  const outline = shade(look.body, -70);
+  const lw = Math.max(1, s / 40);
+
+  let rx = s * 0.32, ry = s * 0.3;
+  if (look.shape === 'tall') { rx = s * 0.27; ry = s * 0.36; }
+  if (look.shape === 'wide') { rx = s * 0.38; ry = s * 0.28; }
+  const cy = baseY - ry - s * 0.06 - bob;
+  const flip = dir === 'left' ? -1 : 1;
+  const side = dir === 'left' || dir === 'right';
+
+  if (o.shadow !== false) ellipse(g, cx, baseY - s * 0.02, rx * 0.9, s * 0.06, 'rgba(0,0,0,0.22)');
+
+  // 꼬리 (뒤)
+  const tailX = side ? cx - flip * rx * 0.95 : cx + rx * 0.75;
+  const tailY = cy + ry * 0.35;
+  const drawTail = () => {
+    switch (look.tail) {
+      case 'flame': {
+        const fl = 1 + Math.sin(t * 10) * 0.12;
+        ellipse(g, tailX, tailY - s * 0.08, s * 0.09, s * 0.13 * fl, look.accent);
+        ellipse(g, tailX, tailY - s * 0.06, s * 0.05, s * 0.08 * fl, '#ffe14a');
+        break;
+      }
+      case 'fin': {
+        g.beginPath();
+        g.moveTo(tailX, tailY);
+        g.lineTo(tailX + (side ? -flip : 1) * s * 0.18, tailY - s * 0.12);
+        g.lineTo(tailX + (side ? -flip : 1) * s * 0.18, tailY + s * 0.1);
+        g.closePath();
+        g.fillStyle = look.accent; g.fill(); g.strokeStyle = outline; g.lineWidth = lw; g.stroke();
+        break;
+      }
+      case 'leaf':
+        ellipse(g, tailX, tailY - s * 0.05, s * 0.06, s * 0.11, look.accent, outline, lw);
+        break;
+      case 'puff':
+        ellipse(g, tailX, tailY - s * 0.02, s * 0.1, s * 0.09, shade(look.body, 20), outline, lw);
+        break;
+      case 'spike':
+        g.beginPath();
+        g.moveTo(tailX, tailY - s * 0.05);
+        g.lineTo(tailX + (side ? -flip : 1) * s * 0.2, tailY + s * 0.02);
+        g.lineTo(tailX, tailY + s * 0.07);
+        g.closePath();
+        g.fillStyle = look.accent; g.fill(); g.strokeStyle = outline; g.lineWidth = lw; g.stroke();
+        break;
+    }
+  };
+  if (dir !== 'up') drawTail();
+
+  // 날개 (뒤쪽)
+  if (look.wings) {
+    const flap = o.walking ? Math.sin(t * 14) * 0.25 : Math.sin(t * 3) * 0.08;
+    for (const sd of side ? [-flip] : [-1, 1]) {
+      g.save();
+      g.translate(cx + sd * rx * 0.85, cy);
+      g.rotate(sd * (0.5 + flap));
+      ellipse(g, 0, -s * 0.02, s * 0.1, s * 0.2, shade(look.body, -20), outline, lw);
+      g.restore();
+    }
+  }
+
+  // 발
+  const step = o.walking ? Math.sin(t * 12) * s * 0.04 : 0;
+  ellipse(g, cx - rx * 0.45, baseY - s * 0.06 + step, s * 0.08, s * 0.05, shade(look.body, -30), outline, lw);
+  ellipse(g, cx + rx * 0.45, baseY - s * 0.06 - step, s * 0.08, s * 0.05, shade(look.body, -30), outline, lw);
+
+  // 등껍질 / 숯불 (뒤쪽 디테일)
+  if (look.extra === 'shell') {
+    const shx = side ? cx - flip * rx * 0.4 : cx;
+    ellipse(g, shx, cy - ry * 0.15, rx * 0.85, ry * 0.8, look.accent, shade(look.accent, -60), lw);
+    g.strokeStyle = shade(look.accent, -50); g.lineWidth = lw;
+    g.beginPath(); g.arc(shx, cy - ry * 0.15, rx * 0.45, 0, Math.PI * 1.6); g.stroke();
+  }
+
+  // 귀 (몸 뒤)
+  const earY = cy - ry * 0.8;
+  const drawEars = () => {
+    const ex = rx * 0.55;
+    const pairs = side ? [flip * -0.2] : [-1, 1];
+    for (const sd of pairs) {
+      const x = cx + sd * ex;
+      switch (look.ears) {
+        case 'round':
+          ellipse(g, x, earY, s * 0.08, s * 0.08, look.body, outline, lw);
+          ellipse(g, x, earY, s * 0.04, s * 0.04, look.belly);
+          break;
+        case 'pointy':
+          g.beginPath();
+          g.moveTo(x - s * 0.07, earY + s * 0.05);
+          g.lineTo(x + sd * s * 0.02, earY - s * 0.14);
+          g.lineTo(x + s * 0.07, earY + s * 0.05);
+          g.closePath(); g.fillStyle = look.body; g.fill(); g.strokeStyle = outline; g.lineWidth = lw; g.stroke();
+          break;
+        case 'horns':
+          g.beginPath();
+          g.moveTo(x - s * 0.03, earY + s * 0.04);
+          g.lineTo(x + sd * s * 0.04, earY - s * 0.12);
+          g.lineTo(x + s * 0.03, earY + s * 0.04);
+          g.closePath(); g.fillStyle = '#f2ead6'; g.fill(); g.strokeStyle = outline; g.lineWidth = lw; g.stroke();
+          break;
+        case 'fin':
+          g.beginPath();
+          g.moveTo(x - s * 0.06, earY + s * 0.06);
+          g.quadraticCurveTo(x + sd * s * 0.1, earY - s * 0.12, x + sd * s * 0.12, earY + s * 0.04);
+          g.closePath(); g.fillStyle = look.accent; g.fill(); g.strokeStyle = outline; g.lineWidth = lw; g.stroke();
+          break;
+        case 'tuft':
+          for (let i = -1; i <= 1; i++) ellipse(g, x + i * s * 0.03, earY - s * 0.02 - (i === 0 ? s * 0.03 : 0), s * 0.03, s * 0.07, shade(look.body, 15), outline, lw * 0.7);
+          break;
+        case 'antler':
+          g.strokeStyle = '#8a6a3a'; g.lineWidth = lw * 2.4; g.lineCap = 'round';
+          g.beginPath(); g.moveTo(x, earY + s * 0.04); g.lineTo(x + sd * s * 0.06, earY - s * 0.14);
+          g.moveTo(x + sd * s * 0.03, earY - s * 0.05); g.lineTo(x + sd * s * 0.12, earY - s * 0.08); g.stroke();
+          break;
+        case 'feather':
+          ellipse(g, x + sd * s * 0.03, earY - s * 0.04, s * 0.04, s * 0.09, look.accent, outline, lw * 0.7);
+          break;
+      }
+    }
+  };
+  drawEars();
+
+  // 몸
+  ellipse(g, cx, cy, rx, ry, look.body, outline, lw * 1.2);
+  // 배
+  if (dir !== 'up') {
+    const bx = side ? cx + flip * rx * 0.25 : cx;
+    ellipse(g, bx, cy + ry * 0.3, rx * (side ? 0.5 : 0.62), ry * 0.55, look.belly);
+  }
+  // 무늬
+  if (look.extra === 'spots') {
+    for (const [a, b, r] of [[-0.5, -0.3, 0.07], [0.45, -0.1, 0.05], [-0.2, 0.15, 0.04]] as const) {
+      ellipse(g, cx + a * rx * (side ? flip : 1), cy + b * ry, s * r, s * r, shade(look.body, -35));
+    }
+  }
+  if (look.extra === 'ember' && dir !== 'down') {
+    const fl = 1 + Math.sin(t * 9) * 0.15;
+    ellipse(g, cx - flip * rx * 0.2, cy - ry * 0.4, s * 0.1 * fl, s * 0.07 * fl, look.accent);
+    ellipse(g, cx - flip * rx * 0.2, cy - ry * 0.45, s * 0.05, s * 0.04, '#ffe14a');
+  }
+  if (look.extra === 'ember' && dir === 'down') {
+    const fl = 1 + Math.sin(t * 9) * 0.15;
+    ellipse(g, cx, cy - ry * 0.92, s * 0.07 * fl, s * 0.06 * fl, look.accent);
+    ellipse(g, cx, cy - ry * 0.95, s * 0.035, s * 0.03, '#ffe14a');
+  }
+  if (look.extra === 'tentacles') {
+    g.strokeStyle = look.accent; g.lineWidth = lw * 2.2; g.lineCap = 'round';
+    for (let i = -2; i <= 2; i++) {
+      const x = cx + i * rx * 0.35;
+      g.beginPath(); g.moveTo(x, cy + ry * 0.8);
+      g.quadraticCurveTo(x + Math.sin(t * 4 + i) * s * 0.05, cy + ry * 1.05, x + Math.sin(t * 4 + i) * s * 0.03, baseY - s * 0.02);
+      g.stroke();
+    }
+  }
+
+  if (dir === 'up') {
+    drawTail();
+  } else {
+    // 얼굴
+    const fx = side ? cx + flip * rx * 0.35 : cx;
+    const fy = cy - ry * 0.12;
+    const eyeSep = side ? 0 : rx * 0.36;
+    const eyes = side ? [fx + flip * rx * 0.12] : [fx - eyeSep, fx + eyeSep];
+    if (look.extra === 'mask' && !side) {
+      ellipse(g, fx, fy, rx * 0.65, ry * 0.25, shade(look.body, -40));
+    }
+    for (const ex of eyes) {
+      if (o.sleeping) {
+        g.strokeStyle = '#2a2a2a'; g.lineWidth = lw * 1.4;
+        g.beginPath(); g.arc(ex, fy, s * 0.04, 0.1 * Math.PI, 0.9 * Math.PI); g.stroke();
+        continue;
+      }
+      switch (look.eyes) {
+        case 'big':
+          ellipse(g, ex, fy, s * 0.065, s * 0.075, '#ffffff', '#2a2a2a', lw);
+          ellipse(g, ex + flip * s * 0.01, fy + s * 0.01, s * 0.04, s * 0.05, '#2a2a3a');
+          ellipse(g, ex - s * 0.012, fy - s * 0.02, s * 0.015, s * 0.015, '#ffffff');
+          break;
+        case 'sharp':
+          g.fillStyle = '#2a2a3a';
+          g.beginPath();
+          g.moveTo(ex - s * 0.055, fy - s * 0.02 * (ex < cx ? 1 : -1) * (side ? 0 : 1) - s * 0.01);
+          g.lineTo(ex + s * 0.055, fy - s * 0.02 * (ex < cx ? -1 : 1) * (side ? 0 : 1) - s * 0.01);
+          g.lineTo(ex, fy + s * 0.04);
+          g.closePath(); g.fill();
+          ellipse(g, ex, fy, s * 0.012, s * 0.012, '#ffffff');
+          break;
+        case 'sleepy':
+          ellipse(g, ex, fy + s * 0.01, s * 0.045, s * 0.025, '#2a2a3a');
+          g.fillStyle = look.body; g.fillRect(ex - s * 0.05, fy - s * 0.03, s * 0.1, s * 0.035);
+          break;
+        default:
+          ellipse(g, ex, fy, s * 0.035, s * 0.042, '#2a2a3a');
+          ellipse(g, ex - s * 0.01, fy - s * 0.014, s * 0.012, s * 0.012, '#ffffff');
+      }
+    }
+    if (look.extra === 'cheeks' || look.extra === 'mask') {
+      const cheekCol = look.extra === 'cheeks' ? 'rgba(255,110,120,0.55)' : 'rgba(0,0,0,0)';
+      for (const ex of side ? [fx + flip * rx * 0.05] : [fx - eyeSep * 1.45, fx + eyeSep * 1.45]) {
+        ellipse(g, ex, fy + s * 0.07, s * 0.045, s * 0.028, cheekCol);
+      }
+    }
+    // 입
+    const my = fy + s * 0.08;
+    const mx = side ? fx + flip * rx * 0.3 : fx;
+    g.strokeStyle = '#2a2a2a'; g.lineWidth = lw * 1.1; g.lineCap = 'round';
+    switch (look.mouth) {
+      case 'beak':
+        g.beginPath();
+        g.moveTo(mx - s * 0.05 * (side ? 0.3 : 1), my - s * 0.025);
+        g.lineTo(mx + (side ? flip * s * 0.09 : 0), my + (side ? 0 : s * 0.04));
+        g.lineTo(mx + s * 0.05 * (side ? 0.3 : 1), my - s * 0.025);
+        g.closePath(); g.fillStyle = look.accent === look.body ? '#f2a030' : '#f2b040'; g.fill(); g.stroke();
+        break;
+      case 'cat':
+        g.beginPath();
+        g.arc(mx - s * 0.025, my, s * 0.025, 0, Math.PI);
+        g.arc(mx + s * 0.025, my, s * 0.025, 0, Math.PI);
+        g.stroke();
+        break;
+      case 'fang':
+        g.beginPath(); g.arc(mx, my - s * 0.01, s * 0.04, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+        g.fillStyle = '#ffffff';
+        g.beginPath(); g.moveTo(mx + s * 0.012, my + s * 0.022); g.lineTo(mx + s * 0.026, my + s * 0.022); g.lineTo(mx + s * 0.019, my + s * 0.045); g.closePath(); g.fill();
+        break;
+      default:
+        g.beginPath(); g.arc(mx, my - s * 0.015, s * 0.04, 0.2 * Math.PI, 0.8 * Math.PI); g.stroke();
+    }
+  }
+
+  // 모자
+  if (o.cap) {
+    const hy = cy - ry * 0.82;
+    const hw = rx * 0.9;
+    const officer = o.cap.startsWith('officer');
+    const kind = o.cap.replace('officer-', '');
+    if (kind === 'navy' && !officer) {
+      ellipse(g, cx, hy, hw * 0.95, s * 0.07, '#ffffff', '#9aa0aa', lw);
+      ellipse(g, cx, hy + s * 0.025, hw * 0.98, s * 0.03, '#2a3a6a');
+    } else {
+      const col = kind === 'army' ? '#5a6a3a' : kind === 'navy' ? '#1f2a4a' : '#3a5a8a';
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(cx - hw, hy + s * 0.04);
+      g.lineTo(cx - hw * 0.85, hy - s * 0.07);
+      g.lineTo(cx + hw * 0.85, hy - s * 0.07);
+      g.lineTo(cx + hw, hy + s * 0.04);
+      g.closePath(); g.fill();
+      g.strokeStyle = shade(col, -40); g.lineWidth = lw; g.stroke();
+      if (dir !== 'up') {
+        const bx = side ? cx + flip * hw * 0.6 : cx;
+        ellipse(g, bx, hy + s * 0.045, side ? hw * 0.6 : hw * 0.85, s * 0.025, shade(col, -25));
+      }
+      if (officer && dir !== 'up') {
+        ellipse(g, side ? cx + flip * hw * 0.3 : cx, hy - s * 0.015, s * 0.03, s * 0.025, '#f2c230');
+      }
+    }
+  }
+
+  if (o.sleeping) {
+    g.fillStyle = '#4a5a8a';
+    g.font = `bold ${Math.round(s * 0.18)}px sans-serif`;
+    const zz = (t * 0.8) % 1;
+    g.globalAlpha = 1 - zz;
+    g.fillText('z', cx + rx * 0.8, cy - ry - zz * s * 0.3);
+    g.globalAlpha = 1;
+  }
+}

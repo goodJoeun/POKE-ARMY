@@ -1,0 +1,768 @@
+import type { Dialogue, NpcId } from '../types';
+import { TOTAL_DAYS } from './branches';
+
+/**
+ * 텍스트 토큰
+ * {S} 경례구호, {me} 플레이어 이름, {myrank} 플레이어 계급, {train} 훈련장, {unit} 부대명,
+ * {wild} 부대 야생동물, {n:id} NPC 이름, {r:id} NPC 이름+계급, {t:id} NPC 직책
+ */
+export const DIALOGUES: Dialogue[] = [
+  // ───────── 분대장 (sgt) ─────────
+  {
+    id: 'sgt_first', npc: 'sgt', once: true, priority: 10,
+    when: (c) => c.day === 1,
+    lines: [
+      { who: 'npc', text: '어이, 신병. 오늘 전입 온 {me} 맞지?' },
+      { who: 'npc', text: '나는 이 생활관 분대장 {r:sgt}이다. 관등성명 대봐.' },
+    ],
+    choices: [
+      {
+        text: '"{S}! 이병 {me}!"', grade: 'good',
+        effects: { affinity: { sgt: 8 }, discipline: 3 },
+        reply: [{ who: 'npc', text: '오, 목소리 좋네. 이 정도면 합격이다.' }],
+        tip: '관등성명 = 계급 + 성명. 상급자가 부르면 "{S}! 이병 ○○○!" 처럼 경례 구호와 함께 답한다.',
+      },
+      {
+        text: '"안녕하세요~ 저는 {me}입니다!"', grade: 'ok',
+        effects: { affinity: { sgt: 1 } },
+        reply: [{ who: 'npc', text: '…여기 학교 아니다. 다음부턴 "{S}! 이병 {me}!" 이렇게 해라.' }],
+        tip: '관등성명 = 계급 + 성명. 군에서는 경례 구호와 함께 관등성명을 댄다.',
+      },
+      {
+        text: '(긴장해서 고개만 끄덕인다)', grade: 'bad',
+        effects: { affinity: { sgt: -4 }, discipline: -2 },
+        reply: [{ who: 'npc', text: '…말 못 하는 포켓몬은 아니지? 대답은 크게 한다.' }],
+      },
+    ],
+  },
+  {
+    id: 'sgt_injury', npc: 'sgt', once: true,
+    when: (c) => c.day >= 1,
+    lines: [
+      { who: 'npc', text: '하나만 확실히 해두자. 훈련하다 다치거나 아프면 어떻게 할래?' },
+    ],
+    choices: [
+      {
+        text: '"즉시 분대장님이나 간부님께 보고하겠습니다!"', grade: 'good',
+        effects: { affinity: { sgt: 6 }, discipline: 3 },
+        reply: [{ who: 'npc', text: '그래. 참다가 큰 사고 나는 게 제일 무섭다. 아프면 무조건 말해.' }],
+        tip: '아프거나 다치면 참지 말고 즉시 보고! 의무대 진료는 병사의 권리다.',
+      },
+      {
+        text: '"참을 수 있는 데까지 참겠습니다!"', grade: 'ok',
+        effects: { affinity: { sgt: 1 } },
+        reply: [{ who: 'npc', text: '그런 근성은 필요 없어. 다치면 바로 말하는 게 진짜 군인이다.' }],
+        tip: '아프거나 다치면 참지 말고 즉시 보고! 숨기면 더 큰 사고가 된다.',
+      },
+      {
+        text: '"그냥 전역할 때까지 버티죠 뭐."', grade: 'bad',
+        effects: { affinity: { sgt: -3 }, mental: -2 },
+        reply: [{ who: 'npc', text: '…너 그러다 진짜 큰일 난다. 절대 그러지 마.' }],
+      },
+    ],
+  },
+  {
+    id: 'sgt_snack', npc: 'sgt', once: true,
+    when: (c) => c.day >= 2 && c.affinity.sgt >= 5,
+    lines: [
+      { who: 'npc', text: '야, {n:me}. 배 안 고프냐? 내가 쏜다.' },
+      { who: 'npc', text: '여기 내 돈이니까 PX 가서 냉동 두 개만 사 와. 하나는 네 거다.' },
+    ],
+    choices: [
+      {
+        text: '"감사합니다! 바로 다녀오겠습니다!"', grade: 'good',
+        effects: { affinity: { sgt: 3 }, quest: 'q_sgt_px' },
+        reply: [{ who: 'npc', text: '뛰지는 말고. 개인정비 시간 끝나기 전에만 와라.' }],
+        tip: '선임이 후임 돈으로 물건을 사 오게 하는 건 부조리. 하지만 선임이 자기 돈으로 함께 나눠 먹는 건 OK!',
+      },
+      {
+        text: '"지금은 좀 바빠서요…"', grade: 'ok',
+        effects: { affinity: { sgt: -1 } },
+        reply: [{ who: 'npc', text: '그래? 그럼 다음에 같이 가자.' }],
+      },
+    ],
+  },
+  {
+    id: 'sgt_mental', npc: 'sgt', once: true,
+    when: (c) => c.day >= 2 && c.affinity.sgt >= 12,
+    lines: [
+      { who: 'npc', text: '요즘 얼굴이 좀 안 좋다? 나도 이병 땐 매일 밤 천장만 봤어.' },
+      { who: 'npc', text: '힘든 거 있으면 말해봐. 분대장이 괜히 있는 거 아니다.' },
+    ],
+    choices: [
+      {
+        text: '"사실… 아직 적응이 쉽지 않습니다."', grade: 'good',
+        effects: { affinity: { sgt: 8 }, mental: 12 },
+        reply: [
+          { who: 'npc', text: '당연하지. 포켓몬 몸으로 군대라니, 나라도 멘붕이다.' },
+          { who: 'npc', text: '하루씩만 버텨. 그러다 보면 어느새 너도 병장이야.' },
+        ],
+        tip: '힘든 마음은 혼자 삭이지 말자. 분대장, 간부, 병영생활전문상담관 모두 이야기를 들어줄 수 있다.',
+      },
+      {
+        text: '"전혀 문제없습니다!"', grade: 'ok',
+        effects: { affinity: { sgt: 2 } },
+        reply: [{ who: 'npc', text: '그래? 그럼 다행이고. 힘들면 언제든 말해.' }],
+      },
+      {
+        text: '"힘든데 분대장님이 어떻게 해주실 건데요?"', grade: 'bad',
+        effects: { affinity: { sgt: -6 }, mental: -3 },
+        reply: [{ who: 'npc', text: '…그래, 알았다. 말 걸어서 미안하다.' }],
+      },
+    ],
+  },
+  {
+    id: 'sgt_farewell', npc: 'sgt', once: true, priority: 20,
+    when: (c) => c.day === 3,
+    lines: [
+      { who: 'npc', text: '{n:me}. 나 내일 전역이다.' },
+      { who: 'npc', text: '처음 왔을 땐 꼬리에 불붙은 것처럼 허둥대더니, 이제 제법 군인 같네.' },
+      { who: 'npc', text: '내가 없어도 {r:senior}이 분대장 할 거다. 잘 따르고.' },
+    ],
+    choices: [
+      {
+        text: '"그동안 감사했습니다! {S}!"', grade: 'good',
+        effects: { affinity: { sgt: 10 }, mental: 6, discipline: 2 },
+        reply: [{ who: 'npc', text: '{S}. …사회에서 보면 밥 한번 사라. 포켓몬 말고 사람으로.' }],
+        tip: '선임의 전역은 생활관의 큰 행사. 감사 인사와 함께 보내주는 것이 좋은 전통이다.',
+      },
+      {
+        text: '"부럽습니다… 저도 데려가 주십시오."', grade: 'ok',
+        effects: { affinity: { sgt: 4 }, mental: -2 },
+        reply: [{ who: 'npc', text: '하하, 국방부 시계는 거꾸로 매달아도 돌아간다. 너도 금방이야.' }],
+      },
+    ],
+  },
+
+  // ───────── 맞선임 (senior) ─────────
+  {
+    id: 'senior_hi', npc: 'senior', once: true, priority: 5,
+    when: (c) => c.day <= 2,
+    lines: [
+      { who: 'npc', text: '오~ 네가 신병이구나! 난 네 맞선임 {r:senior}.' },
+      { who: 'npc', text: '근데 너 포켓몬 되기 전엔 뭐였냐? 혹시 사람?' },
+    ],
+    choices: [
+      {
+        text: '"…그걸 어떻게 아셨습니까?"', grade: 'good',
+        effects: { affinity: { senior: 6 }, mental: 3 },
+        reply: [
+          { who: 'npc', text: '푸하하! 농담이었는데 진짜야? 걱정 마, 여기 다 비슷한 사연 있어.' },
+          { who: 'npc', text: '나도 원래 사람이었는지 기억이 가물가물하다니까.' },
+        ],
+      },
+      {
+        text: '"전입 첫날부터 장난이 심하십니다."', grade: 'ok',
+        effects: { affinity: { senior: 1 } },
+        reply: [{ who: 'npc', text: '아이고 FM이네~ 재미없다, 너.' }],
+      },
+    ],
+  },
+  {
+    id: 'senior_laundry', npc: 'senior', once: true, priority: 8,
+    when: (c) => c.day >= 2 && c.day <= 5,
+    lines: [
+      { who: 'npc', text: '야, {n:me}. 내 전투복이랑 양말 좀 빨아놔라.' },
+      { who: 'npc', text: '나 오늘 너~무 귀찮거든. 후임이 해주는 게 국룰이지?' },
+    ],
+    choices: [
+      {
+        text: '"죄송하지만 개인 빨래는 각자 하는 게 원칙입니다. 세탁기 비는 시간은 알려드리겠습니다."', grade: 'good',
+        effects: { affinity: { senior: -2 }, discipline: 6, mental: 3, flag: 'refused_laundry' },
+        reply: [
+          { who: 'npc', text: '…칫. 너 진짜 FM이구나.' },
+          { who: 'npc', text: '알았어 알았어, 내가 할게. 근데 말투는 마음에 든다.' },
+        ],
+        tip: '병 상호 간 사적인 지시(빨래, 심부름 강요 등)는 "부조리"다. 정중하게 거절해도 된다.',
+      },
+      {
+        text: '"네! 알겠습니다!"', grade: 'ok',
+        effects: { affinity: { senior: 3 }, mental: -8, hp: -5 },
+        reply: [{ who: 'npc', text: '오~ 착하네. (…뭔가 찝찝한 기분이 든다)' }],
+        tip: '병 상호 간 사적인 지시는 부조리다. 한 번 따르면 계속 이어질 수 있으니 정중히 거절하자.',
+      },
+      {
+        text: '(마음의 편지에 적어 소대장에게 제출한다)', grade: 'good',
+        effects: { affinity: { senior: -8 }, discipline: 4, flag: 'reported_senior' },
+        reply: [{ who: 'narr', text: '그날 저녁, 마음의 편지를 조용히 소대장에게 전달했다.' }],
+        tip: '부조리는 "마음의 편지", 간부 면담, 국방헬프콜(1303)로 알릴 수 있다. 신고자는 보호받는다.',
+      },
+    ],
+  },
+  {
+    id: 'senior_gear', npc: 'senior', once: true,
+    when: (c) => c.day >= 2,
+    lines: [
+      { who: 'npc', text: '장비 수입(손질) 할 줄 알아? 내가 특별히 알려준다.' },
+      { who: 'npc', text: '장비는 네 몸처럼. 번호도 꼭 외워둬. 점검 때 물어보거든.' },
+    ],
+    choices: [
+      {
+        text: '"꼭 배우고 싶습니다! 가르쳐 주십시오."', grade: 'good',
+        effects: { affinity: { senior: 6 }, skill: 6 },
+        reply: [{ who: 'npc', text: '좋아, 열정 좋고! 여기 이 부분은 이렇게 닦는 거야.' }],
+        tip: '"수입" = 손질·정비. 개인 장비 번호는 외워두는 것이 기본이다.',
+      },
+      {
+        text: '"이미 훈련소에서 배웠습니다."', grade: 'ok',
+        effects: { affinity: { senior: -1 }, skill: 1 },
+        reply: [{ who: 'npc', text: '오, 그래? 그럼 실전에서 보자고.' }],
+      },
+    ],
+  },
+  {
+    id: 'senior_leave', npc: 'senior', once: true,
+    when: (c) => c.day >= 3 && c.affinity.senior >= 5,
+    lines: [
+      { who: 'npc', text: '{n:me}! 부탁 하나만. 이거 내 휴가 신청서인데 행정반에 좀 내줄래?' },
+      { who: 'npc', text: '강요 아니고 진짜 부탁이야. 싫으면 내가 갈게.' },
+    ],
+    choices: [
+      {
+        text: '"가는 길이니 제가 내드리겠습니다."', grade: 'good',
+        effects: { affinity: { senior: 3 }, quest: 'q_senior_leave' },
+        reply: [{ who: 'npc', text: '역시 내 맞후임! 고맙다~' }],
+      },
+      {
+        text: '"직접 내시는 게 좋을 것 같습니다."', grade: 'ok',
+        effects: {},
+        reply: [{ who: 'npc', text: '그래, 맞는 말이다. 내가 다녀올게.' }],
+      },
+    ],
+  },
+  {
+    id: 'senior_squadleader', npc: 'senior', once: true, priority: 15,
+    when: (c) => c.day >= 4 && c.day <= 5,
+    lines: [
+      { who: 'npc', text: '{n:sgt} 병장님 전역하시고 내가 분대장 됐다. 실감이 안 나네.' },
+      { who: 'npc', text: '근데… 내가 잘할 수 있을까? 솔직히 말해봐.' },
+    ],
+    choices: [
+      {
+        text: '"분대장님은 다들 편하게 대해주셔서 잘하실 겁니다."', grade: 'good',
+        effects: { affinity: { senior: 8 }, mental: 3 },
+        reply: [{ who: 'npc', text: '…야, 감동이다. 너는 내가 꼭 챙긴다.' }],
+      },
+      {
+        text: '"장난만 좀 줄이시면 됩니다."', grade: 'ok',
+        effects: { affinity: { senior: 2 } },
+        reply: [{ who: 'npc', text: '하하, 팩폭 오지네. 알았다, 노력하마.' }],
+      },
+    ],
+  },
+  {
+    id: 'senior_farewell', npc: 'senior', once: true, priority: 20,
+    when: (c) => c.day === 6,
+    lines: [
+      { who: 'npc', text: '야, 나 내일 전역이다. 믿기냐?' },
+      { who: 'npc', text: '이제 네가 이 생활관 분대장이야. 후임들 잘 챙겨라.' },
+    ],
+    choices: [
+      {
+        text: '"분대장님처럼 좋은 선임이 되겠습니다!"', grade: 'good',
+        effects: { affinity: { senior: 10 }, discipline: 4, mental: 4 },
+        reply: [{ who: 'npc', text: '나처럼은 되지 말고, 나보다 낫게 해라. {S}!' }],
+      },
+      {
+        text: '"이제 장난 안 치셔도 됩니다, 사회에서도 자제하십쇼."', grade: 'ok',
+        effects: { affinity: { senior: 5 }, mental: 5 },
+        reply: [{ who: 'npc', text: '푸하하! 끝까지 너답다. 잘 있어라~' }],
+      },
+    ],
+  },
+
+  // ───────── 동기 (buddy) ─────────
+  {
+    id: 'buddy_first', npc: 'buddy', once: true, priority: 10,
+    when: (c) => c.day === 1,
+    lines: [
+      { who: 'npc', text: '너, 너도 오늘 전입이지? 난 {n:buddy}… 같은 날 왔어.' },
+      { who: 'npc', text: '나 너무 무서워. 아까 {t:sgm}님이 나 보고 웃었는데 그게 더 무서워…' },
+    ],
+    choices: [
+      {
+        text: '"우리 같이 버티자. 동기 좋다는 게 뭐겠어!"', grade: 'good',
+        effects: { affinity: { buddy: 10 }, mental: 5 },
+        reply: [{ who: 'npc', text: '흑… 고마워. 너 진짜 좋은 포켓몬이다.' }],
+        tip: '동기는 군 생활 최고의 버팀목. 같은 날 들어와 같은 날 나간다.',
+      },
+      {
+        text: '"나도 무서운데… 둘이 같이 떨자."', grade: 'ok',
+        effects: { affinity: { buddy: 5 }, mental: 1 },
+        reply: [{ who: 'npc', text: '푸흡, 그래. 같이 떨자.' }],
+      },
+      {
+        text: '"각자 알아서 하자."', grade: 'bad',
+        effects: { affinity: { buddy: -6 } },
+        reply: [{ who: 'npc', text: '아… 응. 미안.' }],
+      },
+    ],
+  },
+  {
+    id: 'buddy_homesick', npc: 'buddy', once: true,
+    when: (c) => c.day >= 2,
+    lines: [
+      { who: 'npc', text: '집에 두고 온 강아지가 너무 보고 싶어… 나 지금 포켓몬인데 걔가 날 알아볼까?' },
+    ],
+    choices: [
+      {
+        text: '"냄새로 알아볼 거야. 휴가 나가면 제일 먼저 달려올걸?"', grade: 'good',
+        effects: { affinity: { buddy: 8 }, mental: 4 },
+        reply: [{ who: 'npc', text: '히히, 그렇겠지? 휴가까지 버텨야겠다!' }],
+      },
+      {
+        text: '"오늘 저녁에 휴대폰으로 사진이라도 봐."', grade: 'ok',
+        effects: { affinity: { buddy: 4 }, mental: 2 },
+        reply: [{ who: 'npc', text: '맞다, 일과 끝나면 폰 쓸 수 있지! 좋은 생각이다.' }],
+        tip: '병사들은 일과 이후 정해진 시간에 휴대전화를 사용할 수 있다.',
+      },
+    ],
+  },
+  {
+    id: 'buddy_password', npc: 'buddy', once: true, priority: 6,
+    when: (c) => c.day >= 3,
+    lines: [
+      { who: 'npc', text: '{n:me}, 나 오늘 경계근무 들어가는데… 암구호를 까먹었어. 살짝만 알려줄래?' },
+    ],
+    choices: [
+      {
+        text: '"그건 보안이라 안 돼. 근무 투입 전에 교육 때 다시 확인하자."', grade: 'good',
+        effects: { affinity: { buddy: 2 }, discipline: 6 },
+        reply: [{ who: 'npc', text: '아… 맞다, 그렇지. 괜히 물어봤다. 고마워!' }],
+        tip: '암구호는 군사기밀. 친한 동기라도 사적으로 알려주면 안 된다.',
+      },
+      {
+        text: '(살짝 귓속말로 알려준다)', grade: 'bad',
+        effects: { affinity: { buddy: 5 }, discipline: -8 },
+        reply: [{ who: 'narr', text: '…지나가던 {r:lt}가 이쪽을 유심히 쳐다본다.' }],
+        tip: '암구호 유출은 심각한 보안 위반이다.',
+      },
+    ],
+  },
+  {
+    id: 'buddy_study', npc: 'buddy', once: true,
+    when: (c) => c.day >= 4,
+    lines: [
+      { who: 'npc', text: '나 전역 전에 자격증 하나 따려고! 같이 싸지방 가서 공부할래?' },
+    ],
+    choices: [
+      {
+        text: '"좋아, 지금 가자!"', grade: 'good',
+        effects: { affinity: { buddy: 3 }, quest: 'q_buddy_study' },
+        reply: [{ who: 'npc', text: '오예! 싸지방에서 만나!' }],
+        tip: '군에서도 자기계발 가능! 자격증 응시료 지원, 원격 강좌 등 제도가 있다.',
+      },
+      {
+        text: '"오늘은 좀 쉴래."', grade: 'ok',
+        effects: {},
+        reply: [{ who: 'npc', text: '그래, 쉬는 것도 중요하지!' }],
+      },
+    ],
+  },
+  {
+    id: 'buddy_rank_up', npc: 'buddy', once: true,
+    when: (c) => c.day >= 7,
+    lines: [
+      { who: 'npc', text: '우리 벌써 상병이야. 우리 처음 왔을 때 기억나? 둘 다 덜덜 떨었잖아.' },
+    ],
+    choices: [
+      {
+        text: '"그때 네가 있어서 버틸 수 있었어."', grade: 'good',
+        effects: { affinity: { buddy: 10 }, mental: 6 },
+        reply: [{ who: 'npc', text: '…야, 갑자기 그러면 나 운다?' }],
+      },
+      {
+        text: '"넌 아직도 떨잖아."', grade: 'ok',
+        effects: { affinity: { buddy: 3 }, mental: 3 },
+        reply: [{ who: 'npc', text: '야! …맞는 말이라 반박을 못 하겠네.' }],
+      },
+    ],
+  },
+
+  // ───────── 후임 (junior) ─────────
+  {
+    id: 'junior_arrive', npc: 'junior', once: true, priority: 12,
+    when: (c) => c.day >= 4,
+    lines: [
+      { who: 'npc', text: '{S}! 이병 {n:junior}! 오늘 전입 왔습니다!' },
+      { who: 'npc', text: '선, 선임님이 제 맞선임이라고 들었습니다!' },
+    ],
+    choices: [
+      {
+        text: '"반가워. 모르는 거 있으면 편하게 물어봐."', grade: 'good',
+        effects: { affinity: { junior: 10 }, mental: 3 },
+        reply: [{ who: 'npc', text: '가, 감사합니다! (긴장이 조금 풀린 표정이다)' }],
+        tip: '좋은 선임은 군기를 잡는 사람이 아니라 적응을 돕는 사람이다.',
+      },
+      {
+        text: '"군기 바짝 들어라."', grade: 'ok',
+        effects: { affinity: { junior: -3 }, discipline: 1 },
+        reply: [{ who: 'npc', text: '네, 넵! (잔뜩 얼어붙었다)' }],
+        tip: '"군기 잡기"를 명목으로 한 위압적 언행은 부조리가 될 수 있다.',
+      },
+      {
+        text: '(대충 손만 흔든다)', grade: 'bad',
+        effects: { affinity: { junior: -6 } },
+        reply: [{ who: 'npc', text: '…아, 네.' }],
+      },
+    ],
+  },
+  {
+    id: 'junior_tour', npc: 'junior', once: true,
+    when: (c) => c.day >= 4 && c.affinity.junior >= 0,
+    lines: [
+      { who: 'npc', text: '선임님, 혹시… PX랑 싸지방이 어디 있는지 알려주실 수 있습니까?' },
+    ],
+    choices: [
+      {
+        text: '"따라와. 같이 돌아보자."', grade: 'good',
+        effects: { affinity: { junior: 3 }, quest: 'q_junior_tour' },
+        reply: [{ who: 'npc', text: '감사합니다!! 바로 따라가겠습니다!' }],
+      },
+      {
+        text: '"표지판 보면 다 나와."', grade: 'bad',
+        effects: { affinity: { junior: -4 } },
+        reply: [{ who: 'npc', text: '아… 네, 알겠습니다.' }],
+      },
+    ],
+  },
+  {
+    id: 'junior_struggle', npc: 'junior', once: true,
+    when: (c) => c.day >= 5,
+    lines: [
+      { who: 'npc', text: '선임님… 제가 자꾸 실수해서 다들 저를 싫어하는 것 같습니다.' },
+    ],
+    choices: [
+      {
+        text: '"나도 처음엔 매일 실수했어. 내일 같이 연습하자."', grade: 'good',
+        effects: { affinity: { junior: 10 }, mental: 3 },
+        reply: [{ who: 'npc', text: '선임님도 그러셨습니까? …힘이 납니다!' }],
+        tip: '후임의 고민을 들어주는 것만으로도 큰 힘이 된다. 심각하다면 간부에게 연계하자.',
+      },
+      {
+        text: '"실수 좀 줄이면 되지."', grade: 'ok',
+        effects: { affinity: { junior: -2 } },
+        reply: [{ who: 'npc', text: '…네. 노력하겠습니다.' }],
+      },
+    ],
+  },
+  {
+    id: 'junior_squad', npc: 'junior', once: true,
+    when: (c) => c.day >= 8,
+    lines: [
+      { who: 'npc', text: '분대장님! 다음 주 휴가 계획 세우는 법 좀 알려주십시오!' },
+    ],
+    choices: [
+      {
+        text: '"휴가는 행정반에 미리 신청하고, 복귀 시간 꼭 지키는 거야."', grade: 'good',
+        effects: { affinity: { junior: 6 }, discipline: 3 },
+        reply: [{ who: 'npc', text: '복귀 시간 엄수! 명심하겠습니다!' }],
+        tip: '휴가 복귀 시간은 생명! 늦으면 징계 대상이 될 수 있다.',
+      },
+      {
+        text: '"나가서 일단 치킨부터 먹어."', grade: 'ok',
+        effects: { affinity: { junior: 5 }, mental: 2 },
+        reply: [{ who: 'npc', text: '그것도 중요한 계획입니다!' }],
+      },
+    ],
+  },
+
+  // ───────── 막내 (junior2) ─────────
+  {
+    id: 'junior2_arrive', npc: 'junior2', once: true, priority: 12,
+    when: (c) => c.day >= 7,
+    lines: [
+      { who: 'npc', text: '{S}!!! 이병 {n:junior2}!!! 전입을 명받았습니다!!!' },
+      { who: 'npc', text: '질문 있습니다! 상병님 계급장은 왜 줄이 세 개입니까?!' },
+    ],
+    choices: [
+      {
+        text: '"이병 하나, 일병 둘, 상병 셋, 병장 넷. 줄 수가 계급이야."', grade: 'good',
+        effects: { affinity: { junior2: 8 }, discipline: 2 },
+        reply: [{ who: 'npc', text: '오오! 그럼 저는 한 줄! 외웠습니다!' }],
+        tip: '병사 계급장은 가로 줄 개수로 구분한다. 이병 1줄 ~ 병장 4줄.',
+      },
+      {
+        text: '"…목소리 좀 줄이자."', grade: 'ok',
+        effects: { affinity: { junior2: 2 } },
+        reply: [{ who: 'npc', text: '(작게) 넵…!!!' }],
+      },
+    ],
+  },
+  {
+    id: 'junior2_study', npc: 'junior2', once: true,
+    when: (c) => c.day >= 8,
+    lines: [
+      { who: 'npc', text: '선임님! 계급 체계가 너무 헷갈립니다! 같이 외워주실 수 있습니까?' },
+    ],
+    choices: [
+      {
+        text: '"침상에서 같이 정리해 보자."', grade: 'good',
+        effects: { affinity: { junior2: 3 }, quest: 'q_junior2_rank' },
+        reply: [{ who: 'npc', text: '감사합니다! 생활관에서 기다리겠습니다!' }],
+      },
+      {
+        text: '"외우는 건 혼자 하는 거야."', grade: 'bad',
+        effects: { affinity: { junior2: -4 } },
+        reply: [{ who: 'npc', text: '…넵.' }],
+      },
+    ],
+  },
+
+  // ───────── 소대장 (lt) ─────────
+  {
+    id: 'lt_first', npc: 'lt', once: true, priority: 10,
+    when: (c) => c.day === 1,
+    lines: [
+      { who: 'npc', text: '{me} 이병, 전입을 환영한다. 소대장 {r:lt}다.' },
+      { who: 'npc', text: '포켓몬 몸이라 적응이 쉽지 않겠지만, 힘든 점은 언제든 말해라.' },
+    ],
+    choices: [
+      {
+        text: '"{S}! 감사합니다, 소대장님!"', grade: 'good',
+        effects: { affinity: { lt: 6 }, discipline: 3 },
+        reply: [{ who: 'npc', text: '좋아. 씩씩해서 보기 좋다.' }],
+      },
+      {
+        text: '"넵넵!"', grade: 'ok',
+        effects: { affinity: { lt: 1 } },
+        reply: [{ who: 'npc', text: '"넵넵"은 메신저에서나 쓰고, 대답은 "네, 알겠습니다"로 하자.' }],
+        tip: '간부에게 대답할 땐 "네, 알겠습니다!"처럼 명확하게.',
+      },
+    ],
+  },
+  {
+    id: 'lt_counsel', npc: 'lt', once: true,
+    when: (c) => c.day >= 2,
+    lines: [
+      { who: 'npc', text: '마침 잘 왔다. 신상 면담 좀 하자. 요즘 생활은 어때?' },
+    ],
+    choices: [
+      {
+        text: '"솔직히 말씀드리면, 아직 낯설고 힘든 부분이 있습니다."', grade: 'good',
+        effects: { affinity: { lt: 6 }, mental: 10 },
+        reply: [{ who: 'npc', text: '솔직하게 말해줘서 고맙다. 일과 조정이 필요하면 바로 얘기해.' }],
+        tip: '간부 면담은 고민을 공식적으로 이야기할 수 있는 창구다. 솔직할수록 도움을 받기 쉽다.',
+      },
+      {
+        text: '"아무 문제 없습니다!"', grade: 'ok',
+        effects: { affinity: { lt: 2 } },
+        reply: [{ who: 'npc', text: '그래? 그래도 혹시 모르니 언제든 찾아와.' }],
+      },
+    ],
+  },
+  {
+    id: 'lt_reported', npc: 'lt', once: true, priority: 30,
+    when: (c) => !!c.flags.reported_senior,
+    lines: [
+      { who: 'npc', text: '{me}, 마음의 편지 잘 읽었다. 용기 내줘서 고맙다.' },
+      { who: 'npc', text: '해당 인원과 면담하고 조치했다. 신고자 비밀은 철저히 지킨다.' },
+    ],
+    effects: { affinity: { lt: 8 }, mental: 6 },
+    choices: [
+      {
+        text: '"감사합니다. 앞으로도 좋은 생활관이 됐으면 합니다."', grade: 'good',
+        effects: { discipline: 3 },
+        reply: [{ who: 'npc', text: '그래. 그게 우리 모두의 목표다.' }],
+        tip: '신고는 고자질이 아니다. 건강한 병영 문화를 만드는 용기 있는 행동이다.',
+      },
+    ],
+  },
+  {
+    id: 'lt_doc', npc: 'lt', once: true,
+    when: (c) => c.day >= 2 && c.affinity.lt >= 4,
+    lines: [
+      { who: 'npc', text: '{me}, 이 근무표를 {t:sgm}님께 전달해 줄 수 있겠나?' },
+    ],
+    choices: [
+      {
+        text: '"네, 알겠습니다! 바로 전달하겠습니다."', grade: 'good',
+        effects: { affinity: { lt: 2 }, quest: 'q_lt_doc' },
+        reply: [{ who: 'npc', text: '고맙다. {t:sgm}님은 보통 연병장 쪽에 계신다.' }],
+      },
+      {
+        text: '"지금은 개인정비 시간이라… 혹시 급한 일입니까?"', grade: 'ok',
+        effects: { affinity: { lt: 1 } },
+        reply: [{ who: 'npc', text: '아, 그렇지. 내가 직접 가지. 쉬어라.' }],
+        tip: '개인정비 시간은 병사에게 보장된 시간이다. 정중하게 확인하는 것은 문제가 아니다.',
+      },
+    ],
+  },
+  {
+    id: 'lt_squadleader', npc: 'lt', once: true, priority: 25,
+    when: (c) => c.day >= 7,
+    lines: [
+      { who: 'npc', text: '{me} 상병. 오늘부로 네가 우리 생활관 분대장이다.' },
+      { who: 'npc', text: '분대장은 후임들에게 지시할 수 있는 유일한 병사다. 그만큼 책임도 무겁다.' },
+    ],
+    choices: [
+      {
+        text: '"명심하겠습니다! 분대원들을 잘 이끌겠습니다."', grade: 'good',
+        effects: { affinity: { lt: 6 }, discipline: 6 },
+        reply: [{ who: 'npc', text: '믿는다. 모르는 건 언제든 물어봐.' }],
+        tip: '병영생활 행동강령상 병 상호 간 명령·지시는 금지지만, 분대장은 분대장 임무 범위 내에서 지시할 수 있다.',
+      },
+      {
+        text: '"그럼 이제 후임들한테 뭐든 시킬 수 있는 겁니까?"', grade: 'bad',
+        effects: { affinity: { lt: -6 }, discipline: -4 },
+        reply: [{ who: 'npc', text: '…분대장 권한은 임무 범위 안에서만이다. 사적인 지시는 부조리다.' }],
+        tip: '분대장이라도 사적인 지시는 부조리다.',
+      },
+    ],
+  },
+
+  // ───────── 행정보급관 / 주임원사 (sgm) ─────────
+  {
+    id: 'sgm_work', npc: 'sgm', once: true, priority: 4,
+    when: (c) => c.day >= 1,
+    lines: [
+      { who: 'npc', text: '어이~ {me}! 딱 좋은 때 왔다. 우리 작업 좀 하자.' },
+      { who: 'npc', text: '체력단련장 기구들이 엉망이야. 정리 좀 해줄 수 있나?' },
+    ],
+    choices: [
+      {
+        text: '"지금이 개인정비 시간이긴 합니다만, 급하시면 돕겠습니다!"', grade: 'good',
+        effects: { affinity: { sgm: 4 }, discipline: 2, quest: 'q_sgm_gym' },
+        reply: [{ who: 'npc', text: '오, 개념 있네! 금방 끝나. 고맙다.' }],
+        tip: '개인정비 시간은 원칙적으로 보장된다. 다만 정중하게 의사를 밝히고 돕는다면 서로 좋다.',
+      },
+      {
+        text: '"네! 알겠습니다!"', grade: 'ok',
+        effects: { affinity: { sgm: 6 }, mental: -3, quest: 'q_sgm_gym' },
+        reply: [{ who: 'npc', text: '좋아 좋아! 역시 젊은 포켓몬이 최고야.' }],
+      },
+      {
+        text: '"싫은데요."', grade: 'bad',
+        effects: { affinity: { sgm: -10 }, discipline: -5 },
+        reply: [{ who: 'npc', text: '……(조용히 수첩에 무언가를 적는다)' }],
+      },
+    ],
+  },
+  {
+    id: 'sgm_uniform', npc: 'sgm', once: true,
+    when: (c) => c.day >= 2,
+    lines: [
+      { who: 'npc', text: '{me}, 너 복장 상태가 그게 뭐냐? 털이 삐져나왔잖아.' },
+    ],
+    choices: [
+      {
+        text: '"시정하겠습니다!"', grade: 'good',
+        effects: { affinity: { sgm: 5 }, discipline: 4 },
+        reply: [{ who: 'npc', text: '그래, 그 한마디면 됐다. 포켓몬이라도 복장은 단정하게!' }],
+        tip: '"시정하겠습니다" = 지적받은 점을 고치겠다는 군대식 표현.',
+      },
+      {
+        text: '"포켓몬이라 털이 원래 그렇습니다."', grade: 'bad',
+        effects: { affinity: { sgm: -5 }, discipline: -2 },
+        reply: [{ who: 'npc', text: '핑계는 핑계일 뿐이다~' }],
+      },
+    ],
+  },
+  {
+    id: 'sgm_snow', npc: 'sgm', once: true,
+    when: (c) => c.season === 'winter' || c.season === 'autumn',
+    lines: [
+      { who: 'npc', text: '{me}, 하늘에서 내리는 게 뭔지 아나?' },
+    ],
+    choices: [
+      {
+        text: '"…쓰레기입니까?"', grade: 'good',
+        effects: { affinity: { sgm: 8 }, mental: 4 },
+        reply: [{ who: 'npc', text: '하하하! 짬 좀 찼네! 낭만은 전역하고 찾자.' }],
+        tip: '군대 유머: 눈은 "하늘에서 내리는 쓰레기". 제설 작전은 겨울의 주요 임무다.',
+      },
+      {
+        text: '"낭만입니다!"', grade: 'ok',
+        effects: { affinity: { sgm: 2 } },
+        reply: [{ who: 'npc', text: '그 낭만, 내일 아침 제설할 때도 유지되나 보자.' }],
+      },
+    ],
+  },
+  {
+    id: 'sgm_weed', npc: 'sgm', once: true,
+    when: (c) => c.season === 'summer' || c.season === 'spring',
+    lines: [
+      { who: 'npc', text: '여름엔 제초, 겨울엔 제설. 군대는 사계절이 다 작업이지. 안 그래?' },
+    ],
+    choices: [
+      {
+        text: '"사계절 내내 부대를 가꾸는 거라고 생각하겠습니다."', grade: 'good',
+        effects: { affinity: { sgm: 6 }, discipline: 2 },
+        reply: [{ who: 'npc', text: '오~ 마음가짐 좋다. 너 나중에 간부 할래?' }],
+      },
+      {
+        text: '"…쉬는 계절은 없습니까?"', grade: 'ok',
+        effects: { affinity: { sgm: 2 }, mental: 1 },
+        reply: [{ who: 'npc', text: '있지. 전역.' }],
+      },
+    ],
+  },
+
+  // ───────── 중대장 (cpt) ─────────
+  {
+    id: 'cpt_talk', npc: 'cpt', once: true,
+    when: (c) => c.day >= 2,
+    lines: [
+      { who: 'npc', text: '{me} {myrank}. 부대 생활 적응은 잘 하고 있나?' },
+    ],
+    choices: [
+      {
+        text: '"{S}! 네, 선임들과 간부님들 덕분에 잘 적응하고 있습니다!"', grade: 'good',
+        effects: { affinity: { cpt: 6 }, discipline: 3 },
+        reply: [{ who: 'npc', text: '좋다. 서로 돕는 부대가 강한 부대다.' }],
+      },
+      {
+        text: '"그럭저럭입니다."', grade: 'ok',
+        effects: { affinity: { cpt: 1 } },
+        reply: [{ who: 'npc', text: '그럭저럭도 괜찮다. 힘들면 지휘계통으로 보고해라.' }],
+        tip: '지휘계통: 분대장 → 소대장 → 중대장 순으로 보고하는 것이 원칙이다.',
+      },
+    ],
+  },
+  {
+    id: 'cpt_award', npc: 'cpt', once: true,
+    when: (c) => c.day >= 8,
+    lines: [
+      { who: 'npc', text: '{me}, 요즘 분대장 역할 잘 하고 있다고 들었다.' },
+      { who: 'npc', text: '포상휴가 추천을 고민 중인데, 후보로 누굴 올리면 좋겠나?' },
+    ],
+    choices: [
+      {
+        text: '"고생한 후임 {n:junior} 이병을 추천합니다."', grade: 'good',
+        effects: { affinity: { cpt: 6, junior: 8 }, discipline: 3 },
+        reply: [{ who: 'npc', text: '후임을 먼저 챙기다니, 분대장답군. 검토하겠다.' }],
+      },
+      {
+        text: '"저… 저 말씀이십니까?"', grade: 'ok',
+        effects: { affinity: { cpt: 2 }, mental: 4 },
+        reply: [{ who: 'npc', text: '하하, 솔직하군. 실적으로 증명해라.' }],
+      },
+    ],
+  },
+];
+
+/** 전역일 작별 인사 */
+export const FAREWELL_LINES: Partial<Record<NpcId, string>> = {
+  buddy: '우리 같은 날 들어와서 같은 날 나가네. 사회에서도 동기다, 알지?',
+  junior: '분대장님 덕분에 버틸 수 있었습니다. 전역 축하드립니다!',
+  junior2: '분대장님!!! 전역 축하드립니다!!! 저도 금방 따라가겠습니다!!!',
+  lt: '수고 많았다. 네 덕분에 소대 분위기가 많이 좋아졌다.',
+  sgm: '이제 작업 안 시킨다~ 사회 나가서도 부지런히 살아라.',
+  cpt: '그동안 국가를 위해 수고했다. 자랑스러운 예비역이 되도록.',
+};
+
+/** 이미 대화한 경우 / 조건에 맞는 대화가 없을 때 */
+export const SMALL_TALK: Partial<Record<NpcId, string[]>> = {
+  sgt: ['개인정비 시간엔 푹 쉬어라.', '점호 시간 늦지 마라.', '전역까지… 아 행복하다.'],
+  senior: ['심심하다~ 뭐 재밌는 거 없냐?', '오늘 PX 냉동 신상 나왔대.', '분대장님 몰래 낮잠 자고 싶다…'],
+  buddy: ['우리 오늘도 살아남았다…', '휴가 날짜 세는 중이야.', '밥 맛있었지? 나만 그래?'],
+  junior: ['선임님! 오늘도 잘 부탁드립니다!', '오늘 실수 안 했습니다!', '선임님 존경합니다!'],
+  junior2: ['선임님!!! 질문 있습니다!!! …까먹었습니다!!!', '오늘 경례 각도 완벽했습니다!'],
+  lt: ['아픈 데는 없지?', '오늘 훈련 수고 많았다.', '보고는 두괄식, 알지?'],
+  sgm: ['작업할 거 없나 찾는 중이다~', '복장 단정!', '눈 오면 나 찾아와라. 아니, 내가 찾아간다.'],
+  cpt: ['수고가 많다.', '안전이 최우선이다.', '부대의 주인은 너희다.'],
+};
+
+export function isLastDay(day: number) {
+  return day >= TOTAL_DAYS;
+}
