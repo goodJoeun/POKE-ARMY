@@ -213,7 +213,7 @@ export const useGame = create<Store>((set, get) => ({
   go: (s) => set({ scene: s }),
 
   newGame: (name) => {
-    set({ ...initialPersist(), name: name.trim() || '김몬스', scene: 'intro', minigame: null, rollcall: null, toasts: [], busy: false });
+    set({ ...initialPersist(), name: name.trim() || '김몬스', scene: 'home', minigame: null, rollcall: null, toasts: [], busy: false });
   },
 
   chooseBranch: (b) => set({ branch: b, scene: 'quiz' }),

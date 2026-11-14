@@ -9,7 +9,7 @@ export type GameId =
 export type Season = 'winter' | 'spring' | 'summer' | 'autumn';
 
 export type Scene =
-  | 'title' | 'intro' | 'branch' | 'quiz' | 'transform'
+  | 'title' | 'home' | 'intro' | 'branch' | 'quiz' | 'transform'
   | 'world' | 'minigame' | 'promotion' | 'dayEnd' | 'ending';
 
 export interface Stats {

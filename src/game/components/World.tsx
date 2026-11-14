@@ -22,6 +22,7 @@ import DialogueBox, { type DialogueScript } from './DialogueBox';
 import Menu, { type MenuOption } from './Menu';
 import Notebook from './Notebook';
 import RollcallModal from './RollcallModal';
+import TouchPad from './TouchPad';
 
 interface NpcRt {
   map: MapId;
@@ -756,23 +757,3 @@ export default function World() {
 }
 
 const QUEST_STEPS = Object.fromEntries(Object.entries(QUESTS).map(([k, v]) => [k, v.steps]));
-
-function TouchPad({ keys, onAction }: { keys: React.MutableRefObject<Record<string, boolean>>; onAction: () => void }) {
-  const bind = (k: string) => ({
-    onPointerDown: (e: React.PointerEvent) => { e.preventDefault(); keys.current[k] = true; },
-    onPointerUp: () => { keys.current[k] = false; },
-    onPointerLeave: () => { keys.current[k] = false; },
-    onPointerCancel: () => { keys.current[k] = false; },
-  });
-  return (
-    <div className="touchpad">
-      <div className="dpad">
-        <button className="up" {...bind('arrowup')}>▲</button>
-        <button className="left" {...bind('arrowleft')}>◀</button>
-        <button className="right" {...bind('arrowright')}>▶</button>
-        <button className="down" {...bind('arrowdown')}>▼</button>
-      </div>
-      <button className="action" onPointerDown={(e) => { e.preventDefault(); onAction(); }}>E</button>
-    </div>
-  );
-}

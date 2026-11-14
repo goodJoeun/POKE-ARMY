@@ -3,6 +3,7 @@ import { useGame } from '../state/store';
 import World from './World';
 import MinigameHost from '../minigames/MinigameHost';
 import Toasts from './Toasts';
+import Bedroom from './Bedroom';
 import { runtime } from '../engine/runtime';
 import { initSprites } from '../engine/sprites';
 import { BranchSelect, DayEnd, Ending, Intro, Promotion, Quiz, Title, Transform } from './Scenes';
@@ -21,6 +22,7 @@ export default function Game() {
   return (
     <div className="game-root">
       {scene === 'title' && <Title />}
+      {scene === 'home' && <Bedroom />}
       {scene === 'intro' && <Intro />}
       {scene === 'branch' && <BranchSelect />}
       {scene === 'quiz' && <Quiz />}
