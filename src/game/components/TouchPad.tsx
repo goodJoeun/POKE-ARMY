@@ -16,7 +16,10 @@ export default function TouchPad({ keys, onAction }: { keys: React.MutableRefObj
         <button className="right" {...bind('arrowright')}>▶</button>
         <button className="down" {...bind('arrowdown')}>▼</button>
       </div>
-      <button className="action" onPointerDown={(e) => { e.preventDefault(); onAction(); }}>E</button>
+      <div className="touch-actions">
+        <button className="dash" {...bind('shift')}>달리기</button>
+        <button className="action" onPointerDown={(e) => { e.preventDefault(); onAction(); }}>E</button>
+      </div>
     </div>
   );
 }

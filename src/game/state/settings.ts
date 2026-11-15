@@ -17,6 +17,8 @@ export interface Settings {
   showTips: boolean;
   /** 부대 맵 확대 배율 (마우스 휠로 조절, 1 = 기본) */
   mapZoom: number;
+  /** 테스터 모드: F9(또는 `)로 진행 중인 미션을 즉시 종료 */
+  testerMode: boolean;
 }
 
 export const MAP_ZOOM_MIN = 0.6;
@@ -31,10 +33,11 @@ export const DEFAULT_SETTINGS: Settings = {
   screenShake: true,
   showTips: true,
   mapZoom: 1,
+  testerMode: false,
 };
 
 /** 실제 시간으로 게임 1분이 흐르는 데 걸리는 시간(ms) */
-export const MS_PER_MINUTE: Record<Settings['timeSpeed'], number> = { slow: 600, normal: 400, fast: 250 };
+export const MS_PER_MINUTE: Record<Settings['timeSpeed'], number> = { slow: 1500, normal: 1000, fast: 600 };
 /** 집합 허용 시간(게임 분) */
 export const GATHER_MINUTES: Record<Settings['gatherWindow'], number> = { relaxed: 30, normal: 20, strict: 15 };
 /** 미니게임 점수 배율 */
@@ -68,6 +71,7 @@ function persist(s: Settings) {
     const data: Settings = {
       timeSpeed: s.timeSpeed, textSpeed: s.textSpeed, gatherWindow: s.gatherWindow,
       difficulty: s.difficulty, screenShake: s.screenShake, showTips: s.showTips, mapZoom: s.mapZoom,
+      testerMode: s.testerMode,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch { /* noop */ }

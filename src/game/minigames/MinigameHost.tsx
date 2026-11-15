@@ -177,6 +177,7 @@ export default function MinigameHost() {
       {phase === 'result' && result && grade && (
         <div className="mg-result">
           <div className={`big-grade g-${grade}`}>{grade}</div>
+          <div className="mg-homage">{grade === 'S' || grade === 'A' ? '효과는 굉장했다!' : grade === 'B' ? '급소에 맞았다!… 는 아니고 무난했다.' : grade === 'C' ? '효과가 별로인 듯하다…' : '효과가 없는 것 같다…'}</div>
           <div className="mg-score">{Math.round(result.score)}점</div>
           <div>{result.summary}</div>
           <div className="hud-dim">{effText}</div>

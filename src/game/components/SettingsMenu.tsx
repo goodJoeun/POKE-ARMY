@@ -83,7 +83,7 @@ export default function SettingsMenu() {
             <h4>게임 진행</h4>
             <div className="set-row">
               <div><b>시간 흐름</b><div className="hud-dim">실제 1초에 흐르는 게임 시간</div></div>
-              <Segmented k="timeSpeed" options={[{ value: 'slow', label: '느리게 (1.7분)' }, { value: 'normal', label: '보통 (2.5분)' }, { value: 'fast', label: '빠르게 (4분)' }]} />
+              <Segmented k="timeSpeed" options={[{ value: 'slow', label: '느리게 (0.7분)' }, { value: 'normal', label: '보통 (1분)' }, { value: 'fast', label: '빠르게 (1.7분)' }]} />
             </div>
             <div className="set-row">
               <div><b>집합 허용 시간</b><div className="hud-dim">집합 호출 후 지각 처리까지의 여유</div></div>
@@ -92,6 +92,10 @@ export default function SettingsMenu() {
             <div className="set-row">
               <div><b>미니게임 난이도</b><div className="hud-dim">훈련·작업 점수 보정</div></div>
               <Segmented k="difficulty" options={[{ value: 'easy', label: '쉬움 (+15%)' }, { value: 'normal', label: '보통' }, { value: 'hard', label: '어려움 (-10%)' }]} />
+            </div>
+            <div className="set-row">
+              <div><b>🧪 테스터 모드</b><div className="hud-dim">F9 (또는 ` 키)로 진행 중인 미션을 즉시 종료</div></div>
+              <Segmented k="testerMode" options={ON_OFF} />
             </div>
           </section>
 

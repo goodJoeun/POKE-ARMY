@@ -5,13 +5,15 @@ import { BRANCHES, RANKS, TOTAL_DAYS, rankIdxForDay } from '../data/branches';
 import { ARCHETYPE_INFO, findSpecies } from '../data/monsters';
 import { NPC_SKINS, NPC_ROLES, npcDisplayName, npcRoleTitle } from '../data/npcs';
 import { QUESTS } from '../data/quests';
+import { memberName } from '../engine/whereabouts';
 import { ITEMS } from '../data/items';
 import { buildSchedule } from '../data/schedule';
 import { fmtTime } from '../data/branches';
 import MonsterCanvas from './MonsterCanvas';
 import { npcCap } from '../engine/speakers';
+import { CLUES } from '../data/story';
 
-type Tab = 'me' | 'people' | 'quests' | 'items' | 'tips' | 'schedule';
+type Tab = 'me' | 'people' | 'quests' | 'items' | 'tips' | 'schedule' | 'clues';
 
 export default function Notebook({ onClose }: { onClose: () => void }) {
   const s = useGame();
@@ -27,7 +29,7 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const tabs: [Tab, string][] = [['me', '👤 나'], ['people', '🤝 관계'], ['quests', '📋 퀘스트'], ['items', '🎒 소지품'], ['schedule', '🗓️ 일과표'], ['tips', '📘 군대 상식']];
+  const tabs: [Tab, string][] = [['me', '👤 나'], ['people', '🤝 관계'], ['quests', '📋 퀘스트'], ...(s.clues.length > 0 ? [['clues', '🔍 단서'] as [Tab, string]] : []), ['items', '🎒 소지품'], ['schedule', '🗓️ 일과표'], ['tips', '📘 군대 상식']];
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -76,7 +78,16 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
           )}
           {tab === 'quests' && (
             <div>
-              {s.quests.length === 0 && <p className="hud-dim">진행 중인 퀘스트가 없다. 선후임·간부와 대화해 보자.</p>}
+              {s.quests.length === 0 && !s.mealCheck && <p className="hud-dim">진행 중인 퀘스트가 없다. 선후임·간부와 대화해 보자.</p>}
+              {s.mealCheck && (
+                <div className="quest">
+                  <b>🍚 식사 집합</b> <span className="hud-dim">({s.mealCheck.asked.length}/{s.mealCheck.targets.length})</span>
+                  <div>밥 먹으러 가기 전에 선임들께 "식사하러 가시겠습니까?" 여쭤보고 다 같이 가자.</div>
+                  <div className="hud-dim">
+                    {s.mealCheck.targets.map((id) => `${s.mealCheck!.asked.includes(id) ? '✅' : '⬜'} ${memberName(s.branch, id)}`).join('  ')}
+                  </div>
+                </div>
+              )}
               {s.quests.map((q) => {
                 const d = QUESTS[q.id];
                 return (
@@ -120,8 +131,31 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
               </table>
             </div>
           )}
+          {tab === 'clues' && (
+            <div className="nb-clues">
+              <div className="clue-head">
+                <div className="clue-stars" title="별 조각">
+                  {[1, 2, 3, 4, 5, 6, 7].map((n) => <span key={n} className={s.stars.includes(n) ? 'on' : ''}>{s.stars.includes(n) ? '★' : '☆'}</span>)}
+                  <span className="hud-dim"> 별 조각 {s.stars.length}/7</span>
+                </div>
+                <div>🌟 인간의 기억 <b>{s.memory}</b>/100 <span className="hud-dim">· 하루마다 흐려진다. 단서와 꿈이 되살린다.</span></div>
+                <div className="hud-dim">떡밥 {s.clues.length}/{CLUES.length}</div>
+              </div>
+              {CLUES.map((c) => s.clues.includes(c.id) ? (
+                <div key={c.id} className="clue-card">
+                  <div><b>🔍 {c.title}</b> <span className="hud-dim">· {c.place}</span></div>
+                  <div className="clue-text">{c.text}</div>
+                </div>
+              ) : (
+                <div key={c.id} className="clue-card locked"><b>❓ ???</b> <span className="hud-dim">· {c.chapter}장</span></div>
+              ))}
+            </div>
+          )}
           {tab === 'tips' && (
             <div className="tips">
+              <div className="dex-eval">
+                📖 박사님의 도감 평가 ({s.tips.length}개): {s.tips.length < 5 ? '"아직 시작에 불과하다! 군대 상식을 더 모아 보거라."' : s.tips.length < 15 ? '"오, 꽤 모았구나! 이 기세로 계속 가 보거라."' : s.tips.length < 30 ? '"훌륭하다! 이 정도면 걸어 다니는 군대 상식 도감이구나!"' : '"완벽하다! 너야말로 진정한 군대 마스터다!"'}
+              </div>
               {s.tips.length === 0 && <p className="hud-dim">대화와 점호를 통해 군대 상식을 모아보자.</p>}
               {s.tips.map((t, i) => <div key={i} className="tip-item">📘 {t}</div>)}
             </div>

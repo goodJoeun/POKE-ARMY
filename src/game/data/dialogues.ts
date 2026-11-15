@@ -1,5 +1,6 @@
 import type { Dialogue, NpcId } from '../types';
 import { TOTAL_DAYS } from './branches';
+import { isFreeTimeEvening } from './schedule';
 
 /**
  * 텍스트 토큰
@@ -63,7 +64,8 @@ export const DIALOGUES: Dialogue[] = [
   },
   {
     id: 'sgt_snack', npc: 'sgt', once: true,
-    when: (c) => c.day >= 2 && c.affinity.sgt >= 5,
+    // PX 심부름은 저녁 개인정비 시간(17:30~21:30)에만 받는다
+    when: (c) => c.day >= 2 && c.affinity.sgt >= 5 && isFreeTimeEvening(c.minute),
     lines: [
       { who: 'npc', text: '야, {n:me}. 배 안 고프냐? 내가 쏜다.' },
       { who: 'npc', text: '여기 내 돈이니까 PX 가서 냉동 두 개만 사 와. 하나는 네 거다.' },
@@ -617,7 +619,7 @@ export const DIALOGUES: Dialogue[] = [
     when: (c) => c.day >= 1,
     lines: [
       { who: 'npc', text: '어이~ {me}! 딱 좋은 때 왔다. 우리 작업 좀 하자.' },
-      { who: 'npc', text: '체력단련장 기구들이 엉망이야. 정리 좀 해줄 수 있나?' },
+      { who: 'npc', text: '2층 체단실 기구들이 엉망이야. 정리 좀 해줄 수 있나?' },
     ],
     choices: [
       {
@@ -739,6 +741,232 @@ export const DIALOGUES: Dialogue[] = [
       },
     ],
   },
+
+  // ───────── 장소별 부탁 (막사 시설 · 야외 구역) ─────────
+  {
+    id: 'sgt_recycle', npc: 'sgt', once: true,
+    when: (c) => c.day >= 2,
+    lines: [
+      { who: 'npc', text: '{n:me}, 오늘 생활관 분리수거 당번이 너다.' },
+      { who: 'npc', text: '분리수거장은 병영식당 앞에서 아래쪽 길로 쭉 가면 있다. 페트병 라벨 떼는 거 잊지 말고.' },
+    ],
+    choices: [
+      {
+        text: '"알겠습니다! 바로 다녀오겠습니다!"', grade: 'good',
+        effects: { affinity: { sgt: 2 }, quest: 'q_sgt_recycle' },
+        reply: [{ who: 'npc', text: '그래. 다녀와서 보고해라.' }],
+        tip: '분대장은 생활관 청소·당번처럼 분대장 임무 범위 안에서 분대원에게 지시할 수 있다.',
+      },
+      {
+        text: '"분리수거장이 어디인지 잘 모르겠습니다…"', grade: 'ok',
+        effects: { affinity: { sgt: 1 }, quest: 'q_sgt_recycle' },
+        reply: [{ who: 'npc', text: '모르면 물어보는 게 맞다. 병영식당 앞 아래쪽 길, 표지판 따라가.' }],
+      },
+    ],
+  },
+  {
+    id: 'sgt_water', npc: 'sgt', once: true,
+    when: (c) => c.done.includes('q_sgt_recycle'),
+    lines: [
+      { who: 'npc', text: '{n:me}, 복도 정수기 점검표 좀 봐 줄래? 1층이랑 2층 둘 다.' },
+      { who: 'npc', text: '필터 교체일 지났으면 행보관님께 말씀드려야 하거든.' },
+    ],
+    choices: [
+      { text: '"네! 확인하고 보고드리겠습니다."', grade: 'good', effects: { affinity: { sgt: 2 }, quest: 'q_sgt_water' }, reply: [{ who: 'npc', text: '그래, 부탁한다.' }] },
+      { text: '"지금은 일이 좀 있어서요…"', grade: 'ok', effects: { affinity: { sgt: -1 } }, reply: [{ who: 'npc', text: '그래, 그럼 다음에.' }] },
+    ],
+  },
+  {
+    id: 'buddy_laundry', npc: 'buddy', once: true,
+    when: (c) => c.day >= 2 && isFreeTimeEvening(c.minute),
+    lines: [
+      { who: 'npc', text: '야… 세탁기 다 돌았는데, 혼자 개기엔 너무 많다.' },
+      { who: 'npc', text: '1층 세탁실에서 같이 개 줄 수 있어? 대신 내일 네 빨래도 같이 개 줄게.' },
+    ],
+    choices: [
+      { text: '"그래, 같이 하자!"', grade: 'good', effects: { affinity: { buddy: 2 }, quest: 'q_buddy_laundry' }, reply: [{ who: 'npc', text: '역시 동기밖에 없다!' }], tip: '동기끼리 서로 돕는 건 부조리가 아니라 전우애. 받은 만큼 돌려주면 된다.' },
+      { text: '"미안, 나 지금 좀 바빠."', grade: 'ok', effects: { affinity: { buddy: -1 } }, reply: [{ who: 'npc', text: '아냐아냐, 괜찮아. 다음에!' }] },
+    ],
+  },
+  {
+    id: 'senior_book', npc: 'senior', once: true,
+    when: (c) => c.done.includes('q_senior_leave') && c.affinity.senior >= 3,
+    lines: [
+      { who: 'npc', text: '{n:me}~ 부탁 하나만 하자. 명령 아니고 부탁!' },
+      { who: 'npc', text: '이 책 오늘까지 2층 도서관 반납인데 내가 근무라서… 대신 반납해 주면 초코파이 쏜다.' },
+    ],
+    choices: [
+      { text: '"네, 반납해 드리겠습니다."', grade: 'good', effects: { affinity: { senior: 2 }, quest: 'q_senior_book' }, reply: [{ who: 'npc', text: '역시! 반납 대장에 내 이름 쓰는 것도 잊지 마.' }], tip: '선임의 사적인 부탁은 들어줘도, 정중히 거절해도 된다. 거절했다고 불이익을 주면 그게 부조리다.' },
+      { text: '"죄송하지만 저도 오늘 일정이 있어서요."', grade: 'ok', effects: {}, reply: [{ who: 'npc', text: '아, 그래? 알았어. 근무 끝나고 내가 갈게.' }], tip: '선임의 사적인 부탁은 들어줘도, 정중히 거절해도 된다. 거절했다고 불이익을 주면 그게 부조리다.' },
+    ],
+  },
+  {
+    id: 'senior_maint', npc: 'senior', once: true,
+    when: (c) => c.day >= 5,
+    lines: [
+      { who: 'npc', text: '어제 정비실에서 빌린 공구 반납하러 가는데, 같이 갈래?' },
+      { who: 'npc', text: '공구 대장 쓰는 법 알려 줄게. 나 전역하면 네가 해야 하니까.' },
+    ],
+    choices: [
+      { text: '"네! 배워 두겠습니다."', grade: 'good', effects: { affinity: { senior: 2 }, quest: 'q_senior_maint' }, reply: [{ who: 'npc', text: '좋아. 1층 정비실로 가자.' }] },
+      { text: '"다음에 알려 주십시오."', grade: 'ok', effects: {}, reply: [{ who: 'npc', text: '그래, 아직 시간 있으니까.' }] },
+    ],
+  },
+  {
+    id: 'junior_court', npc: 'junior', once: true,
+    when: (c) => c.done.includes('q_junior_tour') && isFreeTimeEvening(c.minute),
+    lines: [
+      { who: 'npc', text: '{myrank}님! 눈이 마주쳤으면 승부입니다! 저녁에 농구 한 판 하시겠습니까?' },
+      { who: 'npc', text: '2분대랑 시합이 잡혔는데 한 명이 모자랍니다. 연병장 옆 농구장입니다!' },
+    ],
+    choices: [
+      { text: '"좋지! 가자!"', grade: 'good', effects: { affinity: { junior: 2 }, quest: 'q_junior_court' }, reply: [{ who: 'npc', text: '감사합니다! 먼저 가서 몸 풀고 있겠습니다!' }] },
+      { text: '"오늘은 좀 쉴게."', grade: 'ok', effects: { affinity: { junior: -1 } }, reply: [{ who: 'npc', text: '아, 알겠습니다! 다음에 꼭 같이 뛰십시오!' }] },
+    ],
+  },
+  {
+    id: 'junior2_board', npc: 'junior2', once: true,
+    lines: [
+      { who: 'npc', text: '{myrank}님, 질문 있습니다! 이번 달 생일자가 누군지 아십니까?' },
+      { who: 'npc', text: '게시판에 붙어 있다던데 어디 있는지 모르겠습니다…' },
+    ],
+    choices: [
+      { text: '"1층 복도 게시판에 있어. 같이 보러 가자."', grade: 'good', effects: { affinity: { junior2: 3 }, quest: 'q_junior2_board' }, reply: [{ who: 'npc', text: '감사합니다! 따라가겠습니다!' }], tip: '복도 게시판에는 경계작전명령서, 식단표, 생일자 같은 공지가 붙는다. 전입 신병이 제일 먼저 볼 곳!' },
+      { text: '"직접 찾아봐. 그것도 공부다."', grade: 'bad', effects: { affinity: { junior2: -2 } }, reply: [{ who: 'npc', text: '아… 네, 알겠습니다.' }] },
+    ],
+  },
+  {
+    id: 'sgm_kitchen', npc: 'sgm', once: true,
+    when: (c) => c.day >= 3,
+    lines: [
+      { who: 'npc', text: '어이, {n:me}. 오늘 조리실 일손이 모자란다.' },
+      { who: 'npc', text: '병영식당 안쪽 조리실 가서 취사 지원 좀 하고 와. 조리병들 고생 많다.' },
+    ],
+    choices: [
+      { text: '"알겠습니다! 다녀오겠습니다."', grade: 'good', effects: { affinity: { sgm: 2 }, quest: 'q_sgm_kitchen' }, reply: [{ who: 'npc', text: '그래. 끝나면 나한테 와라.' }] },
+      { text: '"오늘 일과가 많아서…"', grade: 'bad', effects: { affinity: { sgm: -2 } }, reply: [{ who: 'npc', text: '…알았다. 다음엔 꼭 가라.' }] },
+    ],
+  },
+  {
+    id: 'lt_ammo', npc: 'lt', once: true,
+    when: (c) => c.day >= 3 && c.done.includes('q_lt_doc'),
+    lines: [
+      { who: 'npc', text: '{n:me}, 부탁 하나 하지. 이 근무 일지로 {ammo} 출입 기록을 확인하고,' },
+      { who: 'npc', text: '위병소 근무자에게 전달해 줄 수 있나? 연병장 아래쪽 길로 가면 된다.' },
+    ],
+    choices: [
+      { text: '"네, 확인하고 전달하겠습니다!"', grade: 'good', effects: { affinity: { lt: 2 }, quest: 'q_lt_ammo' }, reply: [{ who: 'npc', text: '고맙다. 보안 문서니까 다른 데 두지 말고.' }], tip: '근무 일지·출입 기록은 보안 문서. 전달할 때도 지정된 사람에게만 직접 건넨다.' },
+      { text: '"지금은 어렵습니다."', grade: 'ok', effects: {}, reply: [{ who: 'npc', text: '그래, 다른 사람에게 부탁하지.' }] },
+    ],
+  },
+
+  // ───────── 연계 퀘스트 (체인 3단계) ─────────
+  {
+    id: 'sgt_handover', npc: 'sgt', once: true,
+    when: (c) => c.done.includes('q_sgt_water'),
+    lines: [
+      { who: 'npc', text: '{n:me}. 나 이제 전역이 얼마 안 남았다.' },
+      { who: 'npc', text: '분대 살림 인수인계 노트를 만들려는데… 같이 정리해 줄래? 행정반 서류랑 게시판 공지부터.' },
+    ],
+    choices: [
+      { text: '"네! 꼼꼼하게 정리하겠습니다."', grade: 'good', effects: { affinity: { sgt: 3 }, quest: 'q_sgt_handover' }, reply: [{ who: 'npc', text: '고맙다. 사실 너한테 넘겨주고 싶었다.' }], tip: '인수인계는 업무·장비·인원 현황을 문서로 넘겨주는 것. 말로만 넘기면 반드시 구멍이 생긴다.' },
+      { text: '"아직은 좀 이른 것 같습니다…"', grade: 'ok', effects: {}, reply: [{ who: 'npc', text: '그런가? 그래도 생각나면 말해라.' }] },
+    ],
+  },
+  {
+    id: 'senior_gift', npc: 'senior', once: true,
+    when: (c) => c.done.includes('q_senior_book'),
+    lines: [
+      { who: 'npc', text: '{n:me}~ 나 휴가 나가는데, 조카 선물을 뭘 사야 할지 모르겠어.' },
+      { who: 'npc', text: 'PX 같이 가서 골라 줄래? 내 돈으로 사는 거니까 걱정 마!' },
+    ],
+    choices: [
+      { text: '"좋습니다! 같이 골라 드리겠습니다."', grade: 'good', effects: { affinity: { senior: 2 }, quest: 'q_senior_gift' }, reply: [{ who: 'npc', text: '역시 너밖에 없다~' }] },
+      { text: '"선물은 직접 고르시는 게…"', grade: 'ok', effects: {}, reply: [{ who: 'npc', text: '그것도 맞는 말이네. 혼자 가 볼게~' }] },
+    ],
+  },
+  {
+    id: 'buddy_exam', npc: 'buddy', once: true,
+    when: (c) => c.done.includes('q_buddy_study'),
+    lines: [
+      { who: 'npc', text: '야, 우리 공부한 거 아깝잖아. 이번 회차 시험 접수하자!' },
+      { who: 'npc', text: '싸지방에서 접수하고, 행정반에 외출 승인 서류도 내야 한대.' },
+    ],
+    choices: [
+      { text: '"좋아, 같이 접수하자!"', grade: 'good', effects: { affinity: { buddy: 2 }, quest: 'q_buddy_exam' }, reply: [{ who: 'npc', text: '좋아! 수험표 뽑으면 사진 찍어 두자.' }], tip: '군 복무 중에도 자격증 시험을 볼 수 있다. 응시료 지원 제도도 있으니 행정반에 문의해 보자.' },
+      { text: '"나는 다음 회차에 볼게."', grade: 'ok', effects: { affinity: { buddy: -1 } }, reply: [{ who: 'npc', text: '그래… 그럼 나 먼저 붙고 올게!' }] },
+    ],
+  },
+  {
+    id: 'buddy_result', npc: 'buddy', once: true,
+    when: (c) => c.done.includes('q_buddy_exam') && c.day >= 6,
+    lines: [
+      { who: 'npc', text: '오늘… 합격 발표 날이야. 혼자 보기 무서워.' },
+      { who: 'npc', text: '싸지방 같이 가 줄 수 있어?' },
+    ],
+    choices: [
+      { text: '"같이 보자. 우리 둘 다 붙었을 거야."', grade: 'good', effects: { affinity: { buddy: 2 }, quest: 'q_buddy_result' }, reply: [{ who: 'npc', text: '…좋아. 하나, 둘, 셋 하면 같이 누르자.' }] },
+    ],
+  },
+  {
+    id: 'junior_mentor', npc: 'junior', once: true,
+    when: (c) => c.done.includes('q_junior_court'),
+    lines: [
+      { who: 'npc', text: '{myrank}님, 다음 주 체력검정이 걱정입니다…' },
+      { who: 'npc', text: '자세 좀 봐 주실 수 있습니까? 그리고 게시판 보는 법도 아직 헷갈립니다.' },
+    ],
+    choices: [
+      { text: '"그래, 체단실로 가자. 게시판도 같이 보고."', grade: 'good', effects: { affinity: { junior: 3 }, quest: 'q_junior_mentor' }, reply: [{ who: 'npc', text: '감사합니다! 열심히 따라 하겠습니다!' }], tip: '후임을 가르칠 땐 명령이 아니라 시범과 설명으로. 병영생활 행동강령상 지시는 분대장 몫이다.' },
+      { text: '"알아서 연습해 봐."', grade: 'bad', effects: { affinity: { junior: -3 } }, reply: [{ who: 'npc', text: '…네, 알겠습니다.' }] },
+    ],
+  },
+  {
+    id: 'lt_report', npc: 'lt', once: true,
+    when: (c) => c.done.includes('q_lt_ammo'),
+    lines: [
+      { who: 'npc', text: '{n:me}, 저번 근무 일지 전달 잘 해 줬다.' },
+      { who: 'npc', text: '이번 주 근무 결과 보고서를 쓰는데, 기록 정리를 도와줄 수 있겠나?' },
+    ],
+    choices: [
+      { text: '"네, 돕겠습니다!"', grade: 'good', effects: { affinity: { lt: 2 }, quest: 'q_lt_report' }, reply: [{ who: 'npc', text: '좋아. 지휘통제실 기록부터 보자.' }] },
+      { text: '"지금은 어렵습니다."', grade: 'ok', effects: {}, reply: [{ who: 'npc', text: '알겠다. 다음에 부탁하지.' }] },
+    ],
+  },
+
+  // ───────── 메인 스토리 1장 「눈을 떠 보니」 ─────────
+  {
+    id: 'buddy_human', npc: 'buddy', once: true, priority: 5,
+    when: (c) => c.day >= 2 && c.day <= 3 && c.flags.dream_1 && isFreeTimeEvening(c.minute),
+    lines: [
+      { who: 'npc', text: '야… 너 가끔 사람처럼 말하더라.' },
+      { who: 'npc', text: '아까도 "유튜브에서 봤는데"라고 했잖아. 유튜브가 뭐야?' },
+    ],
+    choices: [
+      {
+        text: '"…그냥 꿈에서 본 거야."', grade: 'ok', effects: { affinity: { buddy: 1 } },
+        reply: [{ who: 'npc', text: '그래? …나도 요즘 이상한 꿈을 꿔. 별이 막 쏟아지는 꿈.' }],
+      },
+      {
+        text: '"너는… 혹시 기억나는 거 없어? 여기 오기 전에."', grade: 'good', effects: { affinity: { buddy: 3 }, memory: 2 },
+        reply: [
+          { who: 'npc', text: '기억…? 몰라. 생각하려고 하면 머리가 아파.' },
+          { who: 'narr', text: '(동기가 머리를 감싸 쥔다.)' },
+          { who: 'npc', text: '…근데 왠지, 너랑은 전부터 알던 사이 같아.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'sgt_warning', npc: 'sgt', once: true, priority: 6,
+    when: (c) => c.day === 3 && c.flags.dream_1 && c.minute >= 17 * 60,
+    lines: [
+      { who: 'npc', text: '{n:me}. 나 내일이면 없다.' },
+      { who: 'npc', text: '…이상한 얘기 하나 해 줄까. 여기 오래 있으면, 원래 뭐였는지 잊어버린다더라.' },
+      { who: 'npc', text: '나도 들은 얘기다. 근데 너 보면 자꾸 그 말이 생각나.' },
+      { who: 'npc', text: '너는 잊지 마라. 뭐였든 간에.' },
+    ],
+    effects: { memory: 2 },
+  },
 ];
 
 /** 전역일 작별 인사 */
@@ -754,8 +982,8 @@ export const FAREWELL_LINES: Partial<Record<NpcId, string>> = {
 /** 이미 대화한 경우 / 조건에 맞는 대화가 없을 때 */
 export const SMALL_TALK: Partial<Record<NpcId, string[]>> = {
   sgt: ['개인정비 시간엔 푹 쉬어라.', '점호 시간 늦지 마라.', '전역까지… 아 행복하다.'],
-  senior: ['심심하다~ 뭐 재밌는 거 없냐?', '오늘 PX 냉동 신상 나왔대.', '분대장님 몰래 낮잠 자고 싶다…'],
-  buddy: ['우리 오늘도 살아남았다…', '휴가 날짜 세는 중이야.', '밥 맛있었지? 나만 그래?'],
+  senior: ['심심하다~ 뭐 재밌는 거 없냐?', '오늘 PX 냉동 신상 나왔대.', '분대장님 몰래 낮잠 자고 싶다…', '내가 왜 이렇게 PX를 자주 가냐고 물으신다면~ 대답해 드리는 게 인지상정!', '분대장님한테 또 걸렸다… 오늘도 또 당했다~ (반짝)'],
+  buddy: ['우리 오늘도 살아남았다…', '휴가 날짜 세는 중이야.', '밥 맛있었지? 나만 그래?', '으으… 머리가 아파… (왠지 고라파덕처럼 머리를 감싸 쥐고 있다)'],
   junior: ['선임님! 오늘도 잘 부탁드립니다!', '오늘 실수 안 했습니다!', '선임님 존경합니다!'],
   junior2: ['선임님!!! 질문 있습니다!!! …까먹었습니다!!!', '오늘 경례 각도 완벽했습니다!'],
   lt: ['아픈 데는 없지?', '오늘 훈련 수고 많았다.', '보고는 두괄식, 알지?'],

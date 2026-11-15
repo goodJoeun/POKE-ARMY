@@ -4,16 +4,20 @@ import type {
   ActiveQuest, Archetype, BranchId, Dialogue, DialogueCtx, Effects, GameId, MinigameRequest,
   NpcId, Scene, ScheduleEvent, SpotId, Stats,
 } from '../types';
-import { BRANCHES, MONTHLY_PAY, RANKS, TOTAL_DAYS, fmtMoney, rankIdxForDay, seasonForDay } from '../data/branches';
+import { BRANCHES, FACILITY_NAME, MONTHLY_PAY, RANKS, STORE_NAME, TOTAL_DAYS, fmtMoney, rankIdxForDay, seasonForDay } from '../data/branches';
 import { pickSpecies, topArchetype } from '../data/monsters';
-import { NPC_IDS, NPC_SKINS, SOLDIER_IDS, currentSquadLeader, npcPresent, arriveDay, leaveDay } from '../data/npcs';
-import { buildSchedule } from '../data/schedule';
+import { NPC_IDS, NPC_ROLES, NPC_SKINS, SOLDIER_IDS, birthdayNpcs, currentSquadLeader, npcPresent, arriveDay, leaveDay } from '../data/npcs';
+import { buildSchedule, isFreeTimeEvening, isMealTime } from '../data/schedule';
 import { DIALOGUES } from '../data/dialogues';
-import { QUESTS } from '../data/quests';
+import { QUESTS, QUEST_CHAINS, chainOf } from '../data/quests';
 import { ITEMS, GIFT_AFFINITY } from '../data/items';
 import { rollcallPool, type RollcallQuestion } from '../data/rollcall';
 import { fmt } from '../engine/text';
-import { teleport } from '../engine/runtime';
+import { runtime, teleport } from '../engine/runtime';
+import { inEventArea } from '../engine/eventArea';
+import { isExtraKey, memberName } from '../engine/whereabouts';
+import { extrasForDay } from '../data/extras';
+import { CLUES, CHAPTERS, DREAMS, MEMORY_DECAY, MEMORY_PER_CLUE, MEMORY_PER_DREAM, MEMORY_START, chapterDone, clueDef } from '../data/story';
 import { getWorld } from '../engine/map';
 
 // v2: 포켓몬 종 ID로 변경되어 이전 세이브와 호환되지 않음
@@ -59,6 +63,41 @@ interface Persist {
   askedQ: number[];
   farewellDone: NpcId[];
   giftCount: Partial<Record<NpcId, number>>;
+  /** 식사 집합 미션: 밥 먹으러 가기 전에 선임들께 여쭤보고 함께 간다 */
+  mealCheck: MealCheck | null;
+  /** 야간 순찰 진행 상태 (점검한 장소) */
+  patrol: { done: SpotId[] } | null;
+  /** 메인 스토리: 찾은 단서 id */
+  clues: string[];
+  /** 메인 스토리: 모은 별 조각 번호 (1~7) */
+  stars: number[];
+  /** 🌟 인간의 기억 (0이 되면 배드 엔딩) */
+  memory: number;
+}
+
+/** 야간 순찰 점검 장소: 막사 1·2층 복도 게시판 · 세탁실 · 화장실 */
+export const PATROL_SPOTS: SpotId[] = ['board1', 'laundry1', 'wc1', 'board2', 'laundry2', 'wc2'];
+const PATROL_TEXT: Partial<Record<SpotId, string[]>> = {
+  board1: ['1층 복도 이상 무. 게시판 경계작전명령서 최신본 확인.', '1층 복도 창문 잠금 확인. 이상 무.'],
+  board2: ['2층 복도 이상 무. 비상구 표지등 정상.', '2층 복도 창문 하나가 열려 있다. 닫았다.'],
+  laundry1: ['1층 세탁실: 건조기가 아직 돌아간다. 취침 시간 이후 사용 금지… 전원을 끄고 메모를 붙였다.', '1층 세탁실 이상 무. 물 새는 곳 없음.'],
+  laundry2: ['2층 세탁실 이상 무. 세제 정리 상태 양호.', '2층 세탁실: 누군가 빨래를 두고 갔다. 이름표 확인 후 메모.'],
+  wc1: ['1층 화장실: 불이 켜져 있다. 아무도 없다. 소등 완료.', '1층 화장실 이상 무. 수도꼭지 잠금 확인.'],
+  wc2: ['2층 화장실 이상 무.', '2층 화장실: 물이 계속 흐른다. 꼭지를 잠그고 수리 요청 메모.'],
+};
+
+/** 식사 집합 시간(분): 식사 시작 후 이 시간 안에 선임들께 다 여쭤봐야 함께 간다 */
+export const MEAL_GATHER_MIN = 20;
+
+export interface MealCheck {
+  meal: 'lunch' | 'dinner';
+  /** 식사 시작 시각 */
+  start: number;
+  /** 여쭤봐야 할 선임 (주요 NPC id 또는 엑스트라 'x:<id>') */
+  targets: string[];
+  asked: string[];
+  /** asking: 여쭤보는 중(여쭌 선임은 막사 앞에서 대기) / together: 다 모여 함께 식당으로 / missed: 기다리다 먼저 감 */
+  status: 'asking' | 'together' | 'missed';
 }
 
 export interface RollcallState {
@@ -121,6 +160,18 @@ interface Store extends Persist {
   wipe: () => void;
   /** 저장 데이터를 지우고 타이틀로 (새로 시작) */
   resetAll: () => void;
+  /** 식사 미션: 선임에게 식사 여부를 여쭤봤다 */
+  askMeal: (key: string) => boolean;
+  /** 야간 순찰: 장소 점검 */
+  patrolCheck: (spot: SpotId) => void;
+  /** 야간 순찰 종료 (보고 완료 / 시간 초과) */
+  finishPatrol: (reported: boolean) => void;
+  /** 메인 스토리: 단서 발견 (처음일 때만 true) */
+  findClue: (id: string) => boolean;
+  /** 메인 스토리: 별 조각 획득 */
+  gainStar: (n: number) => void;
+  /** 오늘 밤 꿈(별의 언덕)을 다 봤다 */
+  finishDream: () => void;
 }
 
 const zeroAff = (): Record<NpcId, number> =>
@@ -147,6 +198,11 @@ const initialPersist = (): Persist => ({
   eventBegun: false,
   announced: [],
   daily: [],
+  mealCheck: null,
+  patrol: null,
+  clues: [],
+  stars: [],
+  memory: MEMORY_START,
   dayLog: [],
   dayStart: { stats: { hp: 80, mental: 70, discipline: 50, skill: 10, money: 30000 }, affinity: zeroAff() },
   grades: [],
@@ -242,6 +298,12 @@ export const useGame = create<Store>((set, get) => ({
     const logs: string[] = [];
     const st = { ...s.stats };
     const b = BRANCHES[s.branch];
+    // 🌟 인간이었던 기억은 매일 조금씩 흐려진다 (스토리가 시작된 뒤부터)
+    let memory = s.memory;
+    if (s.clues.length > 0 && day >= 2) {
+      memory = Math.max(0, memory - MEMORY_DECAY);
+      logs.push(`🌟 인간이었던 기억이 조금 흐려졌다… (기억 ${memory})`);
+    }
     // 도착/전역 알림
     for (const id of SOLDIER_IDS) {
       const sk = NPC_SKINS[s.branch][id];
@@ -272,6 +334,9 @@ export const useGame = create<Store>((set, get) => ({
       talked: [],
       gifted: [],
       daily: [],
+      mealCheck: null,
+      patrol: null,
+      memory,
       dayLog: logs,
       stats: st,
       dayStart: { stats: { ...st }, affinity: { ...s.affinity } },
@@ -324,7 +389,58 @@ export const useGame = create<Store>((set, get) => ({
       ann('lunch', 12 * 60, '🍚 점심시간! 식당에서 밥을 먹자 (13:00까지)');
       ann('dinner', 17 * 60 + 30, '🌇 일과 종료! 개인정비 시간 (저녁 식사 ~18:30)');
       ann('phone', 18 * 60, '📱 휴대폰 사용 시간 (침상에서 사용 가능, ~21:00)');
+      // 식사 시간이 끝났는데 밥을 안 먹었으면 굶은 대가를 치른다
+      const missed = (key: string, at: number, meal: 'meal_lunch' | 'meal_dinner', label: string) => {
+        if (minute < at || get().announced.includes(key)) return;
+        set({ announced: [...get().announced, key] });
+        if (get().daily.includes(meal)) return;
+        get().applyEffects({ hp: -6, mental: -3 }, `${label} 거름`);
+        get().toast(`🍚 ${label}을 걸렀다… 배에서 꼬르륵 소리가 난다.`, 'bad');
+        get().log(`🍚 ${label}을 걸렀다.`);
+      };
+      missed('lunchMissed', 13 * 60, 'meal_lunch', '점심');
+      missed('dinnerMissed', 18 * 60 + 30, 'meal_dinner', '저녁');
+      // 식사 집합 미션: 밥 먹으러 가기 전에 선임들께 "식사하러 가시겠습니까?" 여쭤보고 다 같이 간다
+      const assignMeal = (key: string, at: number, meal: MealCheck['meal']) => {
+        if (minute < at || get().announced.includes(key)) return;
+        set({ announced: [...get().announced, key] });
+        // 1분대 선임: 주요 NPC(분대장·맞선임) + 1분대 상병(엑스트라)
+        const seniors: string[] = [
+          ...SOLDIER_IDS.filter((id) => npcPresent(id, s.day) && NPC_ROLES[id].offset > 0),
+          ...extrasForDay(s.branch, s.day).filter((d) => d.squad1Senior).map((d) => `x:${d.id}`),
+        ];
+        if (!seniors.length) return;
+        set({ mealCheck: { meal, start: at, targets: seniors, asked: [], status: 'asking' } });
+        const names = seniors.map((id) => memberName(s.branch, id)).join('·');
+        get().toast(`📋 미션: 식사 집합 — ${MEAL_GATHER_MIN}분 안에 ${names}께 "식사하러 가시겠습니까?" 여쭤보자`, 'info');
+      };
+      // 집합 시간이 지나도록 다 못 여쭸으면: 기다리던 선임들은 먼저 식당으로
+      const missGather = (key: string, at: number, meal: MealCheck['meal']) => {
+        if (minute < at || get().announced.includes(key)) return;
+        set({ announced: [...get().announced, key] });
+        const mc = get().mealCheck;
+        if (!mc || mc.meal !== meal || mc.status !== 'asking') return;
+        set({ mealCheck: { ...mc, status: 'missed' } });
+        const left = mc.targets.filter((id) => !mc.asked.includes(id));
+        const aff: Partial<Record<NpcId, number>> = {};
+        for (const id of left) if (!isExtraKey(id)) aff[id as NpcId] = -2;
+        get().applyEffects({ affinity: aff, mental: -1 }, '식사 집합 못 챙김');
+        get().toast(`🍚 ${left.map((id) => memberName(s.branch, id)).join('·')}께 여쭤보지 못했다… 선임들이 먼저 식당으로 갔다.`, 'bad');
+        get().log('🍚 식사 집합을 제때 챙기지 못했다.');
+      };
+      const endMeal = (key: string, at: number, meal: MealCheck['meal']) => {
+        if (minute < at || get().announced.includes(key)) return;
+        set({ announced: [...get().announced, key] });
+        if (get().mealCheck?.meal === meal) set({ mealCheck: null });
+      };
+      assignMeal('mealCheckLunch', 12 * 60, 'lunch');
+      assignMeal('mealCheckDinner', 17 * 60 + 30, 'dinner');
+      missGather('mealGatherLunch', 12 * 60 + MEAL_GATHER_MIN, 'lunch');
+      missGather('mealGatherDinner', 17 * 60 + 30 + MEAL_GATHER_MIN, 'dinner');
+      endMeal('mealCheckLunchEnd', 13 * 60, 'lunch');
+      endMeal('mealCheckDinnerEnd', 18 * 60 + 30, 'dinner');
     }
+    if (ev && ev.kind === 'patrol' && s.eventBegun && get().patrol && minute >= ev.end) { get().finishPatrol(false); return; }
     if (!ev || s.eventBegun) return;
     if (ev.auto) {
       if (minute >= ev.start) get().beginEvent();
@@ -336,7 +452,17 @@ export const useGame = create<Store>((set, get) => ({
       return;
     }
     ann(`call_${ev.id}`, ev.start, `📢 집합! ${ev.label} — ${ev.spot ? buildMapSpotLabel(get().branch, ev.spot) : ''}`, 'alert');
-    if (minute > ev.start + ev.window) get().handleLate();
+    // 집합 시각(마감)이 되는 순간 해당 구역에 있으면 정시에 시작, 없으면 지각
+    const deadline = ev.start + ev.window;
+    if (minute >= deadline && ev.spot) {
+      const w = getWorld(s.branch, BRANCHES[s.branch].trainArea);
+      if (inEventArea(w, ev.spot, runtime.player)) {
+        get().toast(`✅ 집합 완료! ${ev.label} 시작`, 'good');
+        get().beginEvent();
+        return;
+      }
+    }
+    if (minute > deadline) get().handleLate();
   },
 
   handleLate: () => {
@@ -393,13 +519,17 @@ export const useGame = create<Store>((set, get) => ({
       case 'night':
         get().startMinigame({
           game: ev.game!,
-          title: BRANCHES[s.branch].games[ev.game as Exclude<GameId, 'overlock'>],
+          title: ev.id === 'guard_night' ? '🌙 야간 위병소 근무' : BRANCHES[s.branch].games[ev.game as Exclude<GameId, 'overlock'>],
           eventId: ev.id,
           returnTo: ev.kind === 'night' ? 'dayEnd' : 'world',
         });
         break;
       case 'farewell':
         set({ scene: 'ending' });
+        break;
+      case 'patrol':
+        set({ patrol: { done: [] }, busy: false });
+        get().toast('🔦 야간 순찰 시작! 막사 1·2층 복도·세탁실·화장실을 점검하고 지휘통제실 당직사관에게 보고하자 (23:00까지)', 'alert');
         break;
     }
   },
@@ -473,6 +603,11 @@ export const useGame = create<Store>((set, get) => ({
         parts.push(`${NPC_SKINS[s.branch][id].name} 호감 ${v > 0 ? '+' : ''}${v}`);
       }
     }
+    let memory = s.memory;
+    if (e.memory) {
+      memory = Math.max(0, Math.min(100, memory + e.memory));
+      parts.push(`🌟 기억 ${e.memory > 0 ? '+' : ''}${e.memory}`);
+    }
     const flags = e.flag ? { ...s.flags, [e.flag]: true } : s.flags;
     let quests = s.quests;
     if (e.quest && !s.quests.some((q) => q.id === e.quest) && !s.doneQuests.includes(e.quest)) {
@@ -481,7 +616,7 @@ export const useGame = create<Store>((set, get) => ({
     }
     const inventory = { ...s.inventory };
     if (e.item) inventory[e.item] = (inventory[e.item] ?? 0) + 1;
-    set({ stats, affinity, flags, quests, inventory });
+    set({ stats, affinity, flags, quests, inventory, memory });
 
     // 쓰러짐 / 멘붕 처리
     if (stats.hp <= 0) {
@@ -547,6 +682,8 @@ export const useGame = create<Store>((set, get) => ({
     const s = get();
     return {
       day: s.day,
+      done: s.doneQuests,
+      minute: s.minute,
       rankIdx: rankIdxForDay(s.day),
       affinity: s.affinity,
       flags: s.flags,
@@ -591,9 +728,22 @@ export const useGame = create<Store>((set, get) => ({
     const def = QUESTS[id];
     const step = q.step + 1;
     if (step >= def.steps.length) {
-      set({ quests: s.quests.filter((x) => x.id !== id), doneQuests: [...s.doneQuests, id] });
+      const doneQuests = [...s.doneQuests, id];
+      set({ quests: s.quests.filter((x) => x.id !== id), doneQuests });
       get().applyEffects(def.reward, `퀘스트 완료: ${def.title}`);
       get().log(`📋 퀘스트 "${def.title}" 완료`);
+      // 연계 퀘스트: 다음 단계 안내 / 체인을 모두 끝내면 보너스
+      const ch = chainOf(id);
+      if (ch) {
+        const idx = ch.quests.indexOf(id);
+        if (ch.quests.every((qid) => doneQuests.includes(qid))) {
+          get().applyEffects(ch.bonus, `🔗 연계 퀘스트 완료: ${ch.title}`);
+          get().toast(`🔗 연계 퀘스트 「${ch.title}」 완료! 보너스 보상`, 'good');
+          get().log(`🔗 연계 퀘스트 「${ch.title}」를 모두 마쳤다.`);
+        } else if (idx >= 0 && idx < ch.quests.length - 1) {
+          get().toast(`🔗 연계 퀘스트 「${ch.title}」 ${idx + 1}/${ch.quests.length} — 다음: ${QUESTS[ch.quests[idx + 1]].title} (${NPC_SKINS[s.branch][ch.giver].name}에게 다시 말 걸기)`, 'info');
+        }
+      }
     } else {
       set({ quests: s.quests.map((x) => (x.id === id ? { ...x, step } : x)) });
     }
@@ -628,7 +778,9 @@ export const useGame = create<Store>((set, get) => ({
       giftCount: { ...s.giftCount, [npc]: count + 1 },
     });
     // 같은 상대에게 반복 선물할수록 효과 감소 (6 → 4 → 2 → 1…)
-    const bonus = item === 'chocopie' ? 2 : 0;
+    const bday = birthdayNpcs(s.day).includes(npc);
+    const bonus = (item === 'chocopie' ? 2 : 0) + (bday ? 3 : 0);
+    if (bday) get().toast(`🎂 생일 축하 선물! ${NPC_SKINS[s.branch][npc].name}의 호감이 더 올랐다.`, 'good');
     get().applyEffects({ affinity: { [npc]: Math.max(1, GIFT_AFFINITY - count * 2) + bonus } }, '선물');
     get().log(`🎁 ${NPC_SKINS[s.branch][npc].name}에게 ${ITEMS[item].name}을(를) 선물했다.`);
     return true;
@@ -643,6 +795,85 @@ export const useGame = create<Store>((set, get) => ({
   markDaily: (key) => set({ daily: [...get().daily, key] }),
   markFarewell: (npc) => set({ farewellDone: [...get().farewellDone, npc] }),
 
+  findClue: (id) => {
+    const s = get();
+    const def = clueDef(id);
+    if (!def || s.clues.includes(id)) return false;
+    const clues = [...s.clues, id];
+    set({ clues });
+    get().applyEffects({ memory: MEMORY_PER_CLUE }, `🔍 단서: ${def.title}`);
+    get().log(`🔍 단서 「${def.title}」를 떡밥 수첩에 적었다.`);
+    // 장(章) 완료
+    const ch = CHAPTERS.find((c) => c.n === def.chapter);
+    if (ch && chapterDone(ch.n, clues) && !s.flags[`story_ch${ch.n}`]) {
+      get().applyEffects({ flag: `story_ch${ch.n}` }, undefined, true);
+      get().toast(`📖 ${ch.n}장 「${ch.title}」 완료! 떡밥 ${clues.length}/${CLUES.length}`, 'good');
+      get().log(`📖 ${ch.n}장 「${ch.title}」의 단서를 모두 모았다.`);
+    }
+    return true;
+  },
+
+  gainStar: (n) => {
+    const s = get();
+    if (s.stars.includes(n)) return;
+    set({ stars: [...s.stars, n].sort((a, b) => a - b) });
+    get().toast(`✨ 별 조각을 얻었다! (${s.stars.length + 1}/7)`, 'good');
+    get().log(`✨ 별 조각 ${n}번째를 손에 넣었다.`);
+  },
+
+  finishDream: () => {
+    const s = get();
+    const dream = DREAMS[s.day];
+    if (!dream || s.flags[`dream_${s.day}`]) return;
+    get().applyEffects({ flag: `dream_${s.day}` }, undefined, true);
+    if (dream.clue) get().findClue(dream.clue);
+    if (dream.star) get().gainStar(dream.star);
+    get().applyEffects({ memory: MEMORY_PER_DREAM }, '꿈: 별의 언덕', true);
+  },
+
+  patrolCheck: (spot) => {
+    const pt = get().patrol;
+    if (!pt || pt.done.includes(spot)) return;
+    const done = [...pt.done, spot];
+    set({ patrol: { done } });
+    const pool = PATROL_TEXT[spot] ?? ['이상 무.'];
+    get().toast(`🔦 (${done.length}/${PATROL_SPOTS.length}) ${pool[Math.floor(Math.random() * pool.length)]}`, 'info');
+    if (done.length >= PATROL_SPOTS.length) get().toast('✅ 순찰 완료! 막사 1층 지휘통제실 당직사관에게 보고하자.', 'good');
+  },
+
+  finishPatrol: (reported) => {
+    const pt = get().patrol;
+    if (!pt) return;
+    set({ patrol: null });
+    if (reported) {
+      get().applyEffects({ discipline: 4, affinity: { lt: 3 } }, '야간 순찰');
+      get().log('🔦 야간 순찰을 빠짐없이 돌고 당직사관에게 보고했다.');
+    } else {
+      const ratio = pt.done.length / PATROL_SPOTS.length;
+      get().applyEffects(ratio >= 1 ? { discipline: 1 } : { discipline: -3, mental: -2 }, '야간 순찰');
+      get().toast(ratio >= 1 ? '🔦 순찰은 다 돌았지만 보고를 못 했다…' : `🔦 순찰을 다 돌지 못했다… (${pt.done.length}/${PATROL_SPOTS.length})`, 'bad');
+      get().log('🔦 야간 순찰을 제대로 마치지 못했다.');
+    }
+    get().completeEvent();
+  },
+
+  askMeal: (npc) => {
+    const mc = get().mealCheck;
+    if (!mc || mc.status !== 'asking' || !mc.targets.includes(npc) || mc.asked.includes(npc)) return false;
+    const asked = [...mc.asked, npc];
+    get().applyEffects(isExtraKey(npc) ? { mental: 1 } : { affinity: { [npc]: 2 } }, '식사 집합', true);
+    if (asked.length >= mc.targets.length) {
+      set({ mealCheck: { ...mc, asked, status: 'together' } });
+      get().applyEffects({ discipline: 2, mental: 1 }, '식사 집합 완료');
+      get().toast('✅ 식사 집합 완료! 선임들과 다 같이 식당으로 간다 (군기 +2 · 멘탈 +1 · 선임 호감 +2씩)', 'good');
+      get().log('🍚 선임들께 빠짐없이 여쭤보고 다 같이 식사하러 갔다.');
+    } else {
+      set({ mealCheck: { ...mc, asked } });
+      get().toast(`🍚 식사 집합 ${asked.length}/${mc.targets.length} — 여쭌 선임은 막사 앞에서 기다린다`, 'info');
+    }
+    return true;
+  },
+
   save: () => {
     try {
       const s = get();
@@ -652,7 +883,8 @@ export const useGame = create<Store>((set, get) => ({
         doneQuests: s.doneQuests, inventory: s.inventory, flags: s.flags, tips: s.tips, eventIdx: s.eventIdx,
         eventBegun: false, announced: s.announced, daily: s.daily, dayLog: s.dayLog, dayStart: s.dayStart,
         grades: s.grades, lateCount: s.lateCount, askedQ: s.askedQ, farewellDone: s.farewellDone,
-        giftCount: s.giftCount,
+        giftCount: s.giftCount, mealCheck: s.mealCheck, patrol: null,
+        clues: s.clues, stars: s.stars, memory: s.memory,
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch { /* 저장 불가 환경 */ }
@@ -692,9 +924,13 @@ function teleportToBed(branch: BranchId) {
 
 function buildMapSpotLabel(branch: BranchId, spot: SpotId): string {
   const labels: Record<SpotId, string> = {
-    bed: '1생활관 내 침상', barracks: '막사 1층 1생활관', mess: '식당', px: 'PX', admin: '막사 1층 행정반',
-    command: '막사 1층 지휘통제실', tv: '막사 2층 휴게실', cyber: '싸지방',
-    gym: '체력단련장', parade: '연병장', train: BRANCHES[branch].trainArea, post: '위병소 초소', gate: '위병소 정문',
+    bed: '1생활관 내 침상', barracks: '막사 1층 1생활관', mess: '병영식당', px: STORE_NAME[branch], admin: '막사 1층 행정반',
+    command: '막사 1층 지휘통제실', tv: '막사 2층 휴게실', cyber: '막사 2층 싸지방',
+    gym: '막사 2층 체단실', parade: '연병장', train: BRANCHES[branch].trainArea, post: '위병소 초소', gate: '위병소 정문',
+    maint: '막사 1층 정비실', library: '막사 2층 도서관', wc1: '막사 1층 화장실', wc2: '막사 2층 화장실',
+    laundry1: '막사 1층 세탁실', laundry2: '막사 2층 세탁실', water1: '막사 1층 정수기', water2: '막사 2층 정수기',
+    board1: '막사 1층 복도 게시판', board2: '막사 2층 복도 게시판',
+    kitchen: '병영식당 조리실', court: '농구장', recycle: '분리수거장', ammo: FACILITY_NAME[branch],
   };
   return labels[spot];
 }
@@ -702,6 +938,46 @@ function buildMapSpotLabel(branch: BranchId, spot: SpotId): string {
 export function spotLabel(branch: BranchId, spot: SpotId) {
   return buildMapSpotLabel(branch, spot);
 }
+
+/** 자유 시간(점심·저녁 개인정비)에 퀘스트·식사 집합이 진행 중이면 시간이 절반 속도로 흐른다 */
+export function questSlowActive(s: { quests: ActiveQuest[]; mealCheck: MealCheck | null; minute: number; patrol: { done: SpotId[] } | null }): boolean {
+  if (s.patrol) return true;
+  const busy = s.quests.length > 0 || s.mealCheck?.status === 'asking';
+  return busy && (isMealTime(s.minute) || isFreeTimeEvening(s.minute));
+}
+
+/** 퀘스트 창 "받을 수 있는 퀘스트": 퀘스트를 주는 대화 기준으로 지금 받을 수 있는지 / 잠겨 있는지 */
+export interface QuestOffer {
+  questId: string;
+  giver: NpcId;
+  dialogueId: string;
+  /** 지금 말을 걸면 받을 수 있다 */
+  open: boolean;
+  /** 대화했지만 거절해서 놓쳤다 */
+  missed: boolean;
+}
+export function questOffers(s: Store): QuestOffer[] {
+  const c = s.dialogueCtx();
+  const out = new Map<string, QuestOffer>();
+  for (const d of DIALOGUES) {
+    const qids = [...new Set((d.choices ?? []).map((ch) => ch.effects?.quest).filter(Boolean) as string[])];
+    for (const qid of qids) {
+      if (!QUESTS[qid] || s.quests.some((x) => x.id === qid) || s.doneQuests.includes(qid)) continue;
+      if (!npcPresent(d.npc, s.day)) continue;
+      const seen = !!d.once && s.seen.includes(d.id);
+      const open = !seen && (!d.when || d.when(c));
+      const prev = out.get(qid);
+      // 같은 퀘스트를 주는 대화가 여럿이면 받을 수 있는 쪽을 우선
+      if (!prev || (open && !prev.open)) out.set(qid, { questId: qid, giver: d.npc, dialogueId: d.id, open, missed: seen && !open });
+    }
+  }
+  return [...out.values()];
+}
+/** 대화 id로 대화 찾기 */
+export function dialogueById(id: string) {
+  return DIALOGUES.find((d) => d.id === id) ?? null;
+}
+export { QUEST_CHAINS };
 
 export function presentNpcs(day: number): NpcId[] {
   return NPC_IDS.filter((id) => npcPresent(id, day));

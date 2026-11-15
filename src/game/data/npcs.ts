@@ -61,7 +61,7 @@ export const NPC_SKINS: Record<BranchId, Record<NpcId, NpcSkin>> = {
     senior: { name: '딜리버드', species: '얼음·비행 타입', look: { sprite: 'delibird', body: '#e04a4a', belly: '#ffffff', accent: '#f2f2f2', shape: 'tall', ears: 'none', tail: 'none', wings: true, eyes: 'dot', mouth: 'beak' } },
     buddy: { name: '주뱃', species: '독·비행 타입', look: { sprite: 'zubat', body: '#5a8ad8', belly: '#c890e0', accent: '#c890e0', shape: 'round', ears: 'pointy', tail: 'none', wings: true, eyes: 'sleepy', mouth: 'fang' } },
     junior: { name: '테일로', species: '노말·비행 타입', look: { sprite: 'taillow', body: '#2a3a5a', belly: '#f2f2f2', accent: '#e04a4a', shape: 'round', ears: 'none', tail: 'none', wings: true, eyes: 'sharp', mouth: 'beak', extra: 'cheeks' } },
-    junior2: { name: '에몽가', species: '전기·비행 타입', look: { sprite: 'emolga', body: '#f2f2f2', belly: '#ffffff', accent: '#2a2a2a', shape: 'round', ears: 'pointy', tail: 'puff', wings: true, eyes: 'big', mouth: 'cat', extra: 'cheeks' } },
+    junior2: { name: '깨비참', species: '노말·비행 타입', look: { sprite: 'spearow', body: '#a87048', belly: '#f2d8b0', accent: '#e05a4a', shape: 'round', ears: 'feather', tail: 'none', wings: true, eyes: 'sharp', mouth: 'beak' } },
     lt: { name: '스왈로', species: '노말·비행 타입', look: { sprite: 'swellow', body: '#2a3a5a', belly: '#f2f2f2', accent: '#e04a4a', shape: 'tall', ears: 'feather', tail: 'none', wings: true, eyes: 'sharp', mouth: 'beak' } },
     sgm: { name: '깨비드릴조', species: '노말·비행 타입', look: { sprite: 'fearow', body: '#a0704a', belly: '#f2d8b0', accent: '#e05a4a', shape: 'tall', ears: 'feather', tail: 'none', wings: true, eyes: 'sharp', mouth: 'beak' } },
     cpt: { name: '피죤투', species: '노말·비행 타입', look: { sprite: 'pidgeot', body: '#b08a5a', belly: '#f2e2c4', accent: '#e04a3a', shape: 'tall', ears: 'feather', tail: 'none', wings: true, eyes: 'sharp', mouth: 'beak' } },
@@ -101,6 +101,11 @@ export function npcRank(id: NpcId, day: number): string {
 
 export function npcDisplayName(branch: BranchId, id: NpcId, day: number): string {
   return `${NPC_SKINS[branch][id].name} ${npcRank(id, day)}`;
+}
+
+/** 복도 게시판의 "이번 달 생일자" (하루 ≈ 1.5개월이라 날마다 바뀐다) */
+export function birthdayNpcs(day: number): NpcId[] {
+  return NPC_IDS.filter((id, i) => npcPresent(id, day) && (i * 7 + day) % 4 === 0);
 }
 
 /** 현재 생활관 분대장: 남아 있는 가장 고참 병사. 없으면 플레이어. */

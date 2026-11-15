@@ -3,7 +3,11 @@ export type Archetype = 'leader' | 'diligent' | 'social';
 export type NpcId = 'sgt' | 'senior' | 'buddy' | 'junior' | 'junior2' | 'lt' | 'sgm' | 'cpt';
 export type SpotId =
   | 'bed' | 'barracks' | 'mess' | 'px' | 'admin' | 'command' | 'tv' | 'cyber' | 'gym'
-  | 'parade' | 'train' | 'post' | 'gate';
+  | 'parade' | 'train' | 'post' | 'gate'
+  // 막사 시설
+  | 'maint' | 'library' | 'wc1' | 'wc2' | 'laundry1' | 'laundry2' | 'water1' | 'water2' | 'board1' | 'board2'
+  // 식당 조리실 · 야외 구역
+  | 'kitchen' | 'court' | 'recycle' | 'ammo';
 export type GameId =
   | 'env' | 'night' | 'combat' | 'guard' | 'specialty' | 'sandbag' | 'overlock';
 export type Season = 'winter' | 'spring' | 'summer' | 'autumn';
@@ -27,6 +31,8 @@ export interface Effects {
   skill?: number;
   money?: number;
   affinity?: Partial<Record<NpcId, number>>;
+  /** 🌟 인간의 기억 (메인 스토리) */
+  memory?: number;
   flag?: string;
   quest?: string;
   item?: string;
@@ -76,6 +82,10 @@ export interface Choice {
 
 export interface DialogueCtx {
   day: number;
+  /** 완료한 퀘스트 id (연계 퀘스트 조건) */
+  done: string[];
+  /** 현재 게임 시각(분) */
+  minute: number;
   rankIdx: number;
   affinity: Record<NpcId, number>;
   flags: Record<string, boolean>;
@@ -109,6 +119,8 @@ export interface QuestDef {
   desc: string;
   steps: QuestStep[];
   reward: Effects;
+  /** 받을 수 있는 조건 안내 (퀘스트 창 "받을 수 있는 퀘스트"에서 잠겨 있을 때 표시) */
+  hint?: string;
 }
 
 export interface ActiveQuest {
@@ -116,7 +128,7 @@ export interface ActiveQuest {
   step: number;
 }
 
-export type EventKind = 'rollcall_am' | 'rollcall_pm' | 'work' | 'night' | 'farewell';
+export type EventKind = 'rollcall_am' | 'rollcall_pm' | 'work' | 'night' | 'farewell' | 'patrol';
 
 export interface ScheduleEvent {
   id: string;

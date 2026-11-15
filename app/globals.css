@@ -251,6 +251,8 @@ button.big:not(.primary) { background: #fff8e6; color: var(--ink); box-shadow: 0
   .dpad { position: relative; width: 132px; height: 132px; pointer-events: auto; }
   .dpad button { position: absolute; width: 44px; height: 44px; border-radius: 10px; border: none; background: rgba(255,248,230,0.8); font-size: 16px; touch-action: none; }
   .dpad .up { left: 44px; top: 0; } .dpad .down { left: 44px; bottom: 0; } .dpad .left { left: 0; top: 44px; } .dpad .right { right: 0; top: 44px; }
+  .touchpad .touch-actions { display: flex; gap: 10px; align-items: flex-end; }
+  .touchpad .dash { pointer-events: auto; width: 54px; height: 54px; border-radius: 50%; border: none; background: rgba(58,143,224,0.9); color: #fff; font-size: 12px; font-family: 'Galmuri11', sans-serif; touch-action: none; }
   .touchpad .action { pointer-events: auto; width: 64px; height: 64px; border-radius: 50%; border: none; background: rgba(224,96,58,0.9); color: #fff; font-size: 22px; font-family: 'Galmuri14', 'Galmuri11', sans-serif; touch-action: none; }
 }
 @media (max-width: 760px) {

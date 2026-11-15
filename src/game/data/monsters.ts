@@ -89,6 +89,20 @@ export const PLAYER_SPECIES: Record<BranchId, Species[]> = {
       weights: { leader: 1 },
       look: { sprite: 'fletchling', body: '#e8603a', belly: '#f2b080', accent: '#5a5a60', shape: 'round', ears: 'none', tail: 'none', wings: true, eyes: 'sharp', mouth: 'beak' },
     },
+    {
+      id: 'rowlet', name: '나몰빼미', type: '풀·비행',
+      desc: '소리 없이 날아 주변을 살피는 올빼미 포켓몬. 침착하게 맡은 일을 해내는 타입.',
+      wake: '목이… 거의 뒤로 돌아간다?! 가슴엔 나뭇잎 나비넥타이가 달려 있다.',
+      weights: { diligent: 0.8, social: 0.5 },
+      look: { sprite: 'rowlet', body: '#d8c8a0', belly: '#f2ead8', accent: '#5aa850', shape: 'round', ears: 'none', tail: 'none', wings: true, eyes: 'big', mouth: 'beak' },
+    },
+    {
+      id: 'emolga', name: '에몽가', type: '전기·비행',
+      desc: '볼에서 전기를 튀기며 활공하는 하늘다람쥐 포켓몬. 앞장서서 분위기를 끌어올리는 타입.',
+      wake: '팔과 다리 사이에 막이 펼쳐진다?! 볼이 찌릿찌릿하다.',
+      weights: { social: 0.8, leader: 0.5 },
+      look: { sprite: 'emolga', body: '#f2f2f2', belly: '#ffffff', accent: '#2a2a2a', shape: 'round', ears: 'pointy', tail: 'puff', wings: true, eyes: 'big', mouth: 'cat', extra: 'cheeks' },
+    },
   ],
 };
 

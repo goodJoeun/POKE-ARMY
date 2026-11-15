@@ -156,3 +156,8 @@ export function fmtTime(min: number): string {
 export function fmtMoney(n: number): string {
   return n.toLocaleString('ko-KR') + '원';
 }
+
+/** 위병소 옆 군별 핵심 시설: 육군 탄약고 / 공군 격납고 / 해군 함정 부두 */
+export const FACILITY_NAME: Record<BranchId, string> = { army: '탄약고', navy: '함정 부두', air: '격납고' };
+/** 부대 매점 이름: 공군은 BX(Base Exchange) */
+export const STORE_NAME: Record<BranchId, string> = { army: 'PX', navy: 'PX', air: 'BX' };

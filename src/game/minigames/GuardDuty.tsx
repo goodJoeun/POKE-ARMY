@@ -76,7 +76,7 @@ export default function GuardDuty({ ctx, onFinish }: MinigameProps) {
           s.challenged = true;
           s.score += s.dist < 0.85 ? 5 : 2;
           s.phase = 'decide';
-          setDecision({ reply: enc.kind === 'animal' ? `(${animalName}이(가) 놀라서 도망간다…)` : `"${enc.reply}"`, kind: enc.kind });
+          setDecision({ reply: enc.kind === 'animal' ? `야생의 ${animalName}이(가) 나타났다! …놀라서 도망간다.` : `"${enc.reply}"`, kind: enc.kind });
         }
       }
       if (s.dist >= 1 && s.phase === 'approach') {
@@ -125,7 +125,7 @@ export default function GuardDuty({ ctx, onFinish }: MinigameProps) {
         g.fillRect(GW / 2 + 25 * scale, y - 15 * scale, 8 * scale, 20 * scale);
         g.fillStyle = '#ffe14a';
         g.beginPath(); g.arc(GW / 2 + 50 * scale, y - 58 * scale, 3 * scale + 1, 0, Math.PI * 2); g.fill();
-      } else if (enc.look && getSprite(enc.look.sprite, 'art')) {
+      } else if (enc.look && getSprite(enc.look.sprite, 'front')) {
         drawMonster(g, enc.look, GW / 2, y, 170 * scale, { t, walking: s.phase === 'approach', silhouette: lit ? undefined : '#0a0a12' });
       } else if (enc.look) {
         drawMonster(g, enc.look, GW / 2, y, 170 * scale, { t, walking: s.phase === 'approach', cap: enc.kind === 'officer' ? `officer-${b.cap}` : enc.kind === 'friend' ? b.cap : null });

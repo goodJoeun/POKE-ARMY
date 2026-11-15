@@ -1,8 +1,11 @@
 'use client';
-import { useGame, spotLabel, fatigueOf } from '../state/store';
+import { useGame, spotLabel, fatigueOf, questSlowActive } from '../state/store';
 import { useSettings } from '../state/settings';
 import { BRANCHES, RANKS, SEASON_LABEL, TOTAL_DAYS, fmtMoney, fmtTime, rankIdxForDay, seasonForDay, serviceMonth } from '../data/branches';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
+import { getWorld } from '../engine/map';
+import { runtime } from '../engine/runtime';
+import { inEventArea } from '../engine/eventArea';
 
 export function RankBadge({ rankIdx, size = 22 }: { rankIdx: number; size?: number }) {
   return (
@@ -26,7 +29,7 @@ function Bar({ label, value, color, icon }: { label: string; value: number; colo
   );
 }
 
-export default function Hud({ onNotebook, fast, onToggleFast }: { onNotebook: () => void; fast: boolean; onToggleFast: () => void }) {
+export default function Hud({ onNotebook, onQuests, onMap, onHome, fast, onToggleFast }: { onNotebook: () => void; onQuests: () => void; onMap: () => void; onHome: () => void; fast: boolean; onToggleFast: () => void }) {
   const s = useGame();
   const b = BRANCHES[s.branch];
   const rank = rankIdxForDay(s.day);
@@ -36,6 +39,9 @@ export default function Hud({ onNotebook, fast, onToggleFast }: { onNotebook: ()
   let objective = '';
   if (ev) {
     if (ev.kind === 'farewell') objective = `🎊 모두에게 작별 인사 후 ${spotLabel(s.branch, 'gate')}으로!`;
+    else if (ev.kind === 'patrol' && s.patrol) objective = `🔦 야간 순찰 ${s.patrol.done.length}/6 — 막사 1·2층 복도·세탁실·화장실 점검 후 지휘통제실 보고 (23:00까지)`;
+    else if (called && ev.spot && inEventArea(getWorld(s.branch, b.trainArea), ev.spot, runtime.player))
+      objective = `✅ 집합 완료 — ${fmtTime(ev.start + ev.window)} 정시에 ${ev.label} 시작 (E: 바로 보고)`;
     else if (called) objective = `📢 ${ev.label} → ${ev.spot ? spotLabel(s.branch, ev.spot) : ''} (${fmtTime(ev.start + ev.window)}까지 · ${Math.max(0, ev.start + ev.window - s.minute)}분 남음)`;
     else objective = `⏭ ${fmtTime(ev.start)} ${ev.label}${ev.spot ? ` @ ${spotLabel(s.branch, ev.spot)}` : ''}`;
   }
@@ -54,7 +60,7 @@ export default function Hud({ onNotebook, fast, onToggleFast }: { onNotebook: ()
         </div>
         <div className="hud-box hud-clock">
           <div className="clock">{fmtTime(s.minute)}</div>
-          <div className="hud-dim">{period}{fast ? ' · ⏩x5' : ''}</div>
+          <div className="hud-dim">{period}{fast ? ' · ⏩x5' : questSlowActive(s) ? ' · 🐢½' : ''}</div>
         </div>
         <div className="hud-box hud-rank">
           <RankBadge rankIdx={rank} />
@@ -69,11 +75,15 @@ export default function Hud({ onNotebook, fast, onToggleFast }: { onNotebook: ()
         <Bar label="멘탈" value={s.stats.mental} color="#a070e0" icon="🧠" />
         <Bar label="군기" value={s.stats.discipline} color="#3a8fe0" icon="🎖️" />
         <Bar label="숙련" value={s.stats.skill} color="#e0a030" icon="🛠️" />
+        {s.clues.length > 0 && <Bar label="기억" value={s.memory} color={s.memory <= 30 ? '#c86ad8' : '#f0c040'} icon="🌟" />}
         <div className="stat money">💰 {fmtMoney(s.stats.money)}</div>
         {fatigue.length > 0 && <div className="fatigue-warn">😫 지침: 훈련 점수 {fatigue.join(', ')}</div>}
       </div>
       {objective && <div className={`hud-objective ${called ? 'urgent' : ''}`}>{objective}</div>}
       <div className="hud-buttons">
+        <button onClick={onHome}>🏠 생활관 <kbd>R</kbd></button>
+        <button onClick={onMap}>🗺️ 지도 <kbd>M</kbd></button>
+        <button onClick={onQuests}>📋 퀘스트 <kbd>Q</kbd></button>
         <button onClick={onNotebook}>📒 수첩 <kbd>Tab</kbd></button>
         <button className={fast ? 'on' : ''} onClick={onToggleFast}>⏩ 빨리감기 <kbd>F</kbd></button>
         <button onClick={() => useSettings.getState().openMenu()}>⚙️ 설정 <kbd>Esc</kbd></button>

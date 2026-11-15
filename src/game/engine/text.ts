@@ -1,5 +1,5 @@
 import type { BranchId, NpcId } from '../types';
-import { BRANCHES, RANKS, rankIdxForDay } from '../data/branches';
+import { BRANCHES, FACILITY_NAME, RANKS, STORE_NAME, rankIdxForDay } from '../data/branches';
 import { NPC_SKINS, npcDisplayName, npcRoleTitle } from '../data/npcs';
 
 export interface TextCtx {
@@ -18,6 +18,8 @@ export function fmt(text: string, c: TextCtx): string {
     .replace(/\{unit\}/g, b.unit)
     .replace(/\{wild\}/g, b.wildlife)
     .replace(/\{branch\}/g, b.name)
+    .replace(/\{ammo\}/g, FACILITY_NAME[c.branch])
+    .replace(/\{store\}/g, STORE_NAME[c.branch])
     .replace(/\{([nrt]):(\w+)\}/g, (_m, k: string, id: string) => {
       if (id === 'me') return c.name;
       const nid = id as NpcId;

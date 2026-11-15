@@ -48,6 +48,12 @@ export function buildSchedule(day: number, branch: BranchId): ScheduleEvent[] {
   ];
   if (hasNightDuty(day)) {
     events.push({ id: 'night', kind: 'night', label: '불침번 근무', start: 22 * 60, window: 0, end: 23 * 60, spot: null, game: 'night', auto: true });
+  } else if (day >= 3 && day % 4 === 3) {
+    // 야간 위병소 근무: 점호 후 위병소 초소로 가서 경계근무
+    events.push({ id: 'guard_night', kind: 'work', label: '야간 위병소 근무', start: 22 * 60, window: W, end: 23 * 60, spot: 'post', game: 'guard' });
+  } else if (day >= 5 && day % 4 === 1) {
+    // 야간 순찰: 점호 후 막사 1·2층 복도를 돌며 점검하고 당직사관에게 보고
+    events.push({ id: 'patrol', kind: 'patrol', label: '야간 순찰 (막사 복도)', start: 22 * 60, window: 0, end: 23 * 60, spot: null, auto: true });
   }
   return events;
 }

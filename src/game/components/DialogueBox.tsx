@@ -9,6 +9,8 @@ import MonsterCanvas from './MonsterCanvas';
 
 export interface DialogueScript {
   npc?: NpcId;
+  /** 주요 NPC가 아닌 화자 (부대 엑스트라 등) — who: 'npc' 줄에 쓰인다 */
+  custom?: SpeakerInfo;
   lines: Line[];
   choices?: Choice[];
 }
@@ -47,10 +49,11 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
     if (!line) return null;
     if (line.who === 'narr') return null;
     if (line.who === 'me') return playerSpeaker(branch, speciesId, name, day);
+    if (line.who === 'npc' && script.custom) return script.custom;
     const id = (line.who === 'npc' ? script.npc : line.who) as NpcId | undefined;
     if (!id) return null;
     return npcSpeaker(branch, id, day);
-  }, [line, branch, speciesId, name, day, script.npc]);
+  }, [line, branch, speciesId, name, day, script.npc, script.custom]);
 
   const advance = useCallback(() => {
     if (phase === 'choices') return;
@@ -98,7 +101,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
       <div className="dialogue">
         {speaker?.look && (
           <div className="portrait">
-            <MonsterCanvas look={speaker.look} size={110} cap={speaker.cap} />
+            <MonsterCanvas look={speaker.look} size={124} cap={speaker.cap} />
           </div>
         )}
         <div className="dialogue-body">

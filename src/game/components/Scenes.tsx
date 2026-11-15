@@ -103,6 +103,7 @@ export function Quiz() {
   const closing: DreamLine[] = [
     { who: 'voice', text: '"…그래, 잘 들었다."' },
     { who: 'voice', text: '"네 대답에 어울리는 모습을 정해 두마."' },
+    { who: 'voice', text: '"…좋아. 너로 정했다!"' },
     { who: 'voice', text: '"눈을 뜨면 알게 될 것이다. 잘 해 보거라, 신병."' },
     { who: 'narr', text: '빛이 점점 커지더니… 눈앞이 새하얘졌다.' },
   ];
@@ -266,6 +267,10 @@ export function Promotion() {
   return (
     <div className="scene promo-scene">
       <h2>🎖️ 진급 신고</h2>
+      <div className="promo-evo">
+        <div>…어라? {s.name}의 모습이…!</div>
+        <div>축하합니다! {s.name}은(는) <b>{RANKS[rank - 1]}</b>에서 <b>{RANKS[rank]}</b>(으)로 진화했다!</div>
+      </div>
       <div className="promo-badge"><RankBadge rankIdx={rank} size={60} /><div>{RANKS[rank - 1]} → <b>{RANKS[rank]}</b></div></div>
       <div className="promo-cpt">
         {cpt.look && <MonsterCanvas look={cpt.look} size={110} cap={cpt.cap} />}
