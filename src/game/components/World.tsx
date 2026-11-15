@@ -266,8 +266,8 @@ const MEAL_REPLY: Partial<Record<NpcId, string[]>> = {
 /** 달리기: 기력 소모(초당)·회복 시간, 속도 */
 const WALK_SPEED = 6;
 const DASH_SPEED = 10.5;
-const DASH_DRAIN_SEC = 2.8;
-const DASH_REGEN_SEC = 3.5;
+const DASH_DRAIN_SEC = 5.5;
+const DASH_REGEN_SEC = 3;
 
 const FORMATION: [number, number][] = [[-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2]];
 
