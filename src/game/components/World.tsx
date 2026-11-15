@@ -13,7 +13,7 @@ import { isFreeTimeEvening, isMealTime } from '../data/schedule';
 import { MS_PER_MINUTE, clampMapZoom, useSettings } from '../state/settings';
 import {
   MAP_NAMES, TILE, collides, doorCenter, doorToward, findPath, getWorld, isSolid, renderMapCanvas,
-  type Door, type MapId, type WorldDef,
+  type Door, type GameMap, type MapId, type WorldDef,
 } from '../engine/map';
 import { drawMonster, type CapType, type Dir } from '../engine/drawMonster';
 import { runtime } from '../engine/runtime';
@@ -41,6 +41,8 @@ interface NpcRt {
   targetKey: string;
   /** 경로 끝에 도착하면 통과할 문 (다른 건물로 이동 중) */
   viaDoor: Door | null;
+  /** 나와 동행 중: 내 발자취를 따라 바로 뒤에 붙었다 */
+  att?: boolean;
 }
 
 /** 맵 + 타일 좌표 */
@@ -209,11 +211,49 @@ function nightGoal(key: string, st: ReturnType<typeof useGame.getState>): Pos | 
   if (key === nd.next && nd.nextAwake) return ['room1', 7, 5]; // 새 불침번: 출입문 쪽에서 근무
   return null;
 }
-/** 지금 나를 따라오는 사수·부사수인지 */
+/** 함께 하는 퀘스트(동기·후임·선임과 같이 가는 부탁)가 진행 중이면 그 사람이 나와 동행한다 (집합·점호·취침 준비 때는 제외) */
+function questCompanion(key: string, st: ReturnType<typeof useGame.getState>): boolean {
+  if (st.minute < 6 * 60 + 15 || st.minute >= 21 * 60 || st.rollcall || st.lateCall) return false;
+  if (!st.quests.some((q) => QUESTS[q.id]?.together && QUESTS[q.id].giver === key)) return false;
+  const ev = st.currentEvent();
+  return !(ev && !st.eventBegun && st.minute >= ev.start && ev.spot);
+}
+/** 지금 나와 동행하는 사람인지: 야간 근무 사수·부사수 / 함께 하는 퀘스트의 상대 */
 const followsMe = (key: string, st: ReturnType<typeof useGame.getState>) => {
   const nd = st.nightDuty;
-  return !!nd && nd.partner === key && (nd.phase === 'toPost' || nd.phase === 'return');
+  if (nd) return nd.partner === key && (nd.phase === 'toPost' || nd.phase === 'return');
+  return questCompanion(key, st);
 };
+/** 내 발자취 (최근 위치가 맨 앞). 동행하는 사람은 이 길을 따라 내 바로 뒤에 선다 */
+const myTrail: { map: MapId | null; pts: [number, number][] } = { map: null, pts: [] };
+/** 동행하는 사람이 서는 거리 (내 뒤로 한 칸) */
+const FOLLOW_GAP = 1.05;
+function trackMyTrail(p: { map: MapId; x: number; y: number; dir: Dir }, map: GameMap) {
+  if (myTrail.map !== p.map) {
+    // 문을 지나면 발자취를 새로 시작: 들어온 방향의 반대쪽(내 뒤)이 비어 있으면 거기서부터
+    const [ox, oy] = { up: [0, 1], down: [0, -1], left: [1, 0], right: [-1, 0] }[p.dir];
+    const bx = p.x + ox * FOLLOW_GAP, by = p.y + oy * FOLLOW_GAP;
+    myTrail.map = p.map;
+    myTrail.pts = collides(map, bx, by) ? [[p.x, p.y]] : [[p.x, p.y], [bx, by]];
+    return;
+  }
+  const [lx, ly] = myTrail.pts[0];
+  if (Math.hypot(p.x - lx, p.y - ly) < 0.1) return;
+  myTrail.pts.unshift([p.x, p.y]);
+  if (myTrail.pts.length > 80) myTrail.pts.pop();
+}
+/** 발자취를 따라 dist만큼 되돌아간 지점 */
+function trailBack(dist: number): [number, number] {
+  const pts = myTrail.pts;
+  let left = dist;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i], [bx, by] = pts[i + 1];
+    const d = Math.hypot(bx - ax, by - ay);
+    if (d >= left) return [ax + ((bx - ax) * left) / d, ay + ((by - ay) * left) / d];
+    left -= d;
+  }
+  return pts[pts.length - 1];
+}
 /** 누운 위치(발 기준 y) / 침상 앞 통로 y */
 const bedY = (row: 'top' | 'bottom') => (row === 'top' ? 2.62 : 7.62);
 const aisleY = (row: 'top' | 'bottom') => (row === 'top' ? 4 : 6);
@@ -960,6 +1000,8 @@ export default function World() {
       }
       if (id === 'lt' || (id === 'cpt' && ev.kind === 'rollcall_am')) return [sp.map, sp.x + (id === 'cpt' ? 1 : -1), sp.y - 4];
     }
+    // 함께 하는 퀘스트 중이면 나를 따라온다
+    if (questCompanion(id, st)) { const p = runtime.player; return [p.map, Math.floor(p.x), Math.floor(p.y)]; }
     // 아침 점호 전에는 다들 생활관에 있다 (1일차 늦잠 장면은 분대장이 내 침상 옆)
     if (!officer && m < 6 * 60 + 15) {
       if (st.day === 1 && !st.flags.wokeUp && WAKE_POS[id]) return WAKE_POS[id]!;
@@ -1797,6 +1839,36 @@ export default function World() {
         }
       }
 
+      // 👣 내 발자취 기록 → 동행하는 사람이 내 바로 뒤를 따라온다
+      trackMyTrail(p, world.maps[p.map]);
+      /** 동행: 가까이 오면 내 뒤에 붙어서, 내가 걸어온 길 그대로 한 칸 뒤를 따라온다. (아직 멀면 false → 길을 찾아 다가온다) */
+      const followStep = (n: NpcRt): boolean => {
+        if (n.map !== p.map) {
+          if (!n.att) return false;
+          n.map = p.map; n.x = p.x; n.y = p.y; n.dir = p.dir; // 뒤따라 문을 지나온다
+        } else if (!n.att) {
+          if (Math.hypot(p.x - n.x, p.y - n.y) > 3) return false;
+          n.att = true;
+        }
+        n.path = []; n.viaDoor = null;
+        if (blocked) { n.moving = false; return true; }
+        const [tx, ty] = trailBack(FOLLOW_GAP);
+        const dx = tx - n.x, dy = ty - n.y;
+        const d = Math.hypot(dx, dy);
+        // 발자취가 아직 짧으면(막 문을 지났거나 제자리) 서서 기다린다
+        if (d < 0.03 || Math.hypot(tx - p.x, ty - p.y) < FOLLOW_GAP * 0.7) {
+          n.moving = false;
+          const fx = p.x - n.x, fy = p.y - n.y;
+          if (Math.hypot(fx, fy) > 0.3) n.dir = Math.abs(fx) > Math.abs(fy) ? (fx > 0 ? 'right' : 'left') : fy > 0 ? 'down' : 'up';
+          return true;
+        }
+        const sp = Math.min(d, Math.max(6.5, d * 7) * dt);
+        n.x += (dx / d) * sp; n.y += (dy / d) * sp;
+        n.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+        n.moving = true;
+        return true;
+      };
+
       // 🔦 야간 순찰: 점검 장소에 다가가면 자동으로 점검
       if (st.patrol && !blocked && !fading) {
         for (const sid of PATROL_SPOTS) {
@@ -1838,7 +1910,8 @@ export default function World() {
         const n = npcs.current[id];
         if (!n) continue;
         const follow = followsMe(id, st);
-        if (follow && n.map === p.map && Math.hypot(p.x - n.x, p.y - n.y) < 1.4) { n.path = []; n.viaDoor = null; }
+        if (!follow) n.att = false;
+        else if (followStep(n)) continue;
         if (n.path.length && !blocked) {
           const [px, py] = n.path[0];
           const gx = px + 0.5, gy = py + 0.5;
@@ -1894,7 +1967,8 @@ export default function World() {
           if (!goalN) { e.moving = false; e.path = []; continue; }
           const gk = `${goalN[0]}:${goalN[1]},${goalN[2]}`;
           const follow = followsMe(xk, st);
-          if (follow && e.map === p.map && Math.hypot(p.x - e.x, p.y - e.y) < 1.4) { e.path = []; e.viaDoor = null; e.moving = false; e.targetKey = gk; continue; }
+          if (!follow) e.att = false;
+          else if (followStep(e)) { e.targetKey = gk; continue; }
           if (e.targetKey !== gk && (!follow || npcRetarget >= 0.45)) route(e, goalN);
           if (e.path.length) {
             const [px, py] = e.path[0];

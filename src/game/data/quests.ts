@@ -30,6 +30,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '4일차 이후',
     title: '동기와 자격증 공부',
     giver: 'buddy',
+    together: true,
     desc: '싸지방(사이버지식정보방)에서 동기와 자격증 공부를 하자.',
     steps: [{ spot: 'cyber', text: '동기와 나란히 앉아 자격증 인강을 들었다. (30분)', minutes: 30 }],
     reward: { affinity: { buddy: 8 }, skill: 6, mental: 3 },
@@ -48,6 +49,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '후임 전입 후 (4일차 이후)',
     title: '후임에게 부대 안내',
     giver: 'junior',
+    together: true,
     desc: '전입 온 후임에게 PX와 싸지방 위치를 알려주자.',
     steps: [
       { spot: 'px', text: '후임에게 PX 위치와 운영 시간을 알려줬다.' },
@@ -70,6 +72,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '8일차 이후 (막내 전입 후)',
     title: '막내의 계급장 공부',
     giver: 'junior2',
+    together: true,
     desc: '막내와 함께 생활관 침상에서 계급 체계를 복습하자.',
     steps: [{ spot: 'bed', text: '이병부터 대장까지, 계급장을 하나하나 같이 외웠다. (20분)', minutes: 20 }],
     reward: { affinity: { junior2: 12 }, skill: 2, discipline: 2 },
@@ -106,6 +109,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '2일차 이후 · 저녁 개인정비 시간',
     title: '동기와 빨래 개기',
     giver: 'buddy',
+    together: true,
     desc: '막사 1층 세탁실에서 동기와 함께 빨래를 개자.',
     steps: [{ spot: 'laundry1', text: '세탁기에서 전투복을 꺼내 동기와 나란히 앉아 각 잡아 갰다. 수다도 한가득. (20분)', minutes: 20 }],
     reward: { affinity: { buddy: 8 }, mental: 4 },
@@ -127,6 +131,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '5일차 이후',
     title: '정비실 공구 반납',
     giver: 'senior',
+    together: true,
     desc: '맞선임과 함께 막사 1층 정비실에 빌린 공구를 반납하고 공구 대장 쓰는 법을 배우자.',
     steps: [
       { spot: 'maint', text: '공구함 번호에 맞춰 공구를 반납하고 대장에 기록했다. 선임이 공구 이름을 하나하나 알려 줬다. (15분)', minutes: 15 },
@@ -139,6 +144,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '「후임에게 부대 안내」 완료 · 저녁 개인정비 시간',
     title: '후임과 농구 한 판',
     giver: 'junior',
+    together: true,
     desc: '저녁 개인정비 시간에 연병장 옆 농구장에서 후임과 함께 시합을 뛰자.',
     steps: [
       { spot: 'court', text: '2분대와 3대3 농구 시합! 후임의 패스를 받아 결승골을 넣었다. (30분)', minutes: 30 },
@@ -151,6 +157,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '막내 전입 후',
     title: '이번 달 생일자 확인',
     giver: 'junior2',
+    together: true,
     desc: '막내와 함께 막사 1층 복도 게시판에서 이번 달 생일자를 확인하자.',
     steps: [
       { spot: 'board1', text: '복도 게시판에서 이번 달 생일자 명단을 확인했다. 옆에 붙은 경계작전명령서도 막내에게 설명해 줬다.', minutes: 5 },
@@ -189,6 +196,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '「정수기 점검표 확인」 완료 (분대장 전역 전, 3일차까지)',
     title: '분대장 인수인계 준비',
     giver: 'sgt',
+    together: true,
     desc: '전역을 앞둔 분대장의 인수인계 노트를 함께 정리하자. 행정반 서류와 복도 게시판의 근무 공지를 옮겨 적는다.',
     steps: [
       { spot: 'admin', text: '행정반에서 분대 인원 현황표와 장비 대장 사본을 받아 왔다.', minutes: 10 },
@@ -202,6 +210,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '「선임의 책 반납 부탁」 완료',
     title: '휴가 선물 고르기',
     giver: 'senior',
+    together: true,
     desc: '휴가를 앞둔 맞선임과 함께 PX에서 가족 선물을 고르자. (선임 돈으로 사는 선물이다)',
     steps: [
       { spot: 'px', text: '맞선임과 머리를 맞대고 조카 선물용 과자 세트를 골랐다. (15분)', minutes: 15 },
@@ -214,6 +223,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '「동기와 자격증 공부」 완료',
     title: '자격증 시험 접수',
     giver: 'buddy',
+    together: true,
     desc: '동기와 함께 싸지방에서 자격증 시험을 접수하고, 행정반에 시험 외출 승인 서류를 내자.',
     steps: [
       { spot: 'cyber', text: '싸지방에서 동기와 나란히 자격증 시험을 접수했다. 수험표 출력 완료!', minutes: 15 },
@@ -227,6 +237,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '「자격증 시험 접수」 완료 · 6일차 이후',
     title: '합격 발표',
     giver: 'buddy',
+    together: true,
     desc: '드디어 자격증 합격 발표 날. 싸지방에서 결과를 확인하고 도서관에서 다음 목표를 정하자.',
     steps: [
       { spot: 'cyber', text: '두근두근… 결과 조회! 둘 다 합격이다!! 싸지방이 떠나가라 소리 질렀다.', minutes: 10 },
@@ -240,6 +251,7 @@ export const QUESTS: Record<string, QuestDef> = {
     hint: '「후임과 농구 한 판」 완료',
     title: '후임 멘토링',
     giver: 'junior',
+    together: true,
     desc: '부대에 적응 중인 후임에게 체력검정 종목과 게시판 공지 보는 법을 알려 주자.',
     steps: [
       { spot: 'gym', text: '체단실에서 팔굽혀펴기·윗몸일으키기 자세를 하나하나 봐 줬다. (20분)', minutes: 20 },

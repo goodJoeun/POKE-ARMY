@@ -116,6 +116,8 @@ export interface QuestDef {
   id: string;
   title: string;
   giver: NpcId;
+  /** 의뢰인과 함께 다니는 퀘스트: 진행 중엔 의뢰인이 내 뒤를 따라온다 */
+  together?: boolean;
   desc: string;
   steps: QuestStep[];
   reward: Effects;
