@@ -11,6 +11,7 @@ import { runtime } from '../engine/runtime';
 import { initSprites } from '../engine/sprites';
 import { DayEnd, Ending, Intro, Promotion, Quiz, Title, Transform } from './Scenes';
 import Dream from './Dream';
+import BgmDirector from './BgmDirector';
 import { dreamPending } from '../data/story';
 
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -74,6 +75,7 @@ export default function Game() {
       )}
       {tester && (scene === 'world' || scene === 'minigame') && <div className="tester-badge">🧪 TEST · F9 미션 종료</div>}
       <SettingsMenu />
+      <BgmDirector />
     </div>
   );
 }

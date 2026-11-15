@@ -38,6 +38,23 @@ function ZoomRow() {
   );
 }
 
+/** 음량: 10 단위로 조절, 0이면 끔 */
+function VolumeRow({ k, label, hint }: { k: 'bgmVolume' | 'sfxVolume'; label: string; hint: string }) {
+  const vol = useSettings((s) => s[k]);
+  const set = useSettings((s) => s.set);
+  const step = (d: number) => set(k, Math.max(0, Math.min(100, vol + d)));
+  return (
+    <div className="set-row">
+      <div><b>{label}</b><div className="hud-dim">{hint}</div></div>
+      <div className="seg">
+        <button onClick={() => step(-10)} disabled={vol <= 0}>－</button>
+        <button className="on" onClick={() => set(k, vol > 0 ? 0 : 60)} title="누르면 끄기/켜기">{vol > 0 ? `${vol}%` : '끔'}</button>
+        <button onClick={() => step(10)} disabled={vol >= 100}>＋</button>
+      </div>
+    </div>
+  );
+}
+
 /** 설정 메뉴: 게임 설정 + 저장/새 게임 */
 export default function SettingsMenu() {
   const open = useSettings((s) => s.open);
@@ -97,6 +114,12 @@ export default function SettingsMenu() {
               <div><b>🧪 테스터 모드</b><div className="hud-dim">F9 (또는 ` 키)로 진행 중인 미션을 즉시 종료</div></div>
               <Segmented k="testerMode" options={ON_OFF} />
             </div>
+          </section>
+
+          <section>
+            <h4>소리</h4>
+            <VolumeRow k="bgmVolume" label="🎵 배경음악" hint="장면에 맞춰 자동으로 바뀝니다" />
+            <VolumeRow k="sfxVolume" label="🔔 효과음" hint="단서·별 조각·진급 등의 징글과 버튼 소리" />
           </section>
 
           <section>

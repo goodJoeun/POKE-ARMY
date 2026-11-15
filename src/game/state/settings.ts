@@ -19,6 +19,10 @@ export interface Settings {
   mapZoom: number;
   /** 테스터 모드: F9(또는 `)로 진행 중인 미션을 즉시 종료 */
   testerMode: boolean;
+  /** 배경음악 음량 (0~100, 0 = 끔) */
+  bgmVolume: number;
+  /** 효과음·징글 음량 (0~100, 0 = 끔) */
+  sfxVolume: number;
 }
 
 export const MAP_ZOOM_MIN = 0.6;
@@ -34,6 +38,8 @@ export const DEFAULT_SETTINGS: Settings = {
   showTips: true,
   mapZoom: 1,
   testerMode: false,
+  bgmVolume: 60,
+  sfxVolume: 70,
 };
 
 /** 실제 시간으로 게임 1분이 흐르는 데 걸리는 시간(ms) */
@@ -71,7 +77,7 @@ function persist(s: Settings) {
     const data: Settings = {
       timeSpeed: s.timeSpeed, textSpeed: s.textSpeed, gatherWindow: s.gatherWindow,
       difficulty: s.difficulty, screenShake: s.screenShake, showTips: s.showTips, mapZoom: s.mapZoom,
-      testerMode: s.testerMode,
+      testerMode: s.testerMode, bgmVolume: s.bgmVolume, sfxVolume: s.sfxVolume,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch { /* noop */ }
