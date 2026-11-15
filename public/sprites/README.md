@@ -8,7 +8,7 @@ npm run sprites
 ```
 
 - 출처: [PokeAPI sprites](https://github.com/PokeAPI/sprites) (`scripts/fetch-sprites.mjs`)
-- 받는 것: 포켓몬마다 `front/`(맵 정면 도트) · `back/`(위로 걸을 때 뒷모습) · `art/`(대화 초상화·연출용 공식 일러스트)
+- 받는 것: 포켓몬마다 `icon/`(필드용 2등신 도트 아이콘 — 게임이 이걸로 앞·옆·뒷모습과 걷기 2프레임을 자동 생성) · `front/`·`back/`(초상화·연출용 도트 배틀 스프라이트) · `art/`(공식 일러스트, 현재 미사용)
 - `manifest.json`이 자동 생성되며, 없으면 게임은 캔버스로 그린 근사치 외형으로 동작합니다.
 - 라이선스 계약으로 공식 에셋을 받으면 같은 폴더 구조로 교체하고 `manifest.json`만 맞추면 됩니다.
 
@@ -29,3 +29,15 @@ npm run sprites
 | 해군 NPC | lapras(라프라스), tentacool(왕눈해), magikarp(잉어킹), marill(마릴), horsea(쏘드라), dewgong(쥬레곤), slowbro(야도란), gyarados(갸라도스) |
 | 공군 NPC | swablu(파비코), delibird(딜리버드), zubat(주뱃), taillow(테일로), emolga(에몽가), swellow(스왈로), fearow(깨비드릴조), pidgeot(피죤투) |
 | 경계근무 | rattata(꼬렛), wingull(갈모매), meowth(나옹) — 야생 / ekans(아보), koffing(또가스) — 수상한 접근자 |
+
+## 필드 걷기 스프라이트 (선택)
+
+4방향 × 걷기 4프레임 팔로워 시트(4x4 칸, 행: 앞·왼쪽·오른쪽·뒤)가 있으면 맵 위 캐릭터가 그 그림으로 걷습니다.
+게임에 나오는 포켓몬의 영문 대문자 이름(예: `CHARMANDER.png`)과 같은 파일만 복사합니다.
+
+```bash
+npm run followers -- "<...\Graphics\Characters\Followers 폴더 경로>"
+```
+
+- `public/sprites/follower/`로 복사되고 `manifest.json`에 `follower` 항목이 추가됩니다 (저장소에는 올리지 않음).
+- 시트가 없는 포켓몬은 `icon/`으로 자동 생성한 걷기 그림을 씁니다.

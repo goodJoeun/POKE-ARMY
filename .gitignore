@@ -8,4 +8,7 @@ next-env.d.ts
 public/sprites/front/
 public/sprites/back/
 public/sprites/art/
+public/sprites/icon/
+public/sprites/follower/
 public/sprites/manifest.json
+public/sprites/ar/

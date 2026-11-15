@@ -1,5 +1,8 @@
 import type { MonsterLook } from '../types';
-import { getSilhouette, getSprite } from './sprites';
+import { getDot, getSilhouette, getSprite, getSpriteAnim, getWalkSprite, hasFollower } from './sprites';
+
+/** 어나더 레드 정면/뒷모습 애니메이션 재생 속도 (초당 프레임) */
+const ANIM_FPS = 14;
 
 export type Dir = 'down' | 'up' | 'left' | 'right';
 export type CapType = 'army' | 'navy' | 'air' | 'officer-army' | 'officer-navy' | 'officer-air' | null;
@@ -13,7 +16,7 @@ export interface DrawOpts {
   shadow?: boolean;
   /** 실루엣 색 (지정 시 이미지를 단색으로) */
   silhouette?: string;
-  /** 공식 일러스트 강제 사용 여부 (기본: 크기 70px 이상이면 일러스트) */
+  /** 공식 일러스트 사용 여부 (기본: 사용 안 함 — 도트로 그린다) */
   art?: boolean;
 }
 
@@ -43,25 +46,41 @@ export function drawMonster(g: CanvasRenderingContext2D, look: MonsterLook, cx: 
   const s = size;
   const bob = o.walking ? Math.abs(Math.sin(t * 12)) * s * 0.05 : Math.sin(t * 2.5) * s * 0.015;
 
-  // 등록된 포켓몬 이미지가 있으면 이미지로 그린다
-  // 큰 화면(초상화 등)은 공식 일러스트, 맵에서는 도트 스프라이트(위로 걸을 땐 뒷모습)
-  const useArt = o.art ?? s >= 70;
-  const kind = useArt ? 'art' : dir === 'up' ? 'back' : 'front';
-  const src = getSprite(look.sprite, kind);
+  // 등록된 포켓몬 이미지가 있으면 도트로 그린다
+  // - 필드(작은 크기): 2등신 도트 아이콘 (없으면 배틀 스프라이트를 줄인 도트)
+  // - 큰 화면(초상화 등): 도트 배틀 스프라이트를 또렷하게 확대
+  // - 공식 일러스트는 o.art 로 명시할 때만
+  const kind = o.art ? 'art' : dir === 'up' ? 'back' : 'front';
+  const field = !o.art && s < 70;
+  // 필드: 2등신 아이콘으로 만든 방향별 걷기 스프라이트 (서기 / 왼발 / 서기 / 오른발)
+  const walkStep = o.walking ? [1, 0, 2, 0][Math.floor(t * 8) % 4] : 0;
+  const walk = field ? getWalkSprite(look.sprite, dir, walkStep) : null;
+  const src = walk ?? (field ? getDot(look.sprite, kind) : getSprite(look.sprite, kind));
   if (src) {
-    const img = o.silhouette ? getSilhouette(look.sprite!, kind, src, o.silhouette) : src;
+    const img = o.silhouette ? getSilhouette(look.sprite!, walk ? `walk-${dir}-${walkStep}` : kind, src, o.silhouette) : src;
     if (o.shadow !== false) ellipse(g, cx, baseY - s * 0.02, s * 0.3, s * 0.06, 'rgba(0,0,0,0.22)');
     // 높이 기준으로 맞추되 너무 넓은 포켓몬(갸라도스 등)은 폭을 제한
-    const hMul = kind === 'art' ? 1.0 : 1.25; // 도트 스프라이트는 맵 타일 대비 조금 크게
-    const scale = Math.min((s * hMul) / img.height, (s * 1.5) / img.width);
+    const hMul = kind === 'art' ? 1.0 : walk ? 1.35 : 1.25;
+    // 팔로워 시트는 포켓몬끼리 크기 비율이 맞춰져 있으므로 같은 배율로 그린다 (큰 포켓몬은 크게)
+    const scale = walk && hasFollower(look.sprite)
+      ? (s * 1.35) / 40
+      : Math.min((s * hMul) / img.height, (s * 1.5) / img.width);
     const w = img.width * scale, h = img.height * scale;
-    const hop = o.walking ? bob * 1.5 : bob;
+    // 도트는 통통 튀는 걸음 (부드러운 흔들림 대신 2단계)
+    const hop = o.walking ? (Math.sin(t * 12) > 0 ? s * 0.06 : 0) : 0;
     g.save();
-    g.translate(cx, baseY - hop);
+    g.translate(Math.round(cx), Math.round(baseY - hop));
     // 도트 스프라이트는 왼쪽을 바라보므로 오른쪽으로 걸을 때 뒤집는다
-    if (dir === 'right' && kind !== 'art') g.scale(-1, 1);
-    g.imageSmoothingEnabled = w < img.width; // 축소는 부드럽게, 확대는 도트 그대로
-    g.drawImage(img, -w / 2, -h, w, h);
+    if (dir === 'right' && kind !== 'art' && !walk) g.scale(-1, 1);
+    g.imageSmoothingEnabled = kind === 'art'; // 도트는 확대해도 또렷하게
+    // 큰 화면(초상화·미니게임): 어나더 레드 애니메이션 띠가 있으면 프레임을 넘기며 움직이게
+    const anim = !walk && !field && !o.silhouette && kind !== 'art' ? getSpriteAnim(look.sprite, kind) : null;
+    if (anim && anim.n > 1) {
+      const f = Math.floor(Math.max(0, t) * ANIM_FPS) % anim.n;
+      g.drawImage(anim.img, f * anim.fh + anim.x0, anim.y0, anim.bw, anim.bh, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+    } else {
+      g.drawImage(img, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+    }
     g.restore();
     if (o.sleeping) {
       g.fillStyle = '#4a5a8a';

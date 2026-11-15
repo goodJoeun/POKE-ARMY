@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "sprites": "node scripts/fetch-sprites.mjs"
+    "sprites": "node scripts/fetch-sprites.mjs",
+    "followers": "node scripts/import-followers.mjs",
+    "anotherred": "node scripts/import-another-red.mjs"
   },
   "dependencies": {
     "galmuri": "^2.40.3",
