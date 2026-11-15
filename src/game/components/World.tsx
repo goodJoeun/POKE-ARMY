@@ -1115,9 +1115,17 @@ export default function World() {
     }
     let best: Interactable | null = null;
     let bd = 1.5;
+    // 동행 중인 사람은 내가 그쪽을 바라볼 때만 말을 건다 (뒤에 붙어 있어도 다른 사람·장소와 상호작용할 수 있게)
+    const [fx, fy] = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[p.dir];
+    const behindMe = (n: NpcRt) => {
+      if (!n.att) return false;
+      const dx = n.x - p.x, dy = n.y - p.y;
+      const d = Math.hypot(dx, dy);
+      return d > 0.05 && (dx * fx + dy * fy) / d < 0.5;
+    };
     for (const id of visibleNpcs(st.day, st.minute)) {
       const n = npcs.current[id];
-      if (!n || n.map !== p.map) continue;
+      if (!n || n.map !== p.map || behindMe(n)) continue;
       const d = dist(n.x, n.y);
       if (d < bd) {
         bd = d;
@@ -1127,7 +1135,7 @@ export default function World() {
     if (best) return best;
     for (const def of extraDefs) {
       const e = extras.current[def.id];
-      if (!e || e.map !== p.map || extraHiddenAtNight(def.id, st.minute)) continue;
+      if (!e || e.map !== p.map || extraHiddenAtNight(def.id, st.minute) || behindMe(e)) continue;
       const d = dist(e.x, e.y);
       if (d < bd) { bd = d; best = { key: `extra_${def.id}`, kind: 'extra', extra: def.id, label: `대화: ${def.name} ${def.title}` }; }
     }
@@ -1969,7 +1977,11 @@ export default function World() {
       const followStep = (n: NpcRt): boolean => {
         if (n.map !== p.map) {
           if (!n.att) return false;
-          n.map = p.map; n.x = p.x; n.y = p.y; n.dir = p.dir; // 뒤따라 문을 지나온다
+          // 뒤따라 문을 지나온다: 내 뒤에 설 자리가 생기면(내가 한 칸 걸어 나오면) 그 자리로 들어선다. 그 전엔 아직 문 밖
+          const [bx, by] = trailBack(FOLLOW_GAP);
+          n.path = []; n.viaDoor = null; n.moving = false;
+          if (Math.hypot(bx - p.x, by - p.y) < FOLLOW_GAP * 0.7) return true;
+          n.map = p.map; n.x = bx; n.y = by; n.dir = p.dir;
         } else if (!n.att) {
           if (Math.hypot(p.x - n.x, p.y - n.y) > 3) return false;
           n.att = true;
