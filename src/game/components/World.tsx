@@ -43,6 +43,8 @@ interface NpcRt {
   viaDoor: Door | null;
   /** 나와 동행 중: 내 발자취를 따라 바로 뒤에 붙었다 */
   att?: boolean;
+  /** 식사 행군 대열에 들어섰다 (선두가 걸어간 길을 그대로 따라간다) */
+  rail?: boolean;
 }
 
 /** 맵 + 타일 좌표 */
@@ -100,15 +102,23 @@ const EXTRA_MEAL_SEAT: Record<string, [number, number]> = {
 const MY_MEAL_SEAT: [number, number] = [4, 3];
 /** 1분대(1생활관) 식사 행군 순서 = 계급순. 맨 앞(있는 사람 중)이 식사를 이끈다 */
 const SQUAD_KEYS = ['sgt', 'x:sq1', 'senior', 'buddy', 'junior', 'junior2'];
-/** 막사 현관 앞 식사 집합 자리 */
+/**
+ * 막사 현관 앞 식사 집합 자리: 식당 쪽(오른쪽)을 보고 계급순 한 줄. 맨 앞이 분대장, 나는 맞선임 바로 뒤
+ * (출발하면 이 줄 그대로 선두를 따라 식당까지 같이 걸어간다)
+ */
+const GATHER_Y = 14;
+const GATHER_TAIL_X = 9;
 const MEAL_GATHER: Record<string, Pos> = {
-  sgt: ['outdoor', 10, 14], 'x:sq1': ['outdoor', 11, 14], senior: ['outdoor', 12, 14],
-  buddy: ['outdoor', 13, 14], junior: ['outdoor', 14, 14], junior2: ['outdoor', 15, 14],
+  sgt: ['outdoor', 15, GATHER_Y], 'x:sq1': ['outdoor', 14, GATHER_Y], senior: ['outdoor', 13, GATHER_Y],
+  buddy: ['outdoor', 11, GATHER_Y], junior: ['outdoor', 10, GATHER_Y], junior2: ['outdoor', GATHER_TAIL_X, GATHER_Y],
 };
+const MY_GATHER: Pos = ['outdoor', 12, GATHER_Y];
 const GATHER_KEYS = new Set(Object.values(MEAL_GATHER).map((g) => `${g[0]}:${g[1]},${g[2]}`));
 /** 분대 선두(분대장)가 앉아서 다 먹기까지(분) — 선임은 빨리 먹는다 / 내가 그냥 먹으면 걸리는 시간 */
 const SQUAD_EAT_MIN = 9;
-const MY_EAT_MIN = 13;
+/** 내 식사 속도 (선택지): 걸리는 시간(분). 'match'는 분대 선두가 다 먹는 시각에 맞춘다 */
+type EatMode = 'fast' | 'match' | 'slow';
+const EAT_MIN: Record<EatMode, number> = { fast: 5, match: SQUAD_EAT_MIN, slow: 14 };
 const mealOf = (m: number): 'lunch' | 'dinner' => (m < 15 * 60 ? 'lunch' : 'dinner');
 const mealStartOf = (m: number) => (m < 15 * 60 ? 12 * 60 : 17 * 60 + 30);
 const hashStr = (str: string) => { let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return h >>> 0; };
@@ -128,7 +138,7 @@ function squadKeys(branch: Parameters<typeof extrasForDay>[0], day: number): str
 /** 내 식사 상태 (식판 들고 있음 / 앉아서 먹는 중) */
 const myMeal: {
   tray: '' | 'lunch' | 'dinner';
-  eating: null | { meal: 'lunch' | 'dinner'; prog: number; last: number; start: number; pace: null | { finish: number; lead: string }; bite: number };
+  eating: null | { meal: 'lunch' | 'dinner'; prog: number; last: number; dur: number; mode: EatMode; lead: string | null; bonus: boolean };
 } = { tray: '', eating: null };
 /** 식판 (left: 남은 양 0~1) */
 function drawTray(g: CanvasRenderingContext2D, tx: number, ty: number, left: number) {
@@ -142,8 +152,43 @@ function drawTray(g: CanvasRenderingContext2D, tx: number, ty: number, left: num
   g.fillStyle = '#e8b048'; g.fillRect(tx + 11, ty + 7, Math.ceil(6 * k), 4);  // 국
 }
 /**
+ * 🚶 식사 행군: 출발 시각이 되면 선두(분대장)가 식당으로 걷고, 나머지는 선두가 지나간 길을 그대로 한 칸 간격으로 따라간다.
+ * pts = 선두가 지나온 길(누적 거리 d), D = 선두가 걸어온 총 거리. 집합 자리 x 차이만큼 뒤에 선다.
+ */
+interface RailPt { map: MapId; x: number; y: number; d: number }
+const march: { key: string; lead: string; leadX: number; pts: RailPt[]; D: number; me: boolean; done: boolean; moving: boolean } =
+  { key: '', lead: '', leadX: 0, pts: [], D: 0, me: false, done: true, moving: false };
+/** 대열에서 key('me' 포함)가 지금 있어야 할 곳 (대열에 자리가 없으면 null) */
+function railSlot(key: string): (RailPt & { dir: Dir }) | null {
+  const g = key === 'me' ? MY_GATHER : MEAL_GATHER[key];
+  if (march.done || !g || key === march.lead) return null;
+  const dist = Math.max(0, march.D - (march.leadX - g[1]));
+  const pts = march.pts;
+  let i = pts.length - 1;
+  while (i > 0 && pts[i].d > dist) i--;
+  const a = pts[i], b = pts[i + 1];
+  if (!b || b.map !== a.map || b.d - a.d < 1e-6) {
+    const prev = pts[i - 1];
+    const dx = prev && prev.map === a.map ? a.x - prev.x : 1, dy = prev && prev.map === a.map ? a.y - prev.y : 0;
+    return { ...a, dir: Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up' };
+  }
+  const k = (dist - a.d) / (b.d - a.d);
+  const dx = b.x - a.x, dy = b.y - a.y;
+  return { map: a.map, x: a.x + dx * k, y: a.y + dy * k, d: dist, dir: Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up' };
+}
+/** 대열 자리로: 떨어져 있으면 빠른 걸음으로 붙고, 붙으면 선두와 같은 속도로 걷는다 */
+function railChase(a: { x: number; y: number; dir: Dir; moving: boolean }, rp: { x: number; y: number; dir: Dir }, dt: number) {
+  const dx = rp.x - a.x, dy = rp.y - a.y;
+  const d = Math.hypot(dx, dy);
+  const step = 9 * dt;
+  if (d <= step) { a.x = rp.x; a.y = rp.y; a.dir = rp.dir; a.moving = march.moving; return; }
+  a.x += (dx / d) * step; a.y += (dy / d) * step;
+  a.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+  a.moving = true;
+}
+/**
  * 식사 시간에 이 사람이 있어야 할 곳 ('free' = 평소 자리).
- * - 1분대: (여쭤보는 중이면) 여쭌 사람은 막사 앞 대기 → 출발 시각에 계급순으로 줄지어 식당 → 분대장이 다 먹으면 차례로 일어남
+ * - 1분대: (여쭤보는 중이면) 여쭌 사람은 막사 앞 대기 → 출발 시각에 계급순 한 줄로 다 같이 식당 → 분대장이 다 먹으면 차례로 일어남
  * - 다른 사람(간부·다른 부대): 저마다 다른 시각에 와서, 저마다 다른 시간 동안 먹고 간다
  */
 function mealGoal(key: string, seat: Pos, st: ReturnType<typeof useGame.getState>): Pos | 'free' {
@@ -157,7 +202,9 @@ function mealGoal(key: string, seat: Pos, st: ReturnType<typeof useGame.getState
     const mc = st.mealCheck;
     if (!mc || mc.meal !== mealOf(m)) return lead !== undefined || m > mealStartOf(m) + 30 ? seat : 'free';
     if (mc.status === 'asking') return mc.targets.includes(key) && !mc.asked.includes(key) ? 'free' : MEAL_GATHER[key] ?? seat;
-    if (mc.marchAt === null || (mc.marchAt !== undefined && m < mc.marchAt + si * 0.35)) return MEAL_GATHER[key] ?? seat;
+    // 출발 시각 전, 그리고 선두가 집합 자리에 와서 대열이 출발하기 전까지는 막사 앞에서 기다린다
+    const marched = march.key === `${st.day}-${mealOf(m)}`;
+    if (mc.marchAt === null || (mc.marchAt !== undefined && (m < mc.marchAt || (!marched && m < mc.marchAt + 8)))) return MEAL_GATHER[key] ?? seat;
     return seat;
   }
   const h = hashStr(`${key}-${st.day}-${mealOf(m)}`);
@@ -334,7 +381,7 @@ export default function World() {
   if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
     (window as unknown as Record<string, unknown>).__npcs = npcs; // 개발용 디버그 핸들
     (window as unknown as Record<string, unknown>).__extras = extras;
-    (window as unknown as Record<string, unknown>).__meal = { myMeal, mealRt };
+    (window as unknown as Record<string, unknown>).__meal = { myMeal, mealRt, march };
   }
   const [overlay, setOverlayState] = useState<Overlay>(null);
   const overlayRef = useRef<Overlay>(null);
@@ -838,7 +885,7 @@ export default function World() {
     }
   };
 
-  /** 🍚 먹는 중 매 프레임: 진행, (처음 한 번) 선임 속도 맞추기, 다 먹으면 일어나기 */
+  /** 🍚 먹는 중 매 프레임: 고른 속도대로 먹고, 다 먹으면 일어난다 */
   const mealTickRef = useRef<() => void>(() => {});
   mealTickRef.current = () => {
     const st = useGame.getState();
@@ -853,46 +900,23 @@ export default function World() {
     if (!isMealTime(st.minute)) { finish('🍚 배식 시간이 끝나 남은 밥을 급히 비웠다.', { hp: 12, mental: 1 }); return; }
     const dm = Math.max(0, st.minute - e.last);
     e.last = st.minute;
-    e.prog = Math.min(1, e.prog + dm / MY_EAT_MIN);
-    const squad = squadKeys(st.branch, st.day);
-    const lead = squad[0];
-    const leadAt = lead ? mealSeated(st.day, st.minute)[lead] : undefined;
-    // 🥄 처음 한 번: 선임 먹는 속도에 맞추는 군대 개념
-    if (!st.flags.mealPace && !e.pace && lead && leadAt !== undefined && st.minute >= e.start + 1 && st.minute < leadAt + SQUAD_EAT_MIN - 3) {
-      const teacher: NpcId | null = presentNpcs(st.day).includes('senior') ? 'senior' : lead.startsWith('x:') ? null : (lead as NpcId);
-      e.pace = { finish: leadAt + SQUAD_EAT_MIN, lead };
-      const leadName = memberName(st.branch, lead);
-      setOverlay({
-        type: 'dialogue',
-        script: {
-          npc: teacher ?? undefined,
-          lines: [
-            { who: 'narr', text: `같은 줄 끝의 ${leadName}. 숟가락이 무서운 속도로 움직인다. 식판이 벌써 반쯤 비었다…` },
-            teacher
-              ? { who: teacher, text: '(작게) 야, {me}. 천천히 먹는 건 좋은데… 군대에선 선임 먹는 속도에 맞추는 거다. 선임이 숟가락 내려놓으면 같이 일어나야 돼.' }
-              : { who: 'narr', text: '선임이 숟가락을 내려놓으면 같이 일어나야 한다. 서두르자!' },
-            { who: 'narr', text: '[Space를 연타해서 선임과 같이 다 먹자!]' },
-          ],
-        },
-        onDone: () => useGame.getState().addTip('식사 예절: 선임과 같이 밥을 먹을 땐 속도를 맞춘다. 선임이 다 먹었는데 혼자 천천히 먹고 있으면 눈치가 보인다… (요즘은 많이 사라진 문화지만, 아직 남아 있는 곳도 있다)'),
-      });
-      return;
-    }
-    if (e.pace && st.minute >= e.pace.finish) {
-      const ok = e.prog >= 0.85;
-      useGame.setState({ flags: { ...useGame.getState().flags, mealPace: true } });
-      const leadName = memberName(st.branch, e.pace.lead);
-      if (ok) finish(`🥄 ${leadName}이(가) 숟가락을 내려놓는 순간, 나도 식판을 비웠다. 완벽한 타이밍!`, { hp: 15, mental: 2, discipline: 2, affinity: e.pace.lead.startsWith('x:') ? {} : { [e.pace.lead]: 2 } }, 'good');
-      else finish(`🥄 ${leadName}이(가) 숟가락을 내려놓았다… 남은 밥을 허겁지겁 밀어 넣고 따라 일어났다.`, { hp: 10, mental: -2, discipline: -1 }, 'bad');
-      return;
-    }
-    if (e.prog >= 1 && e.pace) {
-      useGame.setState({ flags: { ...useGame.getState().flags, mealPace: true } });
-      finish(`🥄 ${memberName(st.branch, e.pace.lead)}보다 한발 먼저 식판을 비우고, 숟가락 놓기를 기다렸다. 눈치 백 점!`, { hp: 15, mental: 2, discipline: 2, affinity: e.pace.lead.startsWith('x:') ? {} : { [e.pace.lead]: 2 } }, 'good');
-      return;
-    }
-    if (e.prog >= 1) {
-      finish(e.meal === 'lunch' ? '🍚 점심 잘 먹었습니다! 제육볶음은 진리다.' : '🍚 저녁 잘 먹었습니다! 군대 카레는 왜 이렇게 맛있지?', e.pace ? { hp: 15, mental: 2, discipline: 2 } : { hp: 15, mental: 2 }, 'good');
+    e.prog = Math.min(1, e.prog + dm / e.dur);
+    if (e.prog < 1) return;
+    const leadName = e.lead ? memberName(st.branch, e.lead) : '';
+    const leadAff = e.lead && e.bonus && !e.lead.startsWith('x:') ? { [e.lead]: 2 } : {};
+    if (e.mode === 'fast') {
+      finish(e.lead
+        ? `🥄 ${leadName}보다 한발 먼저 식판을 비우고, 숟가락 놓기를 기다렸다. …급하게 먹었더니 속이 좀 더부룩하다.`
+        : '🍚 5분 컷! 식판을 순식간에 비웠다. …급하게 먹었더니 속이 좀 더부룩하다.', e.lead ? { hp: 11, discipline: 1 } : { hp: 11 });
+    } else if (e.mode === 'match' && e.lead) {
+      finish(`🥄 ${leadName}이(가) 숟가락을 내려놓는 순간, 나도 식판을 비웠다. 완벽한 타이밍!`, { hp: 15, mental: 2, discipline: e.bonus ? 2 : 1, affinity: leadAff }, 'good');
+    } else if (e.mode === 'slow') {
+      const leadAt = e.lead ? mealSeated(st.day, st.minute)[e.lead] : undefined;
+      if (e.lead && leadAt !== undefined && st.minute > leadAt + SQUAD_EAT_MIN + 1)
+        finish('🍚 꼭꼭 씹어 든든하게 먹었다. …고개를 들어 보니 분대원들은 벌써 다 먹고 일어났다. 눈치가 좀 보인다.', { hp: 18, mental: 3, discipline: -1 });
+      else finish('🍚 천천히 꼭꼭 씹어 든든하게 먹었다. 속이 편안하다.', { hp: 18, mental: 4 }, 'good');
+    } else {
+      finish(e.meal === 'lunch' ? '🍚 점심 잘 먹었습니다! 제육볶음은 진리다.' : '🍚 저녁 잘 먹었습니다! 군대 카레는 왜 이렇게 맛있지?', { hp: 15, mental: 2 }, 'good');
     }
   };
 
@@ -1629,17 +1653,54 @@ export default function World() {
     });
   }, [extraDefs, setOverlay]);
 
-  /** 내 자리에 앉아서 먹기 시작 (실시간으로 먹는다 · Space로 빨리) */
+  /** 내 자리에 앉아서 먹기 시작: 식사 속도를 선택지로 고른다 */
   const sitToEat = useCallback(() => {
     const st = useGame.getState();
     if (!myMeal.tray || myMeal.eating) return;
+    const meal = myMeal.tray;
     const p = runtime.player;
     p.x = MY_MEAL_SEAT[0] + 0.5; p.y = MY_MEAL_SEAT[1] + 0.5; p.dir = 'down'; p.moving = false;
     keys.current = {};
-    myMeal.eating = { meal: myMeal.tray, prog: 0, last: st.minute, start: st.minute, pace: null, bite: 0 };
-    st.markDaily(`meal_${myMeal.tray}`);
-    st.toast('🍚 자리에 앉았다. 잘 먹겠습니다! (Space: 빨리 먹기)', 'info');
-  }, []);
+    // 분대 선두(분대장)가 같은 줄에서 아직 먹는 중이면 "선임 속도에 맞추기"를 고를 수 있다
+    const squad = squadKeys(st.branch, st.day);
+    const leadKey = squad[0];
+    const leadAt = leadKey ? mealSeated(st.day, st.minute)[leadKey] : undefined;
+    const leadLeft = leadAt !== undefined ? Math.round(leadAt + SQUAD_EAT_MIN - st.minute) : 0;
+    const lead = leadKey && leadLeft >= 3 ? leadKey : null;
+    const first = !st.flags.mealPace;
+    const leadName = lead ? memberName(st.branch, lead) : '';
+    const teacher: NpcId | null = !lead ? null : presentNpcs(st.day).includes('senior') ? 'senior' : lead.startsWith('x:') ? null : (lead as NpcId);
+    const lines: DialogueScript['lines'] = [{ who: 'narr', text: '식판을 내려놓고 자리에 앉았다. 잘 먹겠습니다!' }];
+    if (lead) lines.push({ who: 'narr', text: `같은 줄 끝의 ${leadName}. 숟가락이 무서운 속도로 움직인다. 식판이 벌써 비어 간다…` });
+    if (lead && first) {
+      lines.push(teacher
+        ? { who: teacher, text: '(작게) 야, {me}. 천천히 먹는 건 좋은데… 군대에선 선임 먹는 속도에 맞추는 거다. 선임이 숟가락 내려놓으면 같이 일어나야 돼.' }
+        : { who: 'narr', text: '선임이 숟가락을 내려놓으면 같이 일어나는 게 이곳의 눈치다.' });
+    }
+    lines.push({ who: 'narr', text: '어떤 속도로 먹을까?' });
+    const modes: EatMode[] = ['fast', 'match', 'slow'];
+    const choices: Choice[] = [
+      { text: `허겁지겁 빨리 먹는다 (약 ${EAT_MIN.fast}분)`, grade: 'ok', reply: [{ who: 'narr', text: '숟가락을 삽처럼 쥐었다. 씹는 건 사치다!' }] },
+      lead
+        ? { text: `${leadName}의 속도에 맞춰 먹는다 (약 ${leadLeft}분)`, grade: 'good', reply: [{ who: 'narr', text: `곁눈질로 ${leadName}의 식판을 살피며 숟가락 속도를 맞춘다.` }] }
+        : { text: `적당한 속도로 먹는다 (약 ${EAT_MIN.match}분)`, grade: 'good', reply: [{ who: 'narr', text: '밥 한 숟갈, 반찬 한 젓가락. 평소대로 먹는다.' }] },
+      { text: `천천히 꼭꼭 씹어 먹는다 (약 ${EAT_MIN.slow}분)`, grade: 'ok', reply: [{ who: 'narr', text: '서른 번씩 꼭꼭 씹는다. 밥은 천천히 먹어야 제맛이다.' }] },
+    ];
+    setOverlay({
+      type: 'dialogue',
+      script: { npc: lead && first && teacher ? teacher : undefined, lines, choices },
+      onChoice: (c) => {
+        const s2 = useGame.getState();
+        const mode = modes[Math.max(0, choices.indexOf(c))];
+        myMeal.eating = { meal, prog: 0, last: s2.minute, dur: mode === 'match' && lead ? Math.max(3, leadLeft) : EAT_MIN[mode], mode, lead, bonus: first && mode === 'match' };
+        s2.markDaily(`meal_${meal}`);
+        if (lead && first) {
+          useGame.setState({ flags: { ...useGame.getState().flags, mealPace: true } });
+          s2.addTip('식사 예절: 선임과 같이 밥을 먹을 땐 속도를 맞춘다. 선임이 다 먹었는데 혼자 천천히 먹고 있으면 눈치가 보인다… (요즘은 많이 사라진 문화지만, 아직 남아 있는 곳도 있다)');
+        }
+      },
+    });
+  }, [setOverlay]);
 
   const interact = useCallback(() => {
     const it = promptRef.current ?? findInteractable();
@@ -1663,11 +1724,8 @@ export default function World() {
       if (e.key === 'Escape') { e.preventDefault(); keys.current = {}; useSettings.getState().openMenu(); return; }
       keys.current[e.key.toLowerCase()] = true;
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'tab'].includes(e.key.toLowerCase())) e.preventDefault();
-      // 🍚 먹는 중: Space/E 연타로 빨리 먹기 (선임 속도 맞추기)
-      if (myMeal.eating && (e.key === ' ' || e.key === 'e' || e.key === 'E' || e.key === 'Enter')) {
-        if (!e.repeat) { myMeal.eating.prog = Math.min(1, myMeal.eating.prog + 0.03); myMeal.eating.bite = performance.now(); }
-        return;
-      }
+      // 🍚 먹는 중엔 다 먹을 때까지 앉아 있는다
+      if (myMeal.eating) return;
       if (e.key === 'e' || e.key === 'E' || e.key === ' ' || e.key === 'Enter') interact();
       if (e.key === 'Tab') setOverlay({ type: 'notebook' });
       if (e.key === 'q' || e.key === 'Q') setOverlay({ type: 'quests' });
@@ -1763,6 +1821,35 @@ export default function World() {
       const st = useGame.getState();
       const p = runtime.player;
       const blocked = !!overlayRef.current || !!st.rollcall || useSettings.getState().open || st.nightDuty?.phase === 'sleep';
+      // 🚶 식사 행군: 대열에 들어서면 분대와 같이 식당까지 걸어간다 (조작 없이 자동)
+      let railed = false;
+      const myAte = st.daily.includes(`meal_${mealOf(st.minute)}`) || !!myMeal.tray;
+      if (!march.me && !march.done && !blocked && !fading && !myAte) {
+        const rp = railSlot('me');
+        if (rp && rp.map !== 'mess' && rp.map === p.map && Math.hypot(rp.x - p.x, rp.y - p.y) < 1.3) {
+          march.me = true;
+          st.toast('🚶 1생활관 대열에 합류했다. 다 같이 식당으로!', 'info');
+        }
+      }
+      if (march.me) {
+        const rp = railSlot('me');
+        if (!rp || rp.map === 'mess') {
+          march.me = false;
+          if (rp) {
+            if (p.map !== 'mess') { fade = 1; fading = { door: world.maps[p.map].doors[0], phase: 'in' }; }
+            p.map = 'mess'; p.x = rp.x; p.y = rp.y; p.dir = 'up';
+            doorCooldown = 0.4; doorArmed = false; arrivedAt = { x: p.x, y: p.y };
+            st.toast('🍚 분대와 함께 식당에 도착했다. 배식대에서 식판을 받고 내 자리에 앉자.', 'info');
+          }
+          p.moving = false;
+        } else {
+          railed = true;
+          if (!blocked) {
+            if (p.map !== rp.map) { p.map = rp.map; p.x = rp.x; p.y = rp.y; fade = 1; fading = { door: world.maps[rp.map].doors[0], phase: 'in' }; }
+            railChase(p, rp, dt);
+          } else p.moving = false;
+        }
+      }
       const map = world.maps[p.map];
 
       // 📖 안개 정문: 정문 밖(맨 아래 줄)으로 나가려 하면
@@ -1794,7 +1881,7 @@ export default function World() {
 
       // 플레이어 이동
       let vx = 0, vy = 0;
-      if (!blocked && !fading && !myMeal.eating) {
+      if (!blocked && !fading && !myMeal.eating && !railed) {
         const k = keys.current;
         if (k['arrowleft'] || k['a']) vx -= 1;
         if (k['arrowright'] || k['d']) vx += 1;
@@ -1823,11 +1910,11 @@ export default function World() {
         if (!collides(map, p.x, ny)) p.y = ny;
         p.dir = Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? 'right' : 'left') : vy > 0 ? 'down' : 'up';
         p.moving = true;
-      } else p.moving = false;
+      } else if (!railed) p.moving = false;
 
       // 문으로 걸어 들어가면 다른 맵으로
       if (!doorArmed && (!p.moving || Math.hypot(p.x - arrivedAt.x, p.y - arrivedAt.y) > 1.2)) doorArmed = true;
-      if (!fading && !blocked && doorArmed && doorCooldown <= 0 && p.moving) {
+      if (!fading && !blocked && !railed && doorArmed && doorCooldown <= 0 && p.moving) {
         for (const d of map.doors) {
           if (p.dir !== d.enterDir) continue;
           const hit = d.tiles.some(([tx, ty]) => Math.abs(p.x - (tx + 0.5)) < 0.9 && Math.abs(p.y - (ty + 0.5)) < 1.0);
@@ -1866,6 +1953,27 @@ export default function World() {
         n.x += (dx / d) * sp; n.y += (dy / d) * sp;
         n.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
         n.moving = true;
+        return true;
+      };
+
+      /** 식사 행군 대열: 자리에 붙어 선두가 걸어간 길을 따라간다. 식당에 들어서면 대열에서 나와 자기 자리로 */
+      const railStep = (n: NpcRt, key: string): boolean => {
+        const rp = railSlot(key);
+        if (!rp || rp.map === 'mess') {
+          if (n.rail) {
+            n.rail = false; n.path = []; n.viaDoor = null; n.targetKey = ''; n.moving = false;
+            if (rp) { n.map = rp.map; n.x = rp.x; n.y = rp.y; n.dir = 'up'; }
+          }
+          return false;
+        }
+        if (!n.rail) {
+          if (n.map !== rp.map || Math.hypot(rp.x - n.x, rp.y - n.y) > 6) return false;
+          n.rail = true;
+        }
+        if (blocked) { n.moving = false; return true; }
+        n.path = []; n.viaDoor = null;
+        if (n.map !== rp.map) { n.map = rp.map; n.x = rp.x; n.y = rp.y; }
+        railChase(n, rp, dt);
         return true;
       };
 
@@ -1912,6 +2020,7 @@ export default function World() {
         const follow = followsMe(id, st);
         if (!follow) n.att = false;
         else if (followStep(n)) continue;
+        if (railStep(n, id)) continue;
         if (n.path.length && !blocked) {
           const [px, py] = n.path[0];
           const gx = px + 0.5, gy = py + 0.5;
@@ -1993,6 +2102,7 @@ export default function World() {
         // 식사 시간엔 식당 자리로, 끝나면 자기 자리로 (다른 맵이면 문을 거쳐서)
         const seat = EXTRA_MEAL_SEAT[def.id];
         const xkey = `x:${def.id}`;
+        if (railStep(e, xkey)) continue;
         const mg = isMealTime(st.minute) && seat ? mealGoal(xkey, ['mess', seat[0], seat[1]], st) : 'free';
         const home: Pos | null = e.map !== def.map || e.targetKey.startsWith('mess:') || GATHER_KEYS.has(e.targetKey) ? [def.map, def.x, def.y] : null;
         const goal: Pos | null = mg !== 'free' ? mg : home;
@@ -2063,6 +2173,41 @@ export default function World() {
       // 🍚 식사: 자리에 앉은 시각 기록 → 각자 다 먹으면 일어난다
       if (isMealTime(st.minute)) {
         const seated = mealSeated(st.day, st.minute);
+        // 🚶 행군: 출발 시각에 선두가 집합 자리에 서 있으면 대열 출발 → 선두가 걷는 길을 기록
+        const mcM = st.mealCheck;
+        const mkey = `${st.day}-${mealOf(st.minute)}`;
+        const entOf = (k: string) => (k.startsWith('x:') ? extras.current[k.slice(2)] : npcs.current[k as NpcId]);
+        if (march.key !== mkey && !cer.current && mcM && mcM.meal === mealOf(st.minute) && mcM.status !== 'asking' && mcM.marchAt != null && st.minute >= mcM.marchAt) {
+          const lead = squadKeys(st.branch, st.day)[0];
+          const lg = lead ? MEAL_GATHER[lead] : undefined;
+          const le = lead ? entOf(lead) : undefined;
+          const atGather = (k: string) => {
+            const gk = MEAL_GATHER[k], ek = entOf(k);
+            return !gk || !ek || (ek.map === gk[0] && Math.hypot(ek.x - (gk[1] + 0.5), ek.y - (gk[2] + 0.5)) < 0.6);
+          };
+          // 다 모이면 출발 (늦는 사람은 5분까지만 기다린다)
+          const ready = st.minute >= mcM.marchAt + 5 || squadKeys(st.branch, st.day).every(atGather);
+          if (lead && lg && le && atGather(lead) && ready) {
+            march.key = mkey; march.lead = lead; march.leadX = lg[1]; march.done = false; march.moving = false;
+            march.pts = [{ map: lg[0], x: GATHER_TAIL_X + 0.5, y: GATHER_Y + 0.5, d: 0 }, { map: lg[0], x: lg[1] + 0.5, y: GATHER_Y + 0.5, d: lg[1] - GATHER_TAIL_X }];
+            march.D = lg[1] - GATHER_TAIL_X;
+            // 내가 집합 자리 근처에 와 있으면 대열에 선다
+            march.me = !myAte && p.map === MY_GATHER[0] && Math.hypot(p.x - (MY_GATHER[1] + 0.5), p.y - (MY_GATHER[2] + 0.5)) < 5;
+          }
+        }
+        if (!march.done) {
+          const le = march.key === mkey ? entOf(march.lead) : undefined;
+          if (!le || seated[march.lead] !== undefined) march.done = true;
+          else {
+            const lastPt = march.pts[march.pts.length - 1];
+            if (le.map !== lastPt.map) march.pts.push({ map: le.map, x: le.x, y: le.y, d: march.D });
+            else {
+              const dd = Math.hypot(le.x - lastPt.x, le.y - lastPt.y);
+              if (dd > 0.15) { march.D += dd; march.pts.push({ map: le.map, x: le.x, y: le.y, d: march.D }); }
+            }
+            march.moving = le.moving;
+          }
+        }
         for (const id of present) {
           const n = npcs.current[id];
           if (n && seated[id] === undefined && eatingAt(n.map, n.x, n.y, MEAL_POS[id], st.minute)) seated[id] = st.minute;
@@ -2072,6 +2217,8 @@ export default function World() {
           const k = `x:${def.id}`;
           if (e && seated[k] === undefined && eatingAt(e.map, e.x, e.y, EXTRA_MEAL_SEAT[def.id], st.minute)) seated[k] = st.minute;
         }
+      } else if (!march.done) {
+        march.done = true;
       } else if (myMeal.tray && !myMeal.eating) {
         myMeal.tray = '';
         st.toast('🍱 배식 시간이 끝나 식판을 반납했다…', 'bad');
@@ -2186,7 +2333,7 @@ export default function World() {
         const mcg = st.mealCheck;
         if (!st.daily.includes(mealKey)) {
           // 막사 앞에 모이는 중이면 집합 자리 → 출발하면 배식대 → 식판을 받았으면 내 자리
-          const gp = mcg && mcg.status !== 'asking' && mcg.marchAt != null && st.minute < mcg.marchAt ? MEAL_GATHER.buddy : null;
+          const gp = mcg && mcg.status !== 'asking' && mcg.marchAt != null && march.key !== `${st.day}-${mealOf(st.minute)}` && st.minute < mcg.marchAt + 8 ? MY_GATHER : null;
           const [gm, gx, gy]: Pos = gp ?? (myMeal.tray ? ['mess', MY_MEAL_SEAT[0], MY_MEAL_SEAT[1]] : [world.spots.mess.map, world.spots.mess.x, world.spots.mess.y]);
           const gd = guide(gm, gx + 0.5, gy + 0.5);
           if (gd) qTargets.push({ x: gd.x, y: gd.y - (gd.viaDoor ? 0.6 : 0) });
@@ -2372,17 +2519,15 @@ export default function World() {
               g.fillStyle = col; g.fillRect(bx + 22, y + 1, 46 * Math.min(1, v), 7);
               g.fillStyle = '#fff'; g.font = 'bold 9px sans-serif'; g.textAlign = 'left'; g.fillText(label, bx, y + 8);
             };
-            if (me.pace) {
-              const leadV = 1 - Math.max(0, me.pace.finish - st.minute) / SQUAD_EAT_MIN;
-              bar(by0 - 14, '선임', leadV, '#e86040');
-              bar(by0, '나', me.prog, '#58c058');
-              g.textAlign = 'center'; g.font = 'bold 10px sans-serif'; g.fillStyle = Math.floor(t * 3) % 2 ? '#ffe14a' : '#ffffff';
-              g.fillText('Space 연타! 선임 속도에 맞춰 먹자', p.x * TILE, by0 - 22);
-            } else bar(by0, '🍚', me.prog, '#58c058');
-            if (performance.now() - me.bite < 250) {
+            bar(by0, '🍚', me.prog, me.mode === 'fast' ? '#f0a030' : me.mode === 'slow' ? '#58a8e0' : '#58c058');
+            if (Math.sin(t * (me.mode === 'fast' ? 16 : me.mode === 'slow' ? 5 : 9)) > 0.6) {
               g.textAlign = 'center'; g.font = 'bold 11px sans-serif'; g.fillStyle = '#fff';
               g.fillText('냠!', p.x * TILE + 16, p.y * TILE - 30);
             }
+          }
+          if (march.me) {
+            g.textAlign = 'center'; g.font = 'bold 10px "Galmuri11", sans-serif'; g.fillStyle = '#ffffff';
+            g.fillText('🚶 분대와 함께 이동 중', p.x * TILE, p.y * TILE - 54);
           }
           const sta2 = stamina.current;
           if (sta2.dashing && Math.floor(t * 14) % 2 === 0) {
