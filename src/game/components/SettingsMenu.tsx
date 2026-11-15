@@ -86,7 +86,7 @@ export default function SettingsMenu() {
               <Segmented k="timeSpeed" options={[{ value: 'slow', label: '느리게 (0.7분)' }, { value: 'normal', label: '보통 (1분)' }, { value: 'fast', label: '빠르게 (1.7분)' }]} />
             </div>
             <div className="set-row">
-              <div><b>집합 허용 시간</b><div className="hud-dim">집합 호출 후 지각 처리까지의 여유</div></div>
+              <div><b>집합 허용 시간</b><div className="hud-dim">집합 호출 후 지각 처리까지의 여유 · 위병소·훈련장은 +10분, 시간이 빠를수록 자동으로 늘어남</div></div>
               <Segmented k="gatherWindow" options={[{ value: 'relaxed', label: '넉넉 (30분)' }, { value: 'normal', label: '보통 (20분)' }, { value: 'strict', label: '엄격 (15분)' }]} />
             </div>
             <div className="set-row">

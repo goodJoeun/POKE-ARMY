@@ -7,7 +7,7 @@ import type {
 import { BRANCHES, FACILITY_NAME, MONTHLY_PAY, RANKS, STORE_NAME, TOTAL_DAYS, fmtMoney, rankIdxForDay, seasonForDay } from '../data/branches';
 import { pickSpecies, topArchetype } from '../data/monsters';
 import { NPC_IDS, NPC_ROLES, NPC_SKINS, SOLDIER_IDS, birthdayNpcs, currentSquadLeader, npcPresent, arriveDay, leaveDay } from '../data/npcs';
-import { buildSchedule, isFreeTimeEvening, isMealTime } from '../data/schedule';
+import { buildSchedule, isFreeTimeEvening, isMealTime, mealGatherMinutes } from '../data/schedule';
 import { DIALOGUES } from '../data/dialogues';
 import { QUESTS, QUEST_CHAINS, chainOf } from '../data/quests';
 import { ITEMS, GIFT_AFFINITY } from '../data/items';
@@ -86,8 +86,8 @@ const PATROL_TEXT: Partial<Record<SpotId, string[]>> = {
   wc2: ['2층 화장실 이상 무.', '2층 화장실: 물이 계속 흐른다. 꼭지를 잠그고 수리 요청 메모.'],
 };
 
-/** 식사 집합 시간(분): 식사 시작 후 이 시간 안에 선임들께 다 여쭤봐야 함께 간다 */
-export const MEAL_GATHER_MIN = 20;
+/** 식사 집합 시간(분): 식사 시작 후 이 시간 안에 선임들께 다 여쭤봐야 함께 간다 (시간 속도에 맞춰 늘어난다) */
+export const mealGatherMin = () => mealGatherMinutes();
 
 export interface MealCheck {
   meal: 'lunch' | 'dinner';
@@ -412,7 +412,7 @@ export const useGame = create<Store>((set, get) => ({
         if (!seniors.length) return;
         set({ mealCheck: { meal, start: at, targets: seniors, asked: [], status: 'asking' } });
         const names = seniors.map((id) => memberName(s.branch, id)).join('·');
-        get().toast(`📋 미션: 식사 집합 — ${MEAL_GATHER_MIN}분 안에 ${names}께 "식사하러 가시겠습니까?" 여쭤보자`, 'info');
+        get().toast(`📋 미션: 식사 집합 — ${mealGatherMin()}분 안에 ${names}께 "식사하러 가시겠습니까?" 여쭤보자`, 'info');
       };
       // 집합 시간이 지나도록 다 못 여쭸으면: 기다리던 선임들은 먼저 식당으로
       const missGather = (key: string, at: number, meal: MealCheck['meal']) => {
@@ -435,8 +435,8 @@ export const useGame = create<Store>((set, get) => ({
       };
       assignMeal('mealCheckLunch', 12 * 60, 'lunch');
       assignMeal('mealCheckDinner', 17 * 60 + 30, 'dinner');
-      missGather('mealGatherLunch', 12 * 60 + MEAL_GATHER_MIN, 'lunch');
-      missGather('mealGatherDinner', 17 * 60 + 30 + MEAL_GATHER_MIN, 'dinner');
+      missGather('mealGatherLunch', 12 * 60 + mealGatherMin(), 'lunch');
+      missGather('mealGatherDinner', 17 * 60 + 30 + mealGatherMin(), 'dinner');
       endMeal('mealCheckLunchEnd', 13 * 60, 'lunch');
       endMeal('mealCheckDinnerEnd', 18 * 60 + 30, 'dinner');
     }

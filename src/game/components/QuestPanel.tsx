@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { BranchId, Effects } from '../types';
-import { useGame, spotLabel, questSlowActive, questOffers, MEAL_GATHER_MIN, PATROL_SPOTS, type QuestOffer } from '../state/store';
+import { useGame, spotLabel, questSlowActive, questOffers, mealGatherMin, PATROL_SPOTS, type QuestOffer } from '../state/store';
 import { QUESTS, QUEST_CHAINS, chainOf } from '../data/quests';
 import { NPC_SKINS, npcDisplayName } from '../data/npcs';
 import { fmtTime } from '../data/branches';
@@ -64,7 +64,7 @@ export function QuestTracker({ onOpen }: { onOpen: () => void }) {
     const left = mc.targets.filter((id) => !mc.asked.includes(id));
     items.push(mc.status === 'together'
       ? { title: '🍚 식사 집합', next: '✅ 다 모였다! 식당으로 가서 같이 먹자', done: true }
-      : { title: `🍚 식사 집합 (${mc.asked.length}/${mc.targets.length})`, next: `${left.map((id) => `👤 ${memberName(s.branch, id)} 📍${npcWhere(s.branch, id) ?? '?'}`).join(' / ')} · ${fmtTime(mc.start + MEAL_GATHER_MIN)}까지` });
+      : { title: `🍚 식사 집합 (${mc.asked.length}/${mc.targets.length})`, next: `${left.map((id) => `👤 ${memberName(s.branch, id)} 📍${npcWhere(s.branch, id) ?? '?'}`).join(' / ')} · ${fmtTime(mc.start + mealGatherMin())}까지` });
   }
   if (s.patrol) {
     const left = PATROL_SPOTS.filter((sp) => !s.patrol!.done.includes(sp));
@@ -137,7 +137,7 @@ export function QuestLog({ onClose }: { onClose: () => void }) {
           </p>
           {mc && (
             <div className="quest">
-              <b>🍚 식사 집합</b> <span className="hud-dim">({mc.asked.length}/{mc.targets.length}{mc.status === 'asking' ? ` · ${fmtTime(mc.start + MEAL_GATHER_MIN)}까지` : ''})</span>
+              <b>🍚 식사 집합</b> <span className="hud-dim">({mc.asked.length}/{mc.targets.length}{mc.status === 'asking' ? ` · ${fmtTime(mc.start + mealGatherMin())}까지` : ''})</span>
               <div>밥 먹으러 가기 전에 선임들께 "식사하러 가시겠습니까?" 여쭤보고, 다 모이면 같이 식당으로 간다.</div>
               <div className="ql-faces">{mc.targets.map((id) => <Face key={id} branch={s.branch} who={id} day={s.day} />)}</div>
               <ul className="ql-steps">
