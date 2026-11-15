@@ -583,6 +583,8 @@ export function nearestWalkable(map: GameMap, x: number, y: number): [number, nu
 }
 
 // ────────────── 렌더링 ──────────────
+// 도트 화풍: 논리 해상도는 타일 16px(화면 2배 확대). 검은 외곽선, 윗면/앞면 2면 명암,
+// 바닥에 떨어지는 그림자 — 오프닝 방(pixelArt.ts)·사람 캐릭터와 같은 문법이다.
 
 function hash(x: number, y: number) {
   let h = x * 374761393 + y * 668265263;
@@ -596,28 +598,37 @@ function shade(hex: string, amt: number): string {
   return `#${((c((n >> 16) & 255) << 16) | (c((n >> 8) & 255) << 8) | c(n & 255)).toString(16).padStart(6, '0')}`;
 }
 
+type FloorKind = 'wood' | 'tile' | 'lino' | 'concrete';
 const YARD: [string, string] = ['#e9d9b8', '#e2d0ac'];
 const FLOOR_COLORS: Record<MapId, [string, string]> = {
   outdoor: YARD, messyard: YARD, recycle: YARD, pxyard: YARD, depot: YARD,
   hq1: ['#b8c0a8', '#b0b8a0'],
   hq2: ['#b8c0a8', '#b0b8a0'],
-  room1: ['#d8c49a', '#cfba8e'],
-  room2: ['#d8c49a', '#cfba8e'],
+  room1: ['#d8b47a', '#c9a268'],
+  room2: ['#d8b47a', '#c9a268'],
   admin: ['#c8ccd2', '#bec3ca'],
   command: ['#a8b0b8', '#a0a8b0'],
-  lounge: ['#e0c8a0', '#d8c098'],
+  lounge: ['#e0bc84', '#d2ac72'],
   maint: ['#a8a8a0', '#a0a098'],
-  wc1: ['#e0e8ec', '#d6dee2'], wc2: ['#e0e8ec', '#d6dee2'],
-  laundry1: ['#d0d8e0', '#c8d0d8'], laundry2: ['#d0d8e0', '#c8d0d8'],
-  gymroom: ['#c8b890', '#c0b088'],
-  library: ['#d8c8a8', '#cfbf9e'],
+  wc1: ['#e0e8ec', '#d0dbe2'], wc2: ['#e0e8ec', '#d0dbe2'],
+  laundry1: ['#d0d8e0', '#c2ccd6'], laundry2: ['#d0d8e0', '#c2ccd6'],
+  gymroom: ['#d0b078', '#c2a068'],
+  library: ['#d8b888', '#c8a674'],
   cyber: ['#b8c4d0', '#aebac7'],
-  mess: ['#e6e2d6', '#dcd8cb'],
-  kitchen: ['#d8dcd8', '#ced2ce'],
-  px: ['#e8dcc8', '#dfd2bc'],
+  mess: ['#e6e2d6', '#d6d1c2'],
+  kitchen: ['#d8dcd8', '#c8cec8'],
+  px: ['#e8dcc8', '#dacbb0'],
+};
+const FLOOR_KIND: Record<MapId, FloorKind> = {
+  outdoor: 'concrete', messyard: 'concrete', recycle: 'concrete', pxyard: 'concrete', depot: 'concrete',
+  hq1: 'lino', hq2: 'lino', room1: 'wood', room2: 'wood', admin: 'lino', command: 'lino', lounge: 'wood',
+  maint: 'concrete', wc1: 'tile', wc2: 'tile', laundry1: 'tile', laundry2: 'tile', gymroom: 'wood',
+  library: 'wood', cyber: 'lino', mess: 'tile', kitchen: 'tile', px: 'tile',
 };
 
 const BIN_COLORS = ['#3a8a3a', '#e0b030', '#3a6ac8', '#8a8a8a', '#c87a3a', '#6a4a2a'];
+const OUT = '#181018';
+const SHADE = 'rgba(30,20,30,0.22)';
 
 /** 같은 종류 타일이 이어진 세로 범위 (활주로 중앙선·농구장 중앙선용) */
 function runOf(map: GameMap, x: number, y: number, kinds: T[]): [number, number] {
@@ -627,225 +638,481 @@ function runOf(map: GameMap, x: number, y: number, kinds: T[]): [number, number]
   return [a, b];
 }
 
+/** 바닥이 깔리는 타일 (가구 밑에도 바닥이 있다) */
+const ON_FLOOR = new Set<T>([
+  T.FLOOR, T.BED, T.DESK, T.TABLE, T.LOCKER, T.COUNTER, T.PC, T.SHELF, T.TV, T.PLANT, T.BOARD, T.SOFA,
+  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE,
+]);
+
 export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = map.w * TILE;
   c.height = map.h * TILE;
   const g = c.getContext('2d')!;
-  const grass = season === 'winter' ? '#e6eef2' : season === 'autumn' ? '#b8a860' : season === 'spring' ? '#8cc46a' : '#6fae54';
-  const grassDot = season === 'winter' ? '#cfdde4' : season === 'autumn' ? '#a08a48' : '#5a9a44';
+  const P = TILE / 16; // 논리 픽셀 1칸의 실제 크기
+  const winter = season === 'winter';
+  const grass = winter ? '#e6eef2' : season === 'autumn' ? '#b8a860' : season === 'spring' ? '#8cc46a' : '#6fae54';
+  const grassDot = winter ? '#cfdde4' : season === 'autumn' ? '#a08a48' : season === 'spring' ? '#6aa850' : '#5a9a44';
+  const grassHi = winter ? '#f6fafc' : season === 'autumn' ? '#ccbc74' : season === 'spring' ? '#a4d684' : '#86c26a';
   const [fa, fb] = FLOOR_COLORS[map.id];
-  const road = season === 'winter' ? '#d8d4cc' : '#c9b38a';
+  const kind = FLOOR_KIND[map.id];
+  const road = winter ? '#d8d4cc' : '#c9b38a';
+  const dirt = winter ? '#dcd6cc' : '#b89a72';
+  const sand = winter ? '#e8e4dc' : '#dcc89c';
 
-  for (let y = 0; y < map.h; y++) {
-    for (let x = 0; x < map.w; x++) {
-      const t = map.tiles[y][x];
-      const px = x * TILE, py = y * TILE;
-      const r = hash(x, y);
-      const base = (col: string) => { g.fillStyle = col; g.fillRect(px, py, TILE, TILE); };
-      switch (t) {
-        case T.GRASS:
-        case T.TREE:
-        case T.FLOWER:
-          base(grass);
-          g.fillStyle = grassDot;
-          if (r > 0.5) g.fillRect(px + r * 24, py + (1 - r) * 24, 3, 3);
-          if (r > 0.8) g.fillRect(px + 8, py + 20, 2, 4);
-          break;
-        case T.ROAD: case T.BIN: base(road); if (r > 0.7) { g.fillStyle = '#b8a078'; g.fillRect(px + r * 26, py + 10, 3, 2); } break;
-        case T.SAND: case T.STAGE: base(season === 'winter' ? '#e8e4dc' : '#dcc89c'); if (r > 0.6) { g.fillStyle = '#cbb488'; g.fillRect(px + r * 28, py + r * 20, 2, 2); } break;
-        case T.DIRT: case T.TARGET: case T.SANDBAG: case T.AMMO:
-          base(season === 'winter' ? '#dcd6cc' : '#b89a72'); if (r > 0.6) { g.fillStyle = '#a0845e'; g.fillRect(px + r * 26, py + r * 26, 3, 2); } break;
-        case T.GYM:
-          if (map.indoor) base((x + y) % 2 === 0 ? fa : fb);
-          else base(season === 'winter' ? '#dcd6cc' : '#b89a72');
-          break;
-        case T.FLOOR: case T.BED: case T.DESK: case T.TABLE: case T.LOCKER: case T.COUNTER: case T.PC:
-        case T.SHELF: case T.TV: case T.PLANT: case T.BOARD: case T.SOFA:
-        case T.COOLER: case T.WASHER: case T.TOILET: case T.SINK: case T.STOVE:
-          base((x + y) % 2 === 0 ? fa : fb);
-          break;
-        case T.COURT: case T.HOOP: {
-          base('#c8703c');
-          // 코트 바깥 선 + 중앙선
-          g.fillStyle = '#f4ece0';
-          const isC = (tx: number, ty: number) => [T.COURT, T.HOOP].includes(map.tiles[ty]?.[tx]);
-          if (!isC(x - 1, y)) g.fillRect(px, py, 2, TILE);
-          if (!isC(x + 1, y)) g.fillRect(px + TILE - 2, py, 2, TILE);
-          if (!isC(x, y - 1)) g.fillRect(px, py, TILE, 2);
-          if (!isC(x, y + 1)) g.fillRect(px, py + TILE - 2, TILE, 2);
-          const [a, b] = runOf(map, x, y, [T.COURT, T.HOOP]);
-          if (y === Math.floor((a + b) / 2)) g.fillRect(px, py + TILE / 2 - 1, TILE, 2);
-          break;
-        }
-        case T.STAIRS:
-          base('#6a6a72');
-          for (let i = 0; i < 4; i++) { g.fillStyle = i % 2 ? '#8a8a94' : '#a0a0aa'; g.fillRect(px + i * 8, py, 8, TILE); }
-          g.fillStyle = '#4a4a52'; g.fillRect(px, py, TILE, 2);
-          break;
-        case T.WALL: base('#7a6a5a'); g.fillStyle = '#9a8a76'; g.fillRect(px, py, TILE, 6); g.fillStyle = '#5e5044'; g.fillRect(px, py + TILE - 3, TILE, 3); break;
-        case T.FENCE: base(grass); g.fillStyle = '#6a6a6a'; g.fillRect(px, py + 12, TILE, 4); g.fillRect(px + 4, py + 4, 3, 24); g.fillRect(px + 22, py + 4, 3, 24); break;
-        case T.WATER: case T.SHIP: base('#3a7ac0'); g.fillStyle = '#5a9ad8'; g.fillRect(px + ((r * 20 + y * 7) % 24), py + 8 + r * 12, 8, 2); break;
-        case T.PIER: base('#a07850'); g.fillStyle = '#7a5838'; for (let i = 0; i < 4; i++) g.fillRect(px, py + i * 8 + 7, TILE, 1); break;
-        case T.RUNWAY: {
-          base('#5a5e64');
-          const [a, b] = runOf(map, x, y, [T.RUNWAY]);
-          g.fillStyle = '#e8d24a';
-          if (y === a) g.fillRect(px, py, TILE, 3);
-          if (y === b) g.fillRect(px, py + TILE - 3, TILE, 3);
-          if (y === Math.floor((a + b) / 2) && x % 3 === 0) { g.fillStyle = '#f2f2f2'; g.fillRect(px + 4, py + TILE - 2, 22, 4); }
-          break;
-        }
-        case T.BOOTH: case T.HANGAR: base('#c9b38a'); break;
-        case T.DOOR:
-          if (map.indoor) {
-            base('#3a3026');
-            g.fillStyle = '#8a6a4a'; g.fillRect(px + 2, py + 2, TILE - 4, TILE - 6);
-            g.fillStyle = '#c8a878'; g.fillRect(px + 4, py + TILE - 8, TILE - 8, 4);
-          }
-          break;
+  // 타일 원점 기준 논리 픽셀 사각형
+  let ox = 0, oy = 0;
+  const R = (x: number, y: number, w: number, h: number, col: string) => { g.fillStyle = col; g.fillRect(ox + x * P, oy + y * P, w * P, h * P); };
+  const box = (x: number, y: number, w: number, h: number, fill: string, out = OUT) => { R(x, y, w, h, out); R(x + 1, y + 1, w - 2, h - 2, fill); };
+  /** 윗면 + 앞면이 보이는 덩어리 (가구) */
+  const block = (x: number, y: number, w: number, h: number, topH: number, top: string, front: string) => {
+    R(x + 1, y + h, w - 1, 1, SHADE);
+    R(x, y, w, h, OUT);
+    R(x + 1, y + 1, w - 2, topH - 1, top); R(x + 1, y + 1, w - 2, 1, shade(top, 26));
+    R(x + 1, y + topH, w - 2, h - topH - 1, front); R(x + 1, y + topH, w - 2, 1, shade(front, -28));
+  };
+  const at = (tx: number, ty: number): T | undefined => map.tiles[ty]?.[tx];
+  const walkable = (tx: number, ty: number) => { const v = at(tx, ty); return v !== undefined && v !== T.WALL; };
+
+  // ── 1) 바닥 ──
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+    const t = map.tiles[y][x];
+    ox = x * TILE; oy = y * TILE;
+    const r = hash(x, y), r2 = hash(x + 91, y + 37);
+    const base = (col: string) => R(0, 0, 16, 16, col);
+    const speck = (col: string, n = 1) => { for (let i = 0; i < n; i++) R(Math.floor(hash(x + i * 7, y + i * 3) * 13) + 1, Math.floor(hash(x + i * 5, y + i * 11) * 13) + 1, 2, 1, col); };
+    const floor = () => {
+      if (kind === 'wood') {
+        base(fa);
+        R(0, 0, 16, 1, shade(fa, 14)); R(0, 8, 16, 1, shade(fa, 14));
+        R(0, 7, 16, 1, shade(fb, -22)); R(0, 15, 16, 1, shade(fb, -22));
+        R(((x * 5 + y * 3) % 11) + 2, 1, 1, 6, fb); R(((x * 7 + y * 5) % 11) + 2, 9, 1, 6, fb);
+        if (r > 0.7) R(5, 3, 4, 1, fb);
+      } else if (kind === 'tile') {
+        base((x + y) % 2 === 0 ? fa : fb);
+        R(0, 0, 16, 1, shade(fa, 16)); R(0, 0, 1, 16, shade(fa, 16));
+        R(0, 15, 16, 1, shade(fb, -18)); R(15, 0, 1, 16, shade(fb, -18));
+      } else if (kind === 'lino') {
+        base(fa);
+        if (r > 0.45) speck(fb, 2);
+        if (r2 > 0.6) speck(shade(fa, 12), 1);
+        if (y % 2 === 0) R(0, 15, 16, 1, fb);
+      } else {
+        base(fa); if (r > 0.5) speck(fb, 2);
       }
-      // 오브젝트
-      switch (t) {
-        case T.TREE: {
-          g.fillStyle = '#6a4a2a'; g.fillRect(px + 13, py + 18, 6, 12);
-          g.fillStyle = season === 'winter' ? '#d8e6e0' : season === 'autumn' ? '#d0782a' : '#2f7a3a';
-          g.beginPath(); g.arc(px + 16, py + 14, 13, 0, Math.PI * 2); g.fill();
-          g.fillStyle = season === 'winter' ? '#ffffff' : season === 'autumn' ? '#e8a040' : '#3f9a4a';
-          g.beginPath(); g.arc(px + 12, py + 10, 6, 0, Math.PI * 2); g.fill();
-          break;
+    };
+    const grassTile = () => {
+      base(grass);
+      if (r > 0.35) { const a = Math.floor(r * 11) + 1, b = Math.floor(r2 * 10) + 2; R(a, b, 1, 2, grassDot); R(a + 1, b + 1, 1, 1, grassDot); R(a + 2, b, 1, 2, grassDot); }
+      if (r2 > 0.55) { const a = Math.floor(r2 * 12) + 1, b = Math.floor(r * 11) + 2; R(a, b, 2, 1, grassHi); }
+      if (r > 0.85) R(11, 12, 1, 2, grassDot);
+    };
+    switch (t) {
+      case T.GRASS: case T.TREE: case T.FLOWER: case T.FENCE: grassTile(); break;
+      case T.ROAD: case T.BIN: case T.BOOTH: case T.HANGAR:
+        base(road); if (r > 0.5) speck(shade(road, -22), 2); if (r2 > 0.6) speck(shade(road, 16), 1);
+        break;
+      case T.SAND: case T.STAGE: base(sand); if (r > 0.45) speck(shade(sand, -20), 2); if (r2 > 0.7) speck(shade(sand, 14), 1); break;
+      case T.DIRT: case T.TARGET: case T.SANDBAG: case T.AMMO:
+        base(dirt); if (r > 0.45) speck(shade(dirt, -24), 2); if (r2 > 0.6) R(Math.floor(r2 * 12) + 1, Math.floor(r * 12) + 2, 1, 1, shade(dirt, 22));
+        break;
+      case T.GYM:
+        if (map.indoor) floor(); else { base(dirt); if (r > 0.45) speck(shade(dirt, -24), 2); }
+        break;
+      case T.COURT: case T.HOOP: {
+        base('#c8703c'); if (r > 0.5) speck('#b86432', 2);
+        const isC = (tx: number, ty: number) => { const v = at(tx, ty); return v === T.COURT || v === T.HOOP; };
+        const line = '#f4ece0';
+        if (!isC(x - 1, y)) R(0, 0, 1, 16, line);
+        if (!isC(x + 1, y)) R(15, 0, 1, 16, line);
+        if (!isC(x, y - 1)) R(0, 0, 16, 1, line);
+        if (!isC(x, y + 1)) R(0, 15, 16, 1, line);
+        const [a, b] = runOf(map, x, y, [T.COURT, T.HOOP]);
+        if (y === Math.floor((a + b) / 2)) R(0, 7, 16, 1, line);
+        break;
+      }
+      case T.STAIRS:
+        for (let i = 0; i < 4; i++) { R(i * 4, 0, 4, 16, i % 2 ? '#8a8a94' : '#a0a0aa'); R(i * 4, 0, 1, 16, '#c0c0ca'); R(i * 4 + 3, 0, 1, 16, '#5c5c66'); }
+        R(0, 0, 16, 1, OUT); R(0, 15, 16, 1, OUT);
+        for (let i = 0; i < 4; i++) R(i * 4 + 1, 2, 2, 1, '#e8d24a');
+        break;
+      case T.WATER: case T.SHIP:
+        base('#3a7ac0'); R(0, 0, 16, 16, (x + y) % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,40,0.04)');
+        R(Math.floor(r * 9) + 1, Math.floor(r2 * 5) + 2, 4, 1, '#6aa8e0'); R(Math.floor(r2 * 9) + 2, Math.floor(r * 5) + 9, 3, 1, '#5a9ad8');
+        if (r > 0.7) R(Math.floor(r * 9) + 3, Math.floor(r2 * 5) + 3, 2, 1, '#a8d0f0');
+        break;
+      case T.PIER:
+        base('#a07850');
+        for (let i = 0; i < 4; i++) { R(0, i * 4, 16, 1, '#b88a60'); R(0, i * 4 + 3, 16, 1, '#7a5838'); }
+        R(((x * 5 + y) % 9) + 3, 1, 1, 2, '#7a5838'); R(((x * 3 + y * 7) % 9) + 3, 9, 1, 2, '#7a5838');
+        break;
+      case T.RUNWAY: {
+        base('#5a5e64'); if (r > 0.4) speck('#4e5258', 2); if (r2 > 0.6) speck('#686c72', 1);
+        const [a, b] = runOf(map, x, y, [T.RUNWAY]);
+        if (y === a) R(0, 0, 16, 2, '#e8d24a');
+        if (y === b) R(0, 14, 16, 2, '#e8d24a');
+        if (y === Math.floor((a + b) / 2) && x % 3 === 0) R(2, 14, 12, 2, '#f2f2f2');
+        break;
+      }
+      case T.WALL: {
+        if (map.indoor && walkable(x, y + 1) && !(at(x, y + 1) === T.DOOR && (x === 0 || x === map.w - 1))) {
+          // 정면으로 보이는 벽: 회벽 + 국방색 허리띠 + 걸레받이
+          base('#ece6d4');
+          R(0, 0, 16, 1, OUT); R(0, 1, 16, 1, '#8a7a66'); R(0, 2, 16, 1, '#d6cdb6');
+          if (x % 2 === 0) R(7, 4, 1, 1, '#dcd4bf');
+          R(0, 8, 16, 1, '#56684c'); R(0, 9, 16, 5, '#7d9070'); R(0, 9, 16, 1, '#94a886');
+          R(0, 14, 16, 2, '#4a4038'); R(0, 14, 16, 1, '#6a5c50');
+        } else if (map.indoor) {
+          // 위에서 내려다본 벽 윗면
+          base('#3b3442');
+          if (walkable(x + 1, y)) { R(13, 0, 2, 16, '#544a5e'); R(15, 0, 1, 16, OUT); }
+          if (walkable(x - 1, y)) { R(1, 0, 2, 16, '#544a5e'); R(0, 0, 1, 16, OUT); }
+          if (walkable(x, y - 1)) { R(0, 1, 16, 2, '#544a5e'); R(0, 0, 16, 1, OUT); }
+        } else {
+          base('#8a8478');
+          R(0, 0, 16, 1, OUT); R(0, 1, 16, 2, '#aaa496');
+          for (let i = 0; i < 2; i++) { R(0, 7 + i * 5, 16, 1, '#6c665c'); R(((i + x) % 2) * 8 + 3, 3 + i * 5, 1, 4, '#6c665c'); }
+          R(0, 14, 16, 2, '#5c564e');
         }
-        case T.FLOWER: {
-          const cols = ['#f25a7a', '#f2d24a', '#ffffff', '#c47af2'];
-          for (let i = 0; i < 3; i++) {
-            g.fillStyle = cols[(x + y + i) % cols.length];
-            g.beginPath(); g.arc(px + 7 + i * 9, py + 12 + ((i * 7 + x) % 10), 3, 0, Math.PI * 2); g.fill();
-          }
-          break;
+        break;
+      }
+      case T.DOOR:
+        if (!map.indoor) break;
+        if (walkable(x, y + 1) && !walkable(x, y - 1)) {
+          // 위쪽 벽에 난 문: 문짝이 정면으로 보인다
+          R(0, 0, 16, 16, OUT);
+          R(1, 1, 14, 15, '#6e4826'); R(2, 2, 12, 14, '#a9733f'); R(2, 2, 12, 1, '#cf9a62');
+          box(3, 4, 10, 5, '#b88048', '#6e4826'); box(3, 10, 10, 5, '#b88048', '#6e4826');
+          R(11, 9, 2, 2, '#f0d060'); R(11, 9, 1, 1, '#fff2a8');
+        } else {
+          // 아래·옆 벽에 난 문: 문턱과 발매트
+          floor();
+          const bottomDoor = walkable(x, y - 1) && !walkable(x, y + 1);
+          if (bottomDoor) { box(1, 3, 14, 10, '#b04a44', '#5a2424'); R(3, 5, 10, 6, '#d0685c'); R(5, 5, 1, 6, '#b04a44'); R(10, 5, 1, 6, '#b04a44'); }
+          else { box(3, 1, 10, 14, '#b04a44', '#5a2424'); R(5, 3, 6, 10, '#d0685c'); R(5, 5, 6, 1, '#b04a44'); R(5, 10, 6, 1, '#b04a44'); }
         }
-        case T.BED: {
-          const top = map.tiles[y - 1]?.[x] !== T.BED;
-          g.fillStyle = '#5a7a4a'; g.fillRect(px + 3, py + (top ? 3 : 0), TILE - 6, TILE - 3);
-          if (top) { g.fillStyle = '#f2f2ea'; g.fillRect(px + 6, py + 5, TILE - 12, 8); }
-          g.fillStyle = '#4a6a3a'; g.fillRect(px + 3, py + TILE - 4, TILE - 6, 2);
-          break;
+        break;
+      default:
+        if (ON_FLOOR.has(t)) floor();
+        break;
+    }
+    // 벽이 바닥에 드리우는 그림자
+    if (map.indoor && t !== T.WALL && at(x, y - 1) === T.WALL) R(0, 0, 16, 2, 'rgba(40,24,30,0.2)');
+  }
+
+  // ── 2) 물건 (위쪽 타일로 조금 솟아오를 수 있어 바닥을 다 깐 뒤에 그린다) ──
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+    const t = map.tiles[y][x];
+    ox = x * TILE; oy = y * TILE;
+    const r = hash(x, y);
+    const same = (dx: number, dy: number) => at(x + dx, y + dy) === t;
+    /** 옆으로 이어 붙는 상판 가구 (책상·식탁·조리대) */
+    const slab = (top: string, front: string) => {
+      const L = !same(-1, 0), Rt = !same(1, 0), U = !same(0, -1), D = !same(0, 1);
+      const y0 = U ? 2 : 0, yb = D ? 15 : 16;
+      R(0, y0, 16, yb - y0, top);
+      if (U) { R(0, y0, 16, 1, OUT); R(0, y0 + 1, 16, 1, shade(top, 26)); }
+      if (D) { R(0, 10, 16, 5, front); R(0, 10, 16, 1, shade(front, -28)); R(0, 14, 16, 1, OUT); R(1, 15, 15, 1, SHADE); }
+      if (L) R(0, y0, 1, yb - y0, OUT);
+      if (Rt) R(15, y0, 1, yb - y0, OUT);
+      if (D && L) R(1, 11, 1, 3, shade(front, -28));
+      if (D && Rt) R(14, 11, 1, 3, shade(front, -28));
+    };
+    switch (t) {
+      case T.TREE: {
+        const leaf = winter ? '#d8e6e0' : season === 'autumn' ? '#d0782a' : '#2f8a3e';
+        const leafHi = winter ? '#ffffff' : season === 'autumn' ? '#eaa648' : '#56b85c';
+        const leafLo = winter ? '#a8c0c4' : season === 'autumn' ? '#a4541c' : '#1f6630';
+        R(3, 13, 10, 2, SHADE); R(5, 12, 6, 1, SHADE);
+        box(6, 7, 4, 8, '#7a5230'); R(7, 8, 1, 6, '#946840');
+        const ws = [6, 10, 12, 14, 14, 16, 16, 16, 14, 14, 12, 8];
+        ws.forEach((w, i) => R(8 - w / 2, -5 + i, w, 1, OUT));
+        ws.forEach((w, i) => { if (i > 0 && i < ws.length - 1) R(9 - w / 2, -5 + i, w - 2, 1, leaf); });
+        R(4, -3, 4, 1, leafHi); R(3, -2, 5, 2, leafHi); R(3, 0, 3, 1, leafHi); R(9, -2, 2, 1, leafHi);
+        R(9, 3, 5, 2, leafLo); R(6, 4, 7, 1, leafLo); R(11, 1, 3, 2, leafLo); R(3, 3, 2, 1, leafLo);
+        break;
+      }
+      case T.FLOWER: {
+        const cols = ['#f25a7a', '#f2d24a', '#ffffff', '#c47af2'];
+        for (let i = 0; i < 3; i++) {
+          const fx = 2 + i * 5, fy = 3 + ((i * 7 + x * 3 + y) % 8), col = cols[(x + y + i) % cols.length];
+          R(fx + 1, fy + 2, 1, 3, '#3f8a44');
+          R(fx, fy, 3, 3, OUT); R(fx + 1, fy - 1, 1, 5, OUT); R(fx - 1, fy + 1, 5, 1, OUT);
+          R(fx, fy, 3, 3, col); R(fx + 1, fy + 1, 1, 1, '#f0b030');
         }
-        case T.LOCKER: g.fillStyle = '#8a7050'; g.fillRect(px + 2, py + 2, TILE - 4, TILE - 4); g.fillStyle = '#6a5038'; g.fillRect(px + 15, py + 4, 2, TILE - 8); break;
-        case T.DESK: case T.TABLE: g.fillStyle = t === T.DESK ? '#8a6a4a' : '#b08a5a'; g.fillRect(px + 1, py + 6, TILE - 2, TILE - 10); g.fillStyle = '#6a4a2a'; g.fillRect(px + 1, py + TILE - 6, TILE - 2, 2); break;
-        case T.COUNTER: g.fillStyle = '#a0a8b0'; g.fillRect(px, py + 4, TILE, TILE - 8); g.fillStyle = '#c8d0d8'; g.fillRect(px, py + 4, TILE, 5); break;
-        case T.PC: g.fillStyle = '#8a6a4a'; g.fillRect(px + 1, py + 14, TILE - 2, 14); g.fillStyle = '#2a2e38'; g.fillRect(px + 7, py + 3, 18, 13); g.fillStyle = '#5ac0f2'; g.fillRect(px + 9, py + 5, 14, 9); break;
-        case T.SHELF: {
-          g.fillStyle = '#7a5a3a'; g.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
-          const cols = ['#e04a4a', '#f2c230', '#4a90d8', '#5ab04a', '#f28a3a'];
-          for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { g.fillStyle = cols[(i * 3 + j + x) % cols.length]; g.fillRect(px + 5 + j * 8, py + 5 + i * 8, 6, 6); }
-          break;
+        break;
+      }
+      case T.FENCE: {
+        const hz = at(x - 1, y) === T.FENCE || at(x + 1, y) === T.FENCE;
+        const vt = at(x, y - 1) === T.FENCE || at(x, y + 1) === T.FENCE;
+        const m = '#9aa0aa', hi = '#c4cad4', lo = '#5c626c';
+        if (hz) { for (const ry of [5, 10]) { R(0, ry - 1, 16, 3, OUT); R(0, ry, 16, 1, hi); } R(0, 6, 16, 4, 'rgba(90,96,108,0.25)'); }
+        if (vt) { R(6, 0, 4, 16, OUT); R(7, 0, 2, 16, m); R(7, 0, 1, 16, hi); }
+        box(6, 2, 4, 13, m); R(7, 3, 1, 11, hi); R(8, 13, 1, 1, lo); R(6, 1, 4, 1, OUT); R(7, 15, 3, 1, SHADE);
+        break;
+      }
+      case T.BED: {
+        const head = !same(0, -1), foot = !same(0, 1);
+        // 침상 틀
+        R(1, head ? 1 : 0, 14, head || foot ? 15 : 16, OUT);
+        if (foot) R(2, 15, 13, 1, SHADE);
+        const y0 = head ? 2 : 0, y1 = foot ? 14 : 16;
+        R(2, y0, 12, y1 - y0, '#5f7a4c'); // 국방색 모포
+        R(2, y0, 1, y1 - y0, '#7a9664'); R(13, y0, 1, y1 - y0, '#44593a');
+        if (head) {
+          R(2, 2, 12, 2, '#8a8f98'); R(2, 2, 12, 1, '#c4cad4'); // 머리맡 철제 틀
+          R(2, 4, 12, 7, '#f4f2ea'); box(3, 5, 10, 5, '#ffffff', '#b4b6c8'); R(4, 8, 8, 1, '#dcdde8'); // 매트리스 + 베개
+          R(2, 11, 12, 1, '#e8eada'); R(2, 12, 12, 1, '#44593a');
+        } else {
+          R(4, 3, 8, 1, '#6e8a58'); R(4, 9, 8, 1, '#44593a');
+          if (foot) { R(2, 11, 12, 1, '#44593a'); R(2, 12, 12, 2, '#8a8f98'); R(2, 12, 12, 1, '#c4cad4'); }
         }
-        case T.TV: g.fillStyle = '#2a2a30'; g.fillRect(px + 2, py + 4, TILE - 4, TILE - 12); g.fillStyle = '#6ab0e0'; g.fillRect(px + 5, py + 7, TILE - 10, TILE - 18); break;
-        case T.BOARD: g.fillStyle = '#5a7a5a'; g.fillRect(px + 2, py + 4, TILE - 4, TILE - 10); g.fillStyle = '#f2f2ea'; g.fillRect(px + 6, py + 8, 8, 6); g.fillRect(px + 17, py + 10, 8, 6); g.fillStyle = '#e05a4a'; g.fillRect(px + 8, py + 7, 3, 2); break;
-        case T.SOFA:
-          g.fillStyle = '#7a4a5a'; g.fillRect(px + 1, py + 6, TILE - 2, TILE - 10);
-          g.fillStyle = '#9a6a7a'; g.fillRect(px + 1, py + 6, TILE - 2, 8);
-          break;
-        case T.PLANT: g.fillStyle = '#8a5a3a'; g.fillRect(px + 10, py + 18, 12, 11); g.fillStyle = '#3f9a4a'; g.beginPath(); g.arc(px + 16, py + 13, 10, 0, Math.PI * 2); g.fill(); break;
-        case T.GYM: g.fillStyle = '#4a4a52'; g.fillRect(px + 4, py + 14, 24, 4); g.fillRect(px + 2, py + 8, 6, 16); g.fillRect(px + 24, py + 8, 6, 16); break;
-        case T.TARGET: g.fillStyle = '#6a4a2a'; g.fillRect(px + 15, py + 18, 3, 12); g.fillStyle = '#f2f2ea'; g.beginPath(); g.arc(px + 16, py + 13, 10, 0, Math.PI * 2); g.fill(); g.fillStyle = '#d03a3a'; g.beginPath(); g.arc(px + 16, py + 13, 6, 0, Math.PI * 2); g.fill(); g.fillStyle = '#f2f2ea'; g.beginPath(); g.arc(px + 16, py + 13, 2.5, 0, Math.PI * 2); g.fill(); break;
-        case T.SANDBAG: g.fillStyle = '#a89a6a'; for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { g.beginPath(); g.ellipse(px + 8 + j * 16 - (i % 2) * 4, py + 12 + i * 10, 8, 5, 0, 0, Math.PI * 2); g.fill(); } break;
-        case T.STAGE: g.fillStyle = '#9a8a76'; g.fillRect(px, py + 4, TILE, TILE - 6); g.fillStyle = '#b8a890'; g.fillRect(px, py + 4, TILE, 4); break;
-        case T.BOOTH: { g.fillStyle = '#7a8a6a'; g.fillRect(px, py, TILE, TILE); g.fillStyle = '#a0b090'; g.fillRect(px + 4, py + 4, TILE - 8, 8); break; }
-        case T.HANGAR: { g.fillStyle = '#8a929a'; g.fillRect(px, py, TILE, TILE); g.fillStyle = '#a8b0b8'; g.fillRect(px, py + (x % 2) * 16, TILE, 3); break; }
-        case T.COOLER:
-          g.fillStyle = '#e8eef4'; g.fillRect(px + 8, py + 10, 16, 20);
-          g.fillStyle = '#7ab8e8'; g.fillRect(px + 10, py + 1, 12, 11);
-          g.fillStyle = '#3a6aa8'; g.fillRect(px + 11, py + 16, 4, 3); g.fillStyle = '#d04a3a'; g.fillRect(px + 17, py + 16, 4, 3);
-          break;
-        case T.WASHER:
-          g.fillStyle = '#f2f4f6'; g.fillRect(px + 2, py + 4, TILE - 4, TILE - 6);
-          g.fillStyle = '#8a929a'; g.fillRect(px + 2, py + 4, TILE - 4, 5);
-          g.fillStyle = '#3a4a5a'; g.beginPath(); g.arc(px + 16, py + 20, 8, 0, Math.PI * 2); g.fill();
-          g.fillStyle = '#7ab0d8'; g.beginPath(); g.arc(px + 16, py + 20, 5, 0, Math.PI * 2); g.fill();
-          break;
-        case T.TOILET:
-          g.fillStyle = '#b8c0c8'; g.fillRect(px, py, 3, TILE); g.fillRect(px + TILE - 3, py, 3, TILE);
-          g.fillStyle = '#ffffff'; g.fillRect(px + 10, py + 4, 12, 8);
-          g.beginPath(); g.ellipse(px + 16, py + 20, 8, 7, 0, 0, Math.PI * 2); g.fill();
-          g.fillStyle = '#c8d4dc'; g.beginPath(); g.ellipse(px + 16, py + 20, 5, 4, 0, 0, Math.PI * 2); g.fill();
-          break;
-        case T.SINK:
-          g.fillStyle = '#9aa2aa'; g.fillRect(px + 1, py + 8, TILE - 2, 14);
-          g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(px + 16, py + 15, 10, 5, 0, 0, Math.PI * 2); g.fill();
-          g.fillStyle = '#6a7278'; g.fillRect(px + 15, py + 4, 3, 7);
-          break;
-        case T.STOVE:
-          g.fillStyle = '#6a7078'; g.fillRect(px + 1, py + 6, TILE - 2, TILE - 8);
-          g.fillStyle = '#2a2e34'; g.beginPath(); g.arc(px + 16, py + 17, 9, 0, Math.PI * 2); g.fill();
-          g.fillStyle = '#b8c0c8'; g.fillRect(px + 6, py + 2, 20, 10); g.fillStyle = '#e0e4e8'; g.fillRect(px + 6, py + 2, 20, 3);
-          break;
-        case T.HOOP:
-          g.fillStyle = '#6a6a6a'; g.fillRect(px + 15, py + (y === runOf(map, x, y, [T.COURT, T.HOOP])[0] ? 0 : 16), 3, 16);
-          g.fillStyle = '#ffffff'; g.fillRect(px + 6, py + 10, 20, 12);
-          g.strokeStyle = '#d04a2a'; g.lineWidth = 2; g.strokeRect(px + 11, py + 14, 10, 6);
-          break;
-        case T.BIN: {
-          const col = BIN_COLORS[x % BIN_COLORS.length];
-          g.fillStyle = shade(col, -30); g.fillRect(px + 4, py + 6, TILE - 8, TILE - 8);
-          g.fillStyle = col; g.fillRect(px + 5, py + 9, TILE - 10, TILE - 12);
-          g.fillStyle = shade(col, 30); g.fillRect(px + 3, py + 4, TILE - 6, 5);
-          break;
+        break;
+      }
+      case T.LOCKER:
+        // 관물대: 윗면 + 두 짝 문
+        block(1, -3, 14, 18, 5, '#a8865c', '#8a6a44');
+        R(8, 3, 1, 11, '#5e4428'); R(2, 3, 1, 11, '#9c7a52'); R(9, 3, 1, 11, '#9c7a52');
+        R(6, 8, 1, 2, '#f0d060'); R(10, 8, 1, 2, '#f0d060');
+        R(3, 4, 4, 1, '#74583a'); R(10, 4, 4, 1, '#74583a');
+        break;
+      case T.DESK: {
+        slab('#b88a58', '#8e6238');
+        if (r > 0.55) { box(3, 4, 6, 5, '#fbfaf4', '#8a8690'); R(4, 6, 4, 1, '#a9abbd'); }
+        else if (r > 0.25) { box(9, 4, 4, 5, '#4f7ac8', '#283c6c'); R(10, 5, 2, 1, '#9cb8ec'); }
+        if (!same(0, 1)) R(7, 12, 2, 1, '#f0d060');
+        break;
+      }
+      case T.TABLE: {
+        slab('#d6b078', '#a8804c');
+        if (r > 0.6) { box(4, 4, 8, 5, '#c9ccd8', '#6c7080'); R(5, 5, 2, 2, '#f4f2ea'); R(8, 5, 3, 1, '#e08a4a'); R(8, 7, 2, 1, '#58b058'); }
+        break;
+      }
+      case T.COUNTER:
+        slab('#c8d0d8', '#8f98a2');
+        if (!same(0, -1)) R(0, 4, 16, 1, '#e6ecf2');
+        break;
+      case T.PC:
+        slab('#b88a58', '#8e6238');
+        R(6, 5, 4, 2, '#3a4250'); R(4, 7, 8, 1, OUT);
+        box(2, -3, 12, 9, '#525c6e'); R(3, -2, 10, 6, '#5ac0f2'); R(4, -1, 5, 1, '#d8f2ff'); R(4, 1, 7, 1, '#3a98d0');
+        box(3, 8, 10, 3, '#e4e6ee', '#6c7080');
+        break;
+      case T.SHELF: {
+        block(1, -4, 14, 19, 4, '#a97448', '#5e3a20');
+        const cols = ['#de4a4a', '#f0b030', '#4f7ac8', '#58b058', '#f08838', '#9858d0'];
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 4; j++) { const bh = 3 + ((i + j + x) % 2); R(2 + j * 3, 5 + i * 5 - bh, 2, bh, cols[(i * 4 + j + x) % cols.length]); }
+          R(2, 5 + i * 5, 12, 1, '#c48e5c');
         }
-        case T.AMMO: {
-          // 흙을 덮은 벙커 + 가운데 아래쪽에 철문
-          g.fillStyle = '#6a7a52'; g.fillRect(px, py, TILE, TILE);
-          g.fillStyle = '#7a8a62'; if (r > 0.4) g.fillRect(px + r * 20, py + 6, 8, 3);
-          const below = map.tiles[y + 1]?.[x] !== T.AMMO;
-          const [a, b] = [x, x];
-          let l = a, rr = b;
+        R(2, 0, 12, 1, '#3e2614');
+        break;
+      }
+      case T.TV:
+        block(1, 6, 14, 9, 4, '#a97448', '#855430');
+        R(7, 4, 2, 2, OUT); R(5, 6, 6, 1, OUT);
+        box(1, -5, 14, 10, '#3a3a46'); R(2, -4, 12, 8, '#3a78c8'); R(2, -4, 12, 3, '#5a9ae0'); R(3, -3, 4, 1, '#c8e4ff'); R(2, 2, 12, 2, '#2c5c9c'); R(12, 3, 1, 1, '#68f0a0');
+        break;
+      case T.BOARD:
+        // 게시판 (초록 판 + 공지 종이)
+        R(1, 14, 14, 1, SHADE);
+        box(0, 0, 16, 14, '#b88a58'); box(1, 1, 14, 12, '#4f7a58', '#3a2a1c'); R(2, 2, 12, 1, '#62906a');
+        box(3, 3, 5, 5, '#fbfaf4', '#8a8690'); R(4, 5, 3, 1, '#a9abbd'); R(5, 3, 1, 1, '#de4a4a');
+        box(9, 4, 4, 6, '#fff2b0', '#8a7038'); R(10, 6, 2, 1, '#a08848'); R(10, 4, 1, 1, '#4f7ac8');
+        R(4, 9, 4, 2, '#fbfaf4'); R(4, 9, 1, 1, '#f08838');
+        break;
+      case T.SOFA: {
+        const L = !same(-1, 0), Rt = !same(1, 0);
+        R(1, 15, 15, 1, SHADE);
+        R(0, 1, 16, 14, OUT);
+        R(L ? 1 : 0, 2, 16 - (L ? 1 : 0) - (Rt ? 1 : 0), 5, '#a86478'); R(L ? 1 : 0, 2, 16 - (L ? 1 : 0) - (Rt ? 1 : 0), 1, '#c4849a');
+        R(L ? 1 : 0, 7, 16 - (L ? 1 : 0) - (Rt ? 1 : 0), 4, '#8e4c62'); R(L ? 1 : 0, 7, 16 - (L ? 1 : 0) - (Rt ? 1 : 0), 1, '#6c3448');
+        R(L ? 1 : 0, 11, 16 - (L ? 1 : 0) - (Rt ? 1 : 0), 3, '#6c3448');
+        if (L) { box(0, 5, 4, 10, '#a86478'); R(1, 6, 2, 1, '#c4849a'); }
+        if (Rt) { box(12, 5, 4, 10, '#a86478'); R(13, 6, 2, 1, '#c4849a'); }
+        if (!L) R(0, 3, 1, 8, '#6c3448');
+        break;
+      }
+      case T.PLANT:
+        R(4, 15, 9, 1, SHADE);
+        for (const [dx, dy, w, h, col] of [[3, -1, 4, 7, '#3f8f4a'], [9, -2, 4, 8, '#4da858'], [1, 3, 5, 5, '#4da858'], [10, 4, 5, 5, '#3f8f4a'], [6, 1, 4, 8, '#66c070']] as const) {
+          R(dx - 1, dy, w + 2, h, OUT); R(dx, dy - 1, w, h + 2, OUT); R(dx, dy, w, h, col); R(dx, dy, 1, 2, '#9be0a0');
+        }
+        box(4, 8, 8, 7, '#c8683a'); R(5, 9, 6, 1, '#e28a58'); R(5, 13, 6, 1, '#9c4a26');
+        break;
+      case T.GYM:
+        // 벤치 + 바벨
+        R(2, 15, 13, 1, SHADE);
+        box(4, 6, 8, 8, '#434c5e'); R(5, 7, 6, 2, '#6a7488');
+        R(1, 4, 14, 1, OUT); R(1, 5, 14, 1, '#c4cad4'); R(1, 6, 14, 1, OUT);
+        box(0, 1, 4, 9, '#4a4a52'); R(1, 2, 1, 7, '#74747e'); box(12, 1, 4, 9, '#4a4a52'); R(13, 2, 1, 7, '#74747e');
+        break;
+      case T.TARGET:
+        R(4, 15, 9, 1, SHADE); box(7, 9, 2, 6, '#7a5230');
+        { const ws = [4, 8, 10, 12, 12, 12, 12, 10, 8, 4]; ws.forEach((w, i) => R(8 - w / 2, -1 + i, w, 1, OUT)); ws.forEach((w, i) => { if (i > 0 && i < 9) R(9 - w / 2, -1 + i, w - 2, 1, '#f4f2ea'); }); }
+        R(5, 1, 6, 6, '#d03a3a'); R(4, 2, 8, 4, '#d03a3a'); R(6, 2, 4, 4, '#f4f2ea'); R(7, 3, 2, 2, '#d03a3a');
+        break;
+      case T.SANDBAG:
+        R(1, 15, 15, 1, SHADE);
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) {
+          const bx = j * 8 - (i % 2 ? 4 : 0), by = 1 + i * 5;
+          for (const k of i % 2 ? [0, 1, 2] : [0, 1]) { const xx = bx + k * 8; if (xx < -2 || xx > 14) continue; const cx = Math.max(0, xx), cw = Math.min(16, xx + 8) - cx; R(cx, by, cw, 5, OUT); R(cx + (xx >= 0 ? 1 : 0), by + 1, cw - (xx >= 0 ? 1 : 0) - (xx + 8 <= 16 ? 1 : 0), 3, '#b8a874'); R(cx + (xx >= 0 ? 1 : 0), by + 1, cw - 2, 1, '#d4c690'); }
+        }
+        break;
+      case T.STAGE: {
+        // 구령대: 이어 붙는 단상
+        const L = !same(-1, 0), Rt = !same(1, 0), U = !same(0, -1), D = !same(0, 1);
+        R(0, U ? 2 : 0, 16, D ? 13 : 16, '#b8a890'); if (U) { R(0, 2, 16, 1, OUT); R(0, 3, 16, 1, '#d4c6b0'); }
+        if (D) { R(0, 10, 16, 5, '#8a7c68'); R(0, 10, 16, 1, '#6c5f4e'); R(0, 14, 16, 1, OUT); R(1, 15, 15, 1, SHADE); if (x % 2 === 0) R(7, 11, 1, 3, '#6c5f4e'); }
+        if (L) R(0, U ? 2 : 0, 1, 16, OUT); if (Rt) R(15, U ? 2 : 0, 1, 16, OUT);
+        break;
+      }
+      case T.BOOTH: {
+        // 초소: 지붕 + 창
+        const U = !same(0, -1), D = !same(0, 1), L = !same(-1, 0), Rt = !same(1, 0);
+        R(0, 0, 16, 16, '#7a8a6a');
+        if (U) { R(0, 0, 16, 5, '#56684c'); R(0, 0, 16, 1, OUT); R(0, 1, 16, 1, '#6e8260'); R(0, 5, 16, 1, OUT); }
+        if (D) { R(0, 12, 16, 3, '#5f6f52'); R(0, 15, 16, 1, OUT); }
+        if (!U || D) { box(3, U ? 7 : 2, 10, 5, '#a8c8e8', '#3c4a34'); R(4, U ? 8 : 3, 4, 1, '#e0f0ff'); }
+        if (L) R(0, 0, 1, 16, OUT); if (Rt) R(15, 0, 1, 16, OUT);
+        break;
+      }
+      case T.HANGAR: {
+        const U = !same(0, -1), D = !same(0, 1), L = !same(-1, 0), Rt = !same(1, 0);
+        R(0, 0, 16, 16, '#8a929a');
+        for (let i = 0; i < 4; i++) { R(0, i * 4, 16, 1, '#a8b0b8'); R(0, i * 4 + 3, 16, 1, '#727a82'); }
+        if (U) { R(0, 0, 16, 1, OUT); R(0, 1, 16, 2, '#c0c8d0'); }
+        if (D) { R(0, 13, 16, 2, '#5c646c'); R(0, 15, 16, 1, OUT); }
+        if (L) R(0, 0, 1, 16, OUT); if (Rt) R(15, 0, 1, 16, OUT);
+        break;
+      }
+      case T.COOLER:
+        // 정수기: 물통 + 본체
+        R(4, 15, 9, 1, SHADE);
+        box(4, -5, 8, 8, '#7ab8e8', '#2c4c74'); R(5, -4, 2, 5, '#b8dcf6'); R(5, -1, 6, 3, '#5a9ad8');
+        box(3, 2, 10, 13, '#e8eef4'); R(4, 3, 8, 1, '#ffffff'); R(4, 11, 8, 3, '#c4ccd6');
+        R(5, 6, 2, 2, '#3a6aa8'); R(9, 6, 2, 2, '#d04a3a'); R(5, 9, 6, 1, '#8f98a2');
+        break;
+      case T.WASHER:
+        block(1, -1, 14, 16, 4, '#f4f6f8', '#dfe4ea');
+        R(2, 4, 12, 1, '#8f98a2'); R(3, 1, 3, 1, '#58c8f0'); R(11, 1, 2, 1, '#de4a4a');
+        { const ws = [4, 6, 8, 8, 8, 8, 6, 4]; ws.forEach((w, i) => R(8 - w / 2, 6 + i, w, 1, '#3a4a5a')); const wi = [2, 4, 6, 6, 4, 2]; wi.forEach((w, i) => R(8 - w / 2, 7 + i, w, 1, '#7ab0d8')); }
+        R(6, 8, 2, 1, '#d0e8f8');
+        break;
+      case T.TOILET: {
+        // 칸막이 + 양변기
+        R(0, 0, 1, 16, OUT); R(1, 0, 1, 16, '#c4ccd6'); R(15, 0, 1, 16, OUT); R(14, 0, 1, 16, '#8f98a2');
+        box(4, 0, 8, 5, '#ffffff', '#6c7080'); R(5, 1, 6, 1, '#e4e8f0'); R(10, 2, 1, 1, '#8f98a2');
+        const ws = [6, 8, 10, 10, 10, 10, 8, 6]; ws.forEach((w, i) => R(8 - w / 2, 5 + i, w, 1, '#6c7080'));
+        const wi = [4, 6, 8, 8, 8, 8, 6, 4]; wi.forEach((w, i) => { if (i > 0 && i < 7) R(8 - w / 2, 5 + i, w, 1, '#ffffff'); });
+        R(6, 7, 4, 3, '#a8d0e8'); R(5, 8, 6, 1, '#a8d0e8'); R(6, 7, 2, 1, '#d8eefa');
+        R(4, 13, 9, 1, SHADE);
+        break;
+      }
+      case T.SINK:
+        slab('#f4f6f8', '#c4ccd6');
+        { const ws = [8, 10, 10, 8]; ws.forEach((w, i) => R(8 - w / 2, 4 + i, w, 1, '#8f98a2')); R(4, 5, 8, 2, '#a8d0e8'); R(5, 5, 3, 1, '#d8eefa'); }
+        R(7, 1, 2, 4, '#6c7080'); R(7, 1, 2, 1, '#c4ccd6'); R(6, 3, 4, 1, '#6c7080');
+        // 거울
+        box(3, -9, 10, 8, '#bfe4f4', '#6c7080'); R(5, -7, 1, 4, '#ffffff');
+        break;
+      case T.STOVE:
+        slab('#6a7078', '#4a5058');
+        box(3, 3, 10, 7, '#2a2e34'); R(5, 5, 6, 3, '#4a4f58'); R(6, 6, 4, 1, '#f08838');
+        box(4, -3, 8, 6, '#c4ccd6', '#4a5058'); R(5, -2, 6, 1, '#f4f6f8'); R(2, -1, 2, 1, OUT); R(12, -1, 2, 1, OUT);
+        R(3, 12, 2, 1, '#de4a4a'); R(7, 12, 2, 1, '#c4ccd6'); R(11, 12, 2, 1, '#c4ccd6');
+        break;
+      case T.HOOP: {
+        const top = y === runOf(map, x, y, [T.COURT, T.HOOP])[0];
+        R(7, top ? 0 : 8, 2, 8, '#6a6a6a'); R(7, top ? 0 : 8, 1, 8, '#9a9aa2');
+        box(2, 4, 12, 8, '#ffffff', '#3a3a44'); box(5, 6, 6, 4, '#ffffff', '#d04a2a');
+        R(5, top ? 12 : 3, 6, 1, '#f08838'); R(6, top ? 13 : 2, 4, 1, '#e8e8f0');
+        break;
+      }
+      case T.BIN: {
+        const col = BIN_COLORS[x % BIN_COLORS.length];
+        R(3, 15, 11, 1, SHADE);
+        box(2, 3, 12, 12, col); R(3, 4, 1, 10, shade(col, 34)); R(12, 4, 1, 10, shade(col, -34)); R(3, 12, 10, 2, shade(col, -34));
+        box(1, 1, 14, 4, shade(col, 26)); R(2, 2, 12, 1, shade(col, 60));
+        box(5, 7, 6, 4, '#f4f2ea', shade(col, -60));
+        break;
+      }
+      case T.AMMO: {
+        // 흙을 덮은 벙커 + 가운데 아래쪽에 철문
+        R(0, 0, 16, 16, '#6a7a52');
+        if (r > 0.4) { R(Math.floor(r * 10) + 1, 3, 4, 1, '#84966a'); R(Math.floor(r * 8) + 3, 9, 3, 1, '#566644'); }
+        if (!same(0, -1)) { R(0, 0, 16, 1, OUT); R(0, 1, 16, 1, '#84966a'); }
+        if (!same(-1, 0)) R(0, 0, 1, 16, OUT); if (!same(1, 0)) R(15, 0, 1, 16, OUT);
+        if (!same(0, 1)) {
+          R(0, 11, 16, 4, '#8a8e7a'); R(0, 11, 16, 1, '#a8ac98'); R(0, 15, 16, 1, OUT);
+          let l = x, rr = x;
           while (map.tiles[y][l - 1] === T.AMMO) l--;
           while (map.tiles[y][rr + 1] === T.AMMO) rr++;
-          if (below) {
-            g.fillStyle = '#8a8e7a'; g.fillRect(px, py + TILE - 8, TILE, 8);
-            if (x === Math.floor((l + rr) / 2)) { g.fillStyle = '#4a5058'; g.fillRect(px + 4, py + 6, TILE - 8, TILE - 6); g.fillStyle = '#e8c040'; g.fillRect(px + 6, py + 2, TILE - 12, 4); }
-          }
-          break;
+          if (x === Math.floor((l + rr) / 2)) { box(2, 2, 12, 13, '#4a5058'); R(3, 3, 10, 1, '#6c737c'); R(7, 3, 1, 11, '#2e3238'); box(3, 0, 10, 3, '#e8c040', '#5c4a10'); R(9, 8, 2, 2, '#c4cad4'); }
         }
+        break;
       }
     }
   }
 
-  // 건물 외관 (지붕 + 정면 벽 + 문)
+  // ── 3) 건물 외관 (지붕 + 정면 벽 + 문) ──
+  const G = (x: number, y: number, w: number, h: number, col: string) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
   for (const b of map.buildings) {
     const x0 = b.x0 * TILE, y0 = b.y0 * TILE, wpx = (b.x1 - b.x0 + 1) * TILE;
     const facadeTop = (b.y1 - 1) * TILE;
     const bottom = (b.y1 + 1) * TILE;
-    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x0 + 6, y0 + 8, wpx, bottom - y0);
-    g.fillStyle = '#e8dcc0'; g.fillRect(x0, facadeTop, wpx, bottom - facadeTop);
-    g.fillStyle = '#c8b898'; g.fillRect(x0, bottom - 4, wpx, 4);
+    G(x0 + 6, y0 + 8, wpx, bottom - y0, 'rgba(0,0,0,0.18)');
+    // 정면 벽
+    G(x0, facadeTop, wpx, bottom - facadeTop, OUT);
+    G(x0 + P, facadeTop, wpx - 2 * P, bottom - facadeTop - P, '#ece2c8');
+    G(x0 + P, bottom - 8 * P, wpx - 2 * P, 7 * P, '#7d9070'); G(x0 + P, bottom - 8 * P, wpx - 2 * P, P, '#56684c');
+    G(x0 + P, bottom - 3 * P, wpx - 2 * P, 2 * P, '#5c564e');
     for (let x = b.x0; x <= b.x1; x++) {
       if (b.door.some(([dx]) => dx === x) || x === b.x0 || x === b.x1) continue;
       if ((x - b.x0) % 2 === 1) {
-        g.fillStyle = '#5a7a9a'; g.fillRect(x * TILE + 6, facadeTop + 10, TILE - 12, 18);
-        g.fillStyle = '#a8c8e8'; g.fillRect(x * TILE + 8, facadeTop + 12, TILE - 16, 6);
+        const wx = x * TILE + 2 * P, wy = facadeTop + 5 * P;
+        G(wx, wy, 12 * P, 11 * P, OUT); G(wx + P, wy + P, 10 * P, 9 * P, '#6a9cc8');
+        G(wx + P, wy + P, 10 * P, 3 * P, '#a8d0f0'); G(wx + 2 * P, wy + 2 * P, 3 * P, P, '#e8f6ff');
+        G(wx + 5 * P + P / 2, wy + P, P, 9 * P, '#f4f2ea'); G(wx + P, wy + 5 * P, 10 * P, P, '#f4f2ea');
+        G(wx - P, wy + 11 * P, 14 * P, P, OUT); G(wx - P, wy + 10 * P, 14 * P, P, '#c4cad4');
       }
     }
     const dx0 = Math.min(...b.door.map((d) => d[0])) * TILE;
     const dx1 = (Math.max(...b.door.map((d) => d[0])) + 1) * TILE;
-    g.fillStyle = '#5a3e2a'; g.fillRect(dx0 + 3, facadeTop + 14, dx1 - dx0 - 6, bottom - facadeTop - 14);
-    g.fillStyle = '#8a6040'; g.fillRect(dx0 + 6, facadeTop + 18, dx1 - dx0 - 12, bottom - facadeTop - 20);
-    g.fillStyle = '#f2c230'; g.fillRect(dx1 - 12, facadeTop + 38, 3, 4);
-    const roofBottom = facadeTop + 4;
-    g.fillStyle = b.roof; g.fillRect(x0 - 4, y0, wpx + 8, roofBottom - y0);
-    g.fillStyle = shade(b.roof, -25);
-    for (let y = y0 + 10; y < roofBottom - 4; y += 12) g.fillRect(x0 - 4, y, wpx + 8, 2);
-    g.fillStyle = shade(b.roof, -45); g.fillRect(x0 - 4, roofBottom - 6, wpx + 8, 6);
-    if (season === 'winter') {
-      g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(x0 - 4, y0, wpx + 8, Math.min(26, (roofBottom - y0) * 0.4));
-      g.fillStyle = 'rgba(255,255,255,0.6)';
-      for (let x = x0; x < x0 + wpx; x += 18) g.fillRect(x, y0 + 24, 10, 6);
+    const dTop = facadeTop + 6 * P;
+    G(dx0 + P, dTop, dx1 - dx0 - 2 * P, bottom - dTop, OUT);
+    G(dx0 + 2 * P, dTop + P, dx1 - dx0 - 4 * P, bottom - dTop - P, '#6e4826');
+    G(dx0 + 3 * P, dTop + 2 * P, dx1 - dx0 - 6 * P, bottom - dTop - 3 * P, '#a9733f');
+    G(dx0 + 3 * P, dTop + 2 * P, dx1 - dx0 - 6 * P, P, '#cf9a62');
+    G((dx0 + dx1) / 2 - P / 2, dTop + 2 * P, P, bottom - dTop - 3 * P, '#6e4826');
+    G(dx1 - 6 * P, dTop + 12 * P, 2 * P, 2 * P, '#f0d060');
+    G(dx0, bottom - P, dx1 - dx0, P, '#8a8478');
+    // 지붕: 기왓장 줄무늬 + 처마 그림자
+    const roofBottom = facadeTop + 2 * P;
+    const rx = x0 - 2 * P, rw = wpx + 4 * P;
+    G(rx, y0, rw, roofBottom - y0, OUT);
+    G(rx + P, y0 + P, rw - 2 * P, roofBottom - y0 - 2 * P, b.roof);
+    G(rx + P, y0 + P, rw - 2 * P, P, shade(b.roof, 40));
+    for (let yy = y0 + 6 * P, i = 0; yy < roofBottom - 4 * P; yy += 6 * P, i++) {
+      G(rx + P, yy, rw - 2 * P, P, shade(b.roof, -28));
+      for (let xx = rx + P + (i % 2 ? 8 * P : 0); xx < rx + rw - 2 * P; xx += 16 * P) G(xx, yy - 5 * P, P, 5 * P, shade(b.roof, -18));
     }
+    G(rx + P, roofBottom - 4 * P, rw - 2 * P, 3 * P, shade(b.roof, -48));
+    G(rx + P, roofBottom - 4 * P, rw - 2 * P, P, shade(b.roof, -70));
+    if (winter) {
+      const sh = Math.min(13 * P, Math.floor((roofBottom - y0) * 0.4 / P) * P);
+      G(rx + P, y0 + P, rw - 2 * P, sh, '#f8fbff');
+      for (let xx = rx + 3 * P; xx < rx + rw - 6 * P; xx += 9 * P) G(xx, y0 + P + sh, 5 * P, 2 * P + ((xx / P) % 2) * P, '#f8fbff');
+      G(rx + P, y0 + P + sh - P, rw - 2 * P, P, '#d4e2ee');
+    }
+    // 현판
     g.font = 'bold 15px "Galmuri11", sans-serif';
     g.textAlign = 'center';
-    const tw = g.measureText(b.name).width + 18;
-    const cx = x0 + wpx / 2, cy = (y0 + roofBottom) / 2;
-    g.fillStyle = 'rgba(40,30,20,0.8)'; g.fillRect(cx - tw / 2, cy - 12, tw, 24);
+    const tw = Math.ceil((g.measureText(b.name).width + 20) / (2 * P)) * 2 * P;
+    const cx = x0 + wpx / 2, cy = Math.round((y0 + roofBottom) / 2 / P) * P;
+    G(cx - tw / 2, cy - 7 * P, tw, 13 * P, OUT);
+    G(cx - tw / 2 + P, cy - 6 * P, tw - 2 * P, 11 * P, '#f8f4e4');
+    G(cx - tw / 2 + 2 * P, cy - 5 * P, tw - 4 * P, 9 * P, '#3a5a40');
     g.fillStyle = '#fff6dc'; g.fillText(b.name, cx, cy + 5);
   }
 
@@ -893,8 +1160,13 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
       if (!map.indoor) lx = cx + 2.2 * TILE;
     }
     const tw = g.measureText(d.sign).width + 12;
-    g.fillStyle = map.indoor ? 'rgba(40,48,72,0.85)' : 'rgba(30,70,40,0.9)';
-    g.fillRect(lx - tw / 2, cy - 10, tw, map.indoor ? 14 : 17);
+    // 안내판: 검은 테두리 + 흰 띠 + 색 판 (실내 남색 / 야외 초록)
+    const ph = map.indoor ? 14 : 18, pw = Math.ceil(tw / 2) * 2;
+    const pxl = Math.round((lx - pw / 2) / 2) * 2, pyl = Math.round((cy - 10) / 2) * 2;
+    g.fillStyle = OUT; g.fillRect(pxl - 4, pyl - 4, pw + 8, ph + 8);
+    g.fillStyle = '#f8f4e4'; g.fillRect(pxl - 2, pyl - 2, pw + 4, ph + 4);
+    g.fillStyle = map.indoor ? '#34467e' : '#2f6a3c';
+    g.fillRect(pxl, pyl, pw, ph);
     g.fillStyle = '#ffffff';
     g.fillText(d.sign, lx, cy + (map.indoor ? 2 : 3));
   }
