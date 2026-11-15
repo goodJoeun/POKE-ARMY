@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGame } from '../state/store';
 import { TEXT_SPEED, useSettings } from '../state/settings';
 import { fmt } from '../engine/text';
-import { DREAMS, type DreamLine } from '../data/story';
+import { DREAMS, DREAM_FADED, type DreamLine } from '../data/story';
 
 /**
  * 꿈: 별의 언덕 — 하루 끝(결산) 전에 보는 짧은 장면.
@@ -12,10 +12,12 @@ import { DREAMS, type DreamLine } from '../data/story';
 export default function Dream() {
   const s = useGame();
   const dream = DREAMS[s.day];
+  // 기억이 30 이하면 꿈이 흐려진다 (첫날 꿈과 지라치가 이름을 밝히는 밤은 그대로)
+  const faded = s.memory <= 30 && s.day > 1 && s.day !== 11;
   const lines = useMemo<(DreamLine & { scene: 'room' | 'hill' })[]>(() => [
     ...(dream?.room ?? []).map((l) => ({ ...l, scene: 'room' as const })),
-    ...(dream?.hill ?? []).map((l) => ({ ...l, scene: 'hill' as const })),
-  ], [dream]);
+    ...((faded ? DREAM_FADED : dream?.hill) ?? []).map((l) => ({ ...l, scene: 'hill' as const })),
+  ], [dream, faded]);
   const [idx, setIdx] = useState(0);
   const [typed, setTyped] = useState(0);
   const ctx = { branch: s.branch, name: s.name, day: s.day };
@@ -104,7 +106,7 @@ export default function Dream() {
   }, []);
 
   if (!line) return null;
-  const speaker = line.who === 'voice' ? '??? (빛)' : line.who === 'mom' ? '엄마 (아주 먼 곳에서)' : line.who === 'me' ? s.name : '';
+  const speaker = line.who === 'voice' ? '??? (빛)' : line.who === 'jirachi' ? '지라치' : line.who === 'mom' ? '엄마 (아주 먼 곳에서)' : line.who === 'me' ? s.name : '';
   return (
     <div className="dream-scene" onClick={advance}>
       <canvas ref={ref} className="dream-canvas" />

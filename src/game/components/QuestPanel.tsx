@@ -8,7 +8,7 @@ import { fmtTime } from '../data/branches';
 import { fmt } from '../engine/text';
 import { memberFullName, memberLook, memberName, npcWhere } from '../engine/whereabouts';
 import MonsterCanvas from './MonsterCanvas';
-import { CHAPTERS, CLUES, STORY_MISSIONS, missionState, nextStoryMission } from '../data/story';
+import { CHAPTERS, CLUES, STORY_MISSIONS, missionHint, missionState, nextStoryMission } from '../data/story';
 
 /** 퀘스트 창 초상화 + 이름 (포켓몬을 몰라도 누군지 알아볼 수 있게) */
 function Face({ branch, who, day }: { branch: BranchId; who: string; day: number }) {
@@ -59,7 +59,7 @@ export function QuestTracker({ onOpen }: { onOpen: () => void }) {
   const mc = s.mealCheck;
   const items: { title: string; next: string; done?: boolean }[] = [];
   const story = s.clues.length > 0 ? nextStoryMission(s) : null;
-  if (story) items.push({ title: `📖 ${story.chapter}장 · ${story.title}`, next: story.hint });
+  if (story) items.push({ title: `📖 ${story.chapter}장 · ${story.title}`, next: missionHint(story, s) });
   const ate = mc && s.daily.includes(`meal_${mc.meal}`);
   if (mc && !ate) {
     const left = mc.targets.filter((id) => !mc.asked.includes(id));
@@ -278,7 +278,7 @@ function StoryTab() {
     <div className="ql-body">
       <div className="story-head">
         <b>📖 별이 지기 전에</b>
-        <span className="hud-dim"> · 별 조각 {'★'.repeat(s.stars.length)}{'☆'.repeat(7 - s.stars.length)} · 🌟 기억 {s.memory} · 떡밥 {s.clues.length}/{CLUES.length}</span>
+        <span className="hud-dim"> · 별 조각 {'★'.repeat(s.stars.length)}{'☆'.repeat(7 - s.stars.length)} · 🌟 기억 {s.memory} · 실마리 {s.clues.length}/{CLUES.length}</span>
       </div>
       <p className="hud-dim ql-hint">별이 지기 전(12일차 밤)까지 부대 곳곳에서 기억의 실마리를 모아 인간으로 돌아갈 방법을 찾자. 지도(M)와 화면의 ✨ 표시가 단서가 있는 곳이다.</p>
       {CHAPTERS.map((ch) => {
@@ -295,7 +295,7 @@ function StoryTab() {
                   const st = missionState(m, s);
                   return (
                     <li key={m.id} className={st === 'done' ? 'done' : st === 'open' ? 'cur' : ''}>
-                      {st === 'done' ? '✓' : st === 'open' ? '▶' : '🔒'} {m.title} — <span className="hud-dim">{st === 'done' ? '단서 획득' : st === 'open' ? m.hint : `${m.from}일차${m.nightFrom ? ' 밤' : ''}부터`}</span>
+                      {st === 'done' ? '✓' : st === 'open' ? '▶' : st === 'missed' ? '✕' : '🔒'} {m.title} — <span className="hud-dim">{st === 'done' ? (m.clue ? '단서 획득' : '완료') : st === 'open' ? missionHint(m, s) : st === 'missed' ? '지나간 밤의 일' : s.day < m.from ? `${m.from}일차${m.nightFrom ? ' 밤' : ''}부터` : '단서가 더 필요하다'}</span>
                     </li>
                   );
                 })}

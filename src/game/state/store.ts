@@ -202,6 +202,8 @@ interface Store extends Persist {
   gainStar: (n: number) => void;
   /** 오늘 밤 꿈(별의 언덕)을 다 봤다 */
   finishDream: () => void;
+  /** 메인 스토리: 단서가 아닌 진행(추리 정리·보스·최종 선택 등) 기록 + 장(章) 완료 확인 */
+  storyFlag: (flag: string) => void;
 }
 
 const zeroAff = (): Record<NpcId, number> =>
@@ -888,7 +890,7 @@ export const useGame = create<Store>((set, get) => ({
     get().log(`🔍 단서 「${def.title}」를 기억의 실마리에 적었다.`);
     // 장(章) 완료
     const ch = CHAPTERS.find((c) => c.n === def.chapter);
-    if (ch && chapterDone(ch.n, clues) && !s.flags[`story_ch${ch.n}`]) {
+    if (ch && chapterDone(ch.n, { clues, flags: get().flags }) && !s.flags[`story_ch${ch.n}`]) {
       get().applyEffects({ flag: `story_ch${ch.n}` }, undefined, true);
       get().toast(`📖 ${ch.n}장 「${ch.title}」 완료! 실마리 ${clues.length}/${CLUES.length}`, 'good');
       get().log(`📖 ${ch.n}장 「${ch.title}」의 단서를 모두 모았다.`);
@@ -902,6 +904,18 @@ export const useGame = create<Store>((set, get) => ({
     set({ stars: [...s.stars, n].sort((a, b) => a - b) });
     get().toast(`✨ 별 조각을 얻었다! (${s.stars.length + 1}/7)`, 'good');
     get().log(`✨ 별 조각 ${n}번째를 손에 넣었다.`);
+  },
+
+  storyFlag: (flag) => {
+    if (get().flags[flag]) return;
+    set({ flags: { ...get().flags, [flag]: true } });
+    const s = get();
+    for (const ch of CHAPTERS) {
+      if (s.flags[`story_ch${ch.n}`] || !chapterDone(ch.n, s)) continue;
+      set({ flags: { ...get().flags, [`story_ch${ch.n}`]: true } });
+      get().toast(`📖 ${ch.n}장 「${ch.title}」 완료!`, 'good');
+      get().log(`📖 ${ch.n}장 「${ch.title}」을(를) 마쳤다.`);
+    }
   },
 
   finishDream: () => {
