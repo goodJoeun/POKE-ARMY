@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Choice, Dialogue, LineWho, MonsterLook, NpcId, SpotId } from '../types';
+import type { Choice, Dialogue, Line, LineWho, MonsterLook, NpcId, SpotId } from '../types';
 import { extraLook, extrasForDay } from '../data/extras';
 import { useGame, presentNpcs, questSlowActive, questOffers, dialogueById, PATROL_SPOTS } from '../state/store';
 import { BRANCHES, FACILITY_NAME, STORE_NAME, TOTAL_DAYS, fmtTime, rankIdxForDay, seasonForDay } from '../data/branches';
@@ -839,68 +839,79 @@ export default function World() {
     if (key === 'final') finalStar(storyCtx);
   };
 
-  /** 🌙 소등 후 잠들어 있다가 → 근무 시간에 깨어난다 */
+  /** 🌙 내가 침상에 누워 있는지 (소등 후 ~ 근무자가 깨워서 일어날 때까지) */
+  const meInBed = useRef(false);
+  /** 내 침상에 눕는다 (1생활관 위쪽 줄 3번 침상) */
+  const lieInBed = useCallback(() => {
+    const p = runtime.player;
+    p.map = 'room1'; p.x = 3.5; p.y = bedY('top'); p.dir = 'down'; p.moving = false;
+    keys.current = {};
+    meInBed.current = true;
+  }, []);
+  /** 🌙 소등 후 잠들어 있다가 → 근무 시간에 깨어난다 (깨우는 말을 듣고 나서야 침상에서 나온다) */
   const nightWake = useCallback(() => {
     const st = useGame.getState();
     const nd = st.nightDuty;
     if (!nd || nd.phase !== 'sleep') return;
     useGame.setState({ minute: nd.kind === 'guard' ? nd.shiftStart - 20 : nd.shiftStart - 2 });
-    const p = runtime.player;
-    p.map = 'room1'; p.x = 3.5; p.y = 4.5; p.dir = 'right'; p.moving = false;
-    keys.current = {};
-    placeAt(nd.prev, 'room1', 4.5, 4.5, 'left');
+    lieInBed();
+    placeAt(nd.prev, 'room1', 4.5, 4.2, 'left'); // 내 침상 머리맡 통로에 쪼그려 앉아 깨운다
     st.setNightDuty({ phase: 'woken' });
     const sp = speakerOf(nd.prev);
     const prevName = memberName(st.branch, nd.prev);
-    if (nd.kind === 'watch') {
-      const nextName = memberName(st.branch, nd.next);
+    /** 누운 채로 깨우는 말을 듣고 → 침상에서 나와 통로에 선 뒤 → 나머지 대화 */
+    const wakeThen = (lines: Line[], onDone: () => void) => {
       setOverlay({
         type: 'dialogue',
-        script: { npc: sp.npc, custom: sp.custom, lines: [
+        script: { npc: sp.npc, custom: sp.custom, lines: lines.slice(0, 2) },
+        onDone: () => {
+          const p = runtime.player;
+          meInBed.current = false;
+          p.map = 'room1'; p.x = 3.5; p.y = 4.5; p.dir = 'right'; p.moving = false;
+          keys.current = {};
+          setOverlay({ type: 'dialogue', script: { npc: sp.npc, custom: sp.custom, lines: lines.slice(2) }, onDone });
+        },
+      });
+    };
+    if (nd.kind === 'watch') {
+      const nextName = memberName(st.branch, nd.next);
+      wakeThen([
           { who: 'narr', text: '(누군가 어깨를 조심스럽게 흔든다…) 23:58. 생활관은 숨소리뿐이다.' },
           { who: sp.who, text: '(속삭이며) {me}… {me}. 일어나. 불침번 근무 시간이다.' },
-          { who: 'me', text: '(비몽사몽) …네. 일어났습니다.' },
+          { who: 'me', text: '(비몽사몽, 모포를 걷고 침상에서 내려온다) …네. 일어났습니다.' },
           { who: sp.who, text: `근무 인수인계. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기. 다음 근무자는 ${nextName}, 00:50에 깨워서 교대해.` },
           { who: 'me', text: '(작게) 네, 수고하셨습니다.' },
           { who: 'narr', text: `${josa(prevName, '이', '가')} 조용히 자기 침상으로 돌아간다. 깨어 있는 건 이제 나, 그리고 지휘통제실의 당직병과 당직사령뿐.` },
-        ] },
-        onDone: () => {
+        ], () => {
           const s2 = useGame.getState();
           s2.setNightDuty({ phase: 'shift' });
           useGame.setState({ minute: Math.max(s2.minute, s2.nightDuty!.shiftStart) });
           s2.addTip('불침번: 취침 시간에 생활관을 지키는 근무. 이전 근무자가 깨우면 인수인계(특이사항·인원·물품)를 받고, 끝나기 10분 전쯤 다음 근무자를 깨워 교대한다.');
           s2.startMinigame({ game: 'night', title: '🌙 불침번 근무 (00:00~01:00)', returnTo: 'world' });
-        },
       });
     } else {
       const iAmJunior = rankIdxForDay(st.day) <= 1;
-      setOverlay({
-        type: 'dialogue',
-        script: { npc: sp.npc, custom: sp.custom, lines: iAmJunior ? [
+      wakeThen(iAmJunior ? [
           { who: 'narr', text: '(누군가 발끝으로 다가와 이불을 툭툭 친다…) 23:40.' },
           { who: sp.who, text: '(속삭이며) 야, {me}. 일어나. 위병소 근무 가자. …쉿, 조용히. 다른 애들 깬다.' },
-          { who: 'me', text: '(작게) …네, 일어났습니다.' },
+          { who: 'me', text: '(모포를 걷고 조용히 침상에서 내려온다) …네, 일어났습니다.' },
           { who: sp.who, text: '전투복 입고 나와. 00시 교대니까 늦지 않게 앞장서. 내가 뒤따라간다.' },
           { who: 'narr', text: `[사수 ${josa(prevName, '과', '와')} 함께 위병소 초소로 가자. 깨어 있는 건 당직병과 당직사령뿐이다.]` },
         ] : [
           { who: 'narr', text: '(누군가 조심스럽게 어깨를 흔든다…) 23:40.' },
           { who: sp.who, text: '(속삭이며) {me} {myrank}님… 근무 시간입니다.' },
-          { who: 'me', text: '(작게) 어, 그래. 조용히 준비하고 따라와.' },
+          { who: 'me', text: '(침상에서 내려오며, 작게) 어, 그래. 조용히 준비하고 따라와.' },
           { who: 'narr', text: `[부사수 ${josa(prevName, '을', '를')} 데리고 위병소 초소로 가자. 깨어 있는 건 당직병과 당직사령뿐이다.]` },
-        ] },
-        onDone: () => {
+        ], () => {
           useGame.getState().setNightDuty({ phase: 'toPost' });
           useGame.getState().addTip('야간 경계근무는 사수·부사수 2인 1조. 자는 인원이 깨지 않게 조용히 일어나 함께 이동하고, 초소에서 이전 근무자와 교대한다.');
-        },
       });
     }
-  }, [placeAt, speakerOf, setOverlay]);
+  }, [placeAt, speakerOf, setOverlay, lieInBed]);
 
   useEffect(() => {
     if (nightPhase === 'sleep') {
-      const p = runtime.player;
-      p.map = 'room1'; p.x = 3.5; p.y = 4.5; p.dir = 'up'; p.moving = false;
-      keys.current = {};
+      lieInBed();
       const tm = setTimeout(() => nightWake(), 3200);
       return () => clearTimeout(tm);
     }
@@ -2777,7 +2788,11 @@ export default function World() {
           },
         });
       }
-      ents.push({
+      // 🌙 침상에 누워 있는 나 (근무자가 깨우기 전까지)
+      const meLying = meInBed.current && (st.nightDuty?.phase === 'sleep' || st.nightDuty?.phase === 'woken');
+      if (!meLying) meInBed.current = false;
+      if (meLying) ents.push({ y: p.y, draw: () => drawSleeper(g, look, p.x, p.y, t, true) });
+      else ents.push({
         y: p.y,
         draw: () => {
           const fx = fxOf('me', p.dir, p.x, p.y);
