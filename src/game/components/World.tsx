@@ -30,6 +30,11 @@ import { NIGHT_STAR_LINES, STORY_MISSIONS, missionState } from '../data/story';
 import { QuestLog, QuestTracker } from './QuestPanel';
 import MapView from './MapView';
 import TouchPad from './TouchPad';
+import { ResistMeter, StoryBackdrop } from './StoryBackdrop';
+import {
+  SLIPPER_LOOK, buddyForgets, josa, finalStar, libraryLightsOut, phoneCallLines, roofOptions, slipperBoss, slipperCorridor,
+  storyExtraOptions, storyNpcOptions, storySpotOptions, type ResistOpts, type StoryBg, type StoryCtx,
+} from './storyEvents';
 
 interface NpcRt {
   map: MapId;
@@ -58,7 +63,8 @@ interface ExtraRt extends NpcRt {
 
 
 type Overlay =
-  | { type: 'dialogue'; script: DialogueScript; onChoice?: (c: Choice) => void; onDone?: () => void }
+  | { type: 'dialogue'; script: DialogueScript; onChoice?: (c: Choice) => void; onDone?: () => void; bg?: StoryBg; nonce?: number }
+  | { type: 'resist'; opts: ResistOpts; onDone: (ok: boolean) => void }
   | { type: 'menu'; title: string; subtitle?: string; options: MenuOption[] }
   | { type: 'notebook' }
   | { type: 'quests' }
@@ -68,7 +74,7 @@ type Overlay =
 interface Interactable {
   key: string;
   label: string;
-  kind: 'event' | 'npc' | 'spot' | 'extra' | 'seat' | 'duty';
+  kind: 'event' | 'npc' | 'spot' | 'extra' | 'seat' | 'duty' | 'story';
   extra?: string;
   npc?: NpcId;
   spot?: SpotId;
@@ -100,6 +106,12 @@ const EXTRA_MEAL_SEAT: Record<string, [number, number]> = {
 };
 /** 밥 먹으러 갈 땐 길을 걸어가지 않고 식당 입구(안쪽)에 바로 도착한다 */
 const MESS_DOOR_IN: [number, number] = [6.5, 11.5];
+/** 📖 막사 2층 옥상 철문 (복도 위쪽 벽, 계단 옆) · 구령대 위 별 */
+const ROOF_DOOR: [number, number] = [22, 0];
+const STAGE_STAR: [number, number] = [20.5, 16.4];
+/** 전역일: 아침 점호가 끝나고, 아직 별에게 대답하지 않았으면 구령대에 별이 있다 */
+const finalStarOn = (st: ReturnType<typeof useGame.getState>) =>
+  st.clues.length > 0 && st.day >= TOTAL_DAYS && !st.flags.f01 && st.currentEvent()?.kind === 'farewell';
 /** 내 식사 자리: 1분대 줄, 맞선임 옆 */
 const MY_MEAL_SEAT: [number, number] = [4, 3];
 /** 1분대(1생활관) 식사 행군 순서 = 계급순. 맨 앞(있는 사람 중)이 식사를 이끈다 */
@@ -263,7 +275,9 @@ function nightGoal(key: string, st: ReturnType<typeof useGame.getState>): Pos | 
 /** 함께 하는 퀘스트(동기·후임·선임과 같이 가는 부탁)가 진행 중이면 그 사람이 나와 동행한다 (집합·점호·취침 준비 때는 제외) */
 function questCompanion(key: string, st: ReturnType<typeof useGame.getState>): boolean {
   if (st.minute < 6 * 60 + 15 || st.minute >= 21 * 60 || st.rollcall || st.lateCall) return false;
-  if (!st.quests.some((q) => QUESTS[q.id]?.together && QUESTS[q.id].giver === key)) return false;
+  // 📖 잊혀 가는 이름: 기억을 되찾을 때까지 동기가 나를 따라다닌다
+  const storyBuddy = key === 'buddy' && !!st.flags.m13 && !st.flags.buddyBack;
+  if (!storyBuddy && !st.quests.some((q) => QUESTS[q.id]?.together && QUESTS[q.id].giver === key)) return false;
   const ev = st.currentEvent();
   return !(ev && !st.eventBegun && st.minute >= ev.start && ev.spot);
 }
@@ -392,7 +406,10 @@ export default function World() {
   const [fast, setFast] = useState(false);
   const fastRef = useRef(false);
 
+  const dlgSeq = useRef(0);
   const setOverlay = useCallback((o: Overlay) => {
+    // 같은 첫 줄의 대사를 이어서 다시 열어도(재도전 등) 대화창이 새로 시작되도록 번호를 붙인다
+    if (o && o.type === 'dialogue') o.nonce = ++dlgSeq.current;
     overlayRef.current = o;
     setOverlayState(o);
     useGame.getState().setBusy(o !== null);
@@ -776,6 +793,42 @@ export default function World() {
     });
   }, [overlay, rollcall, world, placeAt, setOverlay]);
 
+  /** 📖 스토리 장면이 쓰는 연결: 대화 · 이동 · 사람 배치 · 저항 게이지 */
+  const storyCtx = useMemo<StoryCtx>(() => ({
+    play: (sc) => setOverlay({ type: 'dialogue', script: sc.script, bg: sc.bg, onChoice: sc.onChoice, onDone: sc.onDone }),
+    goTo: (map, x, y, dir, then) => {
+      keys.current = {};
+      warpReq.current = { tiles: [], to: map, enterDir: dir, arrive: { x, y, dir } } as unknown as Door;
+      setTimeout(then, 560);
+    },
+    place: (key, map, x, y, dir) => placeAt(key, map, x, y, dir),
+    near: (key, d) => {
+      const e = entityOf(key);
+      const p = runtime.player;
+      return !!e && e.map === p.map && Math.hypot(e.x - p.x, e.y - p.y) <= d;
+    },
+    resist: (opts, done) => { keys.current = {}; setOverlay({ type: 'resist', opts, onDone: done }); },
+    flash: () => setFlash(true),
+  }), [setOverlay, placeAt, entityOf]);
+  const storyCtxRef = useRef(storyCtx);
+  useEffect(() => { (window as unknown as Record<string, unknown>).__story = { ctx: storyCtx, storySpotOptions, storyNpcOptions, storyExtraOptions, roofOptions, slipperBoss, finalStar, buddyForgets }; }, [storyCtx]); // 개발용 디버그 핸들
+  const m13Tried = useRef(false);
+  const libHint = useRef(0);
+  storyCtxRef.current = storyCtx;
+  /** 슬리퍼(가짜 당직부관)가 서 있는 곳 (사건 중에만) */
+  const slipper = useRef<{ map: MapId; x: number; y: number } | null>(null);
+  /** 📖 스토리 상호작용 (옥상 철문 · 구령대의 별) */
+  const storyActRef = useRef<(key: string) => void>(() => {});
+  storyActRef.current = (key: string) => {
+    const st = useGame.getState();
+    if (key === 'roof') {
+      if (!st.flags.roof) { setOverlay({ type: 'dialogue', script: { lines: [{ who: 'narr', text: '옥상으로 가는 철문. 굳게 잠겨 있다.' }] } }); return; }
+      setOverlay({ type: 'menu', title: '🌌 막사 옥상', subtitle: '철문 너머로 밤하늘이 보인다', options: [...roofOptions(storyCtx), { label: '닫기', onSelect: () => setOverlay(null) }] });
+      return;
+    }
+    if (key === 'final') finalStar(storyCtx);
+  };
+
   /** 🌙 소등 후 잠들어 있다가 → 근무 시간에 깨어난다 */
   const nightWake = useCallback(() => {
     const st = useGame.getState();
@@ -799,7 +852,7 @@ export default function World() {
           { who: 'me', text: '(비몽사몽) …네. 일어났습니다.' },
           { who: sp.who, text: `근무 인수인계. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기. 다음 근무자는 ${nextName}, 00:50에 깨워서 교대해.` },
           { who: 'me', text: '(작게) 네, 수고하셨습니다.' },
-          { who: 'narr', text: `${prevName}이(가) 조용히 자기 침상으로 돌아간다. 깨어 있는 건 이제 나, 그리고 지휘통제실의 당직병과 당직사령뿐.` },
+          { who: 'narr', text: `${josa(prevName, '이', '가')} 조용히 자기 침상으로 돌아간다. 깨어 있는 건 이제 나, 그리고 지휘통제실의 당직병과 당직사령뿐.` },
         ] },
         onDone: () => {
           const s2 = useGame.getState();
@@ -818,12 +871,12 @@ export default function World() {
           { who: sp.who, text: '(속삭이며) 야, {me}. 일어나. 위병소 근무 가자. …쉿, 조용히. 다른 애들 깬다.' },
           { who: 'me', text: '(작게) …네, 일어났습니다.' },
           { who: sp.who, text: '전투복 입고 나와. 00시 교대니까 늦지 않게 앞장서. 내가 뒤따라간다.' },
-          { who: 'narr', text: `[사수 ${prevName}와(과) 함께 위병소 초소로 가자. 깨어 있는 건 당직병과 당직사령뿐이다.]` },
+          { who: 'narr', text: `[사수 ${josa(prevName, '과', '와')} 함께 위병소 초소로 가자. 깨어 있는 건 당직병과 당직사령뿐이다.]` },
         ] : [
           { who: 'narr', text: '(누군가 조심스럽게 어깨를 흔든다…) 23:40.' },
           { who: sp.who, text: '(속삭이며) {me} {myrank}님… 근무 시간입니다.' },
           { who: 'me', text: '(작게) 어, 그래. 조용히 준비하고 따라와.' },
-          { who: 'narr', text: `[부사수 ${prevName}을(를) 데리고 위병소 초소로 가자. 깨어 있는 건 당직병과 당직사령뿐이다.]` },
+          { who: 'narr', text: `[부사수 ${josa(prevName, '을', '를')} 데리고 위병소 초소로 가자. 깨어 있는 건 당직병과 당직사령뿐이다.]` },
         ] },
         onDone: () => {
           useGame.getState().setNightDuty({ phase: 'toPost' });
@@ -873,6 +926,12 @@ export default function World() {
           s2.log('✨ 야간 근무 중 의문의 별빛을 만났다.');
         },
       });
+      return;
+    }
+    if (key === 'duty_post' && st.day === 11 && st.clues.length > 0 && !st.flags.b01) {
+      const sp = world.spots.post;
+      slipper.current = { map: sp.map, x: sp.x + 0.5, y: sp.y - 2.2 };
+      slipperBoss(storyCtx, () => { slipper.current = null; nightActRef.current('duty_post'); });
       return;
     }
     if (key === 'duty_post') {
@@ -1116,6 +1175,10 @@ export default function World() {
       // 근무 중엔 다른 일은 하지 않는다 (다들 자고 있다)
       return null;
     }
+    // 📖 막사 2층 계단 옆 옥상 철문
+    if (p.map === 'hq2' && dist(ROOF_DOOR[0] + 0.5, ROOF_DOOR[1] + 1.5) < 1.3 && st.clues.length > 0) return { key: 'roof', kind: 'story', label: st.flags.roof ? '옥상으로 (철문)' : '옥상 철문' };
+    // 📖 전역일: 연병장 구령대에 내려온 별
+    if (finalStarOn(st) && p.map === 'outdoor' && dist(STAGE_STAR[0], STAGE_STAR[1] + 1.6) < 2.6) return { key: 'final', kind: 'story', label: '✨ 구령대에 내려온 별' };
     if (ev && !st.eventBegun && ev.spot && (st.minute >= ev.start || ev.kind === 'farewell')) {
       const sp = world.spots[ev.spot];
       if (sp.map === p.map && dist(sp.x + 0.5, sp.y + 0.5) < 2.2) {
@@ -1175,6 +1238,8 @@ export default function World() {
       setOverlay({ type: 'dialogue', script: { lines: [{ who: 'narr', text: '(곤히 자고 있다… 깨우지 말자.)' }] } });
       return;
     }
+    // 📖 10일차: 동기가 내 이름을 잊었다
+    if (id === 'buddy' && st.day >= 10 && st.day < TOTAL_DAYS && buddyForgets(storyCtx)) return;
     const name = npcDisplayName(st.branch, id, st.day);
     const q = st.questStepAt({ npc: id });
     if (q) {
@@ -1229,7 +1294,7 @@ export default function World() {
       });
     };
     const already = st.talked.includes(id);
-    const opts: MenuOption[] = [];
+    const opts: MenuOption[] = [...storyNpcOptions(id, storyCtx)];
     for (const of of questOffers(st).filter((o) => o.open && o.giver === id)) {
       const d = dialogueById(of.dialogueId);
       if (!d) continue;
@@ -1328,6 +1393,7 @@ export default function World() {
         },
       });
     }
+    opts.push(...storySpotOptions(id, storyCtx));
     const act = (label: string, hint: string, mins: number, eff: Parameters<typeof st.applyEffects>[0], text: string, dailyKey?: string, disabled = false) => {
       opts.push({
         label, hint, disabled: disabled || (dailyKey ? st.daily.includes(dailyKey) : false),
@@ -1347,7 +1413,16 @@ export default function World() {
         title = '🛏️ 내 침상';
         act('침상에서 쉬기', '30분 · 체력+12', 30, { hp: 12, mental: 2 }, '모포를 덮고 잠시 눈을 붙였다. 개운하다.', undefined, !free);
         const phoneOk = m >= 18 * 60 && m < 21 * 60;
-        act('휴대폰으로 가족과 통화', phoneOk ? '20분 · 멘탈+10 (1일 1회)' : '18:00~21:00 — 지금은 그걸 쓸 때가 아니다!', 20, { mental: 10, memory: st.clues.length ? 3 : 0 }, '"엄마, 나… 포켓몬 됐어." "밥은 잘 먹고?" 역시 엄마는 엄마다.', 'phone', !phoneOk);
+        const momLines = phoneCallLines();
+        if (momLines && phoneOk && !st.daily.includes('phone')) {
+          opts.push({ label: '📱 엄마에게 전화하기', hint: '20분 · 📖', onSelect: () => {
+            const s2 = useGame.getState();
+            s2.spend(20); s2.markDaily('phone');
+            s2.applyEffects({ mental: 10, memory: 5 }, '엄마와 통화');
+            s2.log('📱 엄마: "가기 싫으면 싫다고 해도 돼. 근데 엄마는, 네가 해낼 거 알아."');
+            setOverlay({ type: 'dialogue', script: { lines: momLines } });
+          } });
+        } else act('휴대폰으로 가족과 통화', phoneOk ? '20분 · 멘탈+10 (1일 1회)' : '18:00~21:00 — 지금은 그걸 쓸 때가 아니다!', 20, { mental: 10, memory: st.clues.length ? 3 : 0 }, '"엄마, 나… 포켓몬 됐어." "밥은 잘 먹고?" 역시 엄마는 엄마다.', 'phone', !phoneOk);
         const inv = Object.entries(st.inventory).filter(([, n]) => n > 0);
         opts.push({
           label: '간식 먹기', hint: inv.length ? `${inv.length}종 보유` : '없음', disabled: inv.length === 0,
@@ -1599,12 +1674,21 @@ export default function World() {
     setOverlay({ type: 'menu', title, options: opts });
   }, [setOverlay]);
 
-  const openExtra = useCallback((id: string) => {
+  const openExtraRef = useRef<(id: string, skipStory?: boolean) => void>(() => {});
+  const openExtra = useCallback((id: string, skipStory = false) => {
     const def = extraDefs.find((d) => d.id === id);
     if (!def) return;
     const st = useGame.getState();
     const ex = extras.current[id];
     const storyOn = st.clues.length > 0;
+    const sopts = skipStory || (ex && extraAsleep(id, ex, st.minute)) ? [] : storyExtraOptions(id, storyCtx);
+    if (sopts.length) {
+      setOverlay({
+        type: 'menu', title: `${def.name} ${def.title}`,
+        options: [...sopts, { label: '이야기하기', onSelect: () => openExtraRef.current(id, true) }, { label: '그만두기', onSelect: () => setOverlay(null) }],
+      });
+      return;
+    }
     if (id === 'librarian' && !(ex && extraAsleep(id, ex, st.minute))) {
       const lspeaker = { name: `${def.name} 상병`, sub: '도서관 관리병', look: extraLook(def), cap: BRANCHES[st.branch].cap as CapType };
       if (storyOn && !st.clues.includes('C-08')) {
@@ -1631,6 +1715,22 @@ export default function World() {
         : nextM.id === 'M-02' ? '…물은 얼굴을 비춘다. 거울은 거짓말을 못 하지.'
           : nextM.id === 'M-03' ? '…이름은 벽에 붙어 있다. 생일을 세는 곳에.'
             : nextM.id === 'N-01' ? '…안개는 밤에 더 짙다. 정문을 두려워하지 마라.'
+              : nextM.id === 'M-05' ? '…편지는 날짜가 없어도 도착한다. 화면 속 우체통을 열어 보거라.'
+              : nextM.id === 'M-06' ? '…물에 젖은 이름은 빨래와 함께 돌아온다. 동기와 함께 가거라.'
+              : nextM.id === 'M-07' ? '…시계도 가끔 숨을 참는다. 자정마다.'
+              : nextM.id === 'D-01' ? '…혼자 품은 의문은 무겁다. 같은 별을 본 자에게 털어놓거라.'
+              : nextM.id === 'N-02' ? '…밤의 서가는 낮과 다른 말을 한다. 빛을 거두면 들린다.'
+              : nextM.id === 'M-08' ? '…버려진 종이에도 주인이 있다. 매년 같은 문장의.'
+              : nextM.id === 'M-09' ? '…잡음 속에도 목소리가 있다. 기름 냄새 나는 방 구석에.'
+              : nextM.id === 'M-10' ? '…물은 사흘이면 마른다. 안쪽 방의 문은 열쇠를 가진 자에게 묻거라.'
+              : nextM.id === 'M-11' ? '…같은 얼굴이 해마다 웃고 있다. 그 얼굴은 지금 2생활관에 있다.'
+              : nextM.id === 'D-02' ? '…별은 높은 곳에서 더 크게 보인다. 계단 끝 철문 너머.'
+              : nextM.id === 'M-12' ? '…꿈을 먹는 자는 시계 소리를 낸다. 그리고 바닥에 동그라미를 그린다.'
+              : nextM.id === 'N-04' ? '…글자들은 아직 말을 다 하지 않았다.'
+              : nextM.id === 'M-13' ? '…잊은 것은 함께 걸은 길 위에 떨어져 있다.'
+              : nextM.id === 'D-03' ? '…일곱 개의 별, 그리고 스스로 놓는 손.'
+              : nextM.id === 'B-01' ? '…똑딱 소리가 들리면 눈을 감지 마라. 친구의 이름을 떠올려라.'
+              : nextM.id === 'F-01' ? '…마지막 별은 구령대에 내려앉는다. 네 발로 가거라.'
               : def.lines[Math.floor(Math.random() * def.lines.length)];
       useGame.getState().spend(5);
       setOverlay({ type: 'dialogue', script: { custom: lspeaker, lines: [{ who: 'npc', text: riddle }] } });
@@ -1709,6 +1809,8 @@ export default function World() {
     });
   }, [extraDefs, setOverlay]);
 
+  openExtraRef.current = openExtra;
+
   /** 내 자리에 앉아서 먹기 시작: 식사 속도를 선택지로 고른다 */
   const sitToEat = useCallback(() => {
     const st = useGame.getState();
@@ -1765,8 +1867,14 @@ export default function World() {
   const interact = useCallback(() => {
     const it = promptRef.current ?? findInteractable();
     if (!it) return;
+    // 📖 전역일: 별에게 대답하기 전엔 위병소를 나서지 않는다
+    if (it.kind === 'event' && finalStarOn(useGame.getState())) {
+      useGame.getState().toast('✨ 하늘이 밝아진다… 연병장 구령대 위로 별 하나가 내려앉았다. 먼저 가 보자.', 'alert');
+      return;
+    }
     if (it.kind === 'event') { useGame.getState().beginEvent(); return; }
     if (it.kind === 'seat') { sitToEat(); return; }
+    if (it.kind === 'story') { storyActRef.current(it.key); return; }
     if (it.kind === 'duty') { nightActRef.current(it.key); return; }
     if (it.kind === 'extra' && it.extra) { openExtra(it.extra); return; }
     if (it.kind === 'npc' && it.npc) openNpc(it.npc);
@@ -1792,6 +1900,12 @@ export default function World() {
       if (e.key === 'm' || e.key === 'M') setOverlay({ type: 'map' });
       if (e.key === 'r' || e.key === 'R') goHome();
       if (e.key === 'f' || e.key === 'F') setFast((v) => !v);
+      if ((e.key === 'l' || e.key === 'L') && useGame.getState().patrol && runtime.player.map === 'library') {
+        const st = useGame.getState();
+        if (!(st.clues.length > 0 && (st.day === 5 || st.day === 9) && libraryLightsOut(storyCtxRef.current, false))) {
+          st.toast('🔦 손전등을 껐다 켰다. …조용하다. 도서관 이상 무.', 'info');
+        }
+      }
       if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') {
         const st = useSettings.getState();
         st.set('mapZoom', clampMapZoom(st.mapZoom * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)));
@@ -2042,6 +2156,35 @@ export default function World() {
         railChase(n, rp, dt);
         return true;
       };
+
+      // 📖 7일차 밤: 위병소 가는 길, 막사 1층 복도에 처음 보는 당직부관 (N-03)
+      const ndN = st.nightDuty;
+      if (ndN && ndN.kind === 'guard' && ndN.phase === 'toPost' && st.day === 7 && st.clues.length > 0 && !st.flags.n03 && p.map === 'hq1' && !blocked && !fading && !slipper.current) {
+        slipper.current = { map: 'hq1', x: Math.min(22, Math.max(1.5, p.x + (p.dir === 'left' ? -2 : 2))), y: 3.3 };
+        keys.current = {}; p.moving = false;
+        slipperCorridor(storyCtxRef.current, (ok) => {
+          slipper.current = null;
+          if (!ok) {
+            // 최면에 걸려 정신을 차려 보니 초소 앞
+            const sp = world.spots.post;
+            warpReq.current = { tiles: [], to: sp.map, enterDir: 'up', arrive: { x: sp.x + 0.5, y: sp.y + 1.6, dir: 'up' } } as unknown as Door;
+            const nd2 = useGame.getState().nightDuty;
+            if (nd2?.partner) placeAt(nd2.partner, sp.map, sp.x + 1.5, sp.y + 1.6, 'up');
+          }
+        });
+      }
+      // 📖 10일차 아침: 동기가 내 이름을 잊었다 (기상 직후 1생활관)
+      if (st.day >= 10 && st.day < TOTAL_DAYS && st.clues.length > 0 && !st.flags.m13 && st.minute < 6 * 60 + 14 && p.map === 'room1' && !blocked && !fading && !m13Tried.current) {
+        m13Tried.current = true;
+        placeAt('buddy', 'room1', Math.min(13.5, p.x + 1), 4.5, 'left');
+        buddyForgets(storyCtxRef.current);
+      }
+      // 📖 5·9일차 밤 순찰: 불 꺼진 도서관에 들어서면 안내
+      if (st.patrol && p.map === 'library' && st.clues.length > 0 && (st.day === 5 || st.day === 9) && libHint.current !== st.day
+        && !(st.clues.includes('C-11') && (st.day === 5 || st.clues.includes('C-15')))) {
+        libHint.current = st.day;
+        st.toast('📚 불 꺼진 도서관. 손전등 빛 속에 종이 조각 같은 게 둥둥 떠 있다… [L] 손전등 끄기', 'alert');
+      }
 
       // 🔦 야간 순찰: 점검 장소에 다가가면 자동으로 점검
       if (st.patrol && !blocked && !fading) {
@@ -2621,7 +2764,37 @@ export default function World() {
           g.fill();
         },
       });
+      const sl = slipper.current;
+      if (sl && sl.map === p.map) {
+        ents.push({
+          y: sl.y,
+          draw: () => {
+            drawMonster(g, SLIPPER_LOOK, sl.x * TILE, sl.y * TILE + 12, 40, { dir: 'down', t });
+            // 똑딱, 똑딱… 흔들리는 진자
+            const a = Math.sin(t * 3) * 0.6, hx = sl.x * TILE + 14, hy = sl.y * TILE - 6;
+            g.strokeStyle = '#d8d8e0'; g.lineWidth = 1; g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + Math.sin(a) * 16, hy + Math.cos(a) * 16); g.stroke();
+            g.fillStyle = '#e8e8f0'; g.beginPath(); g.arc(hx + Math.sin(a) * 16, hy + Math.cos(a) * 16, 3.5, 0, Math.PI * 2); g.fill();
+          },
+        });
+      }
       ents.sort((a, c) => a.y - c.y).forEach((e) => e.draw());
+      // 📖 옥상 철문 (막사 2층, 계단 옆)
+      if (p.map === 'hq2' && st.clues.length > 0) {
+        const dx0 = ROOF_DOOR[0] * TILE + 4, dy0 = ROOF_DOOR[1] * TILE + 6;
+        g.fillStyle = '#5a6068'; g.fillRect(dx0, dy0, TILE - 8, TILE - 6);
+        g.fillStyle = '#7a8088'; g.fillRect(dx0 + 3, dy0 + 3, TILE - 14, TILE - 12);
+        g.fillStyle = st.flags.roof ? '#f2c230' : '#3a3e44'; g.fillRect(dx0 + TILE - 14, dy0 + 12, 3, 3);
+      }
+      // 📖 전역일: 구령대 위에 내려앉은 별
+      if (finalStarOn(st) && p.map === 'outdoor') {
+        const sx = STAGE_STAR[0] * TILE, sy = STAGE_STAR[1] * TILE - 20 + Math.sin(t * 1.6) * 6;
+        const gl = g.createRadialGradient(sx, sy, 0, sx, sy, 70);
+        gl.addColorStop(0, 'rgba(255,252,220,1)'); gl.addColorStop(0.35, 'rgba(255,232,140,0.6)'); gl.addColorStop(1, 'rgba(255,232,140,0)');
+        g.fillStyle = gl; g.beginPath(); g.arc(sx, sy, 70, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#fffbe0'; g.beginPath();
+        for (let i = 0; i < 10; i++) { const a = (Math.PI / 5) * i - Math.PI / 2, rr = i % 2 === 0 ? 11 : 5; g.lineTo(sx + Math.cos(a) * rr, sy + Math.sin(a) * rr); }
+        g.closePath(); g.fill();
+      }
       // ✨ 야간 근무 중 의문의 별빛 (지라치)
       let starGlow: { x: number; y: number } | null = null;
       const ndS = st.nightDuty;
@@ -2768,7 +2941,13 @@ export default function World() {
       )}
       <TouchPad keys={keys} onAction={interact} />
       {overlay?.type === 'dialogue' && (
-        <DialogueBox key={JSON.stringify(overlay.script.lines[0])} script={overlay.script} onChoice={overlay.onChoice} onClose={closeOverlay} />
+        <>
+          {overlay.bg && <StoryBackdrop bg={overlay.bg} />}
+          <DialogueBox key={overlay.nonce ?? JSON.stringify(overlay.script.lines[0])} script={overlay.script} onChoice={overlay.onChoice} onClose={closeOverlay} />
+        </>
+      )}
+      {overlay?.type === 'resist' && (
+        <ResistMeter key={overlay.opts.title + overlay.opts.mode} opts={overlay.opts} onDone={(ok) => { const o = overlay; setOverlay(null); o.onDone(ok); }} />
       )}
       {overlay?.type === 'menu' && <Menu title={overlay.title} subtitle={overlay.subtitle} options={overlay.options} onClose={() => setOverlay(null)} />}
       {overlay?.type === 'notebook' && <Notebook onClose={() => setOverlay(null)} />}

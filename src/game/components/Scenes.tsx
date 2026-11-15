@@ -10,6 +10,10 @@ import { PERSONALITY_QUIZ } from '../data/quiz';
 import { NPC_IDS, NPC_SKINS } from '../data/npcs';
 import { npcCap, npcSpeaker } from '../engine/speakers';
 import MonsterCanvas from './MonsterCanvas';
+import { endingLines, promotionKeyLines } from './storyEvents';
+import type { StoryEnding } from '../data/story';
+import { fmt } from '../engine/text';
+import type { Line } from '../types';
 import { RankBadge } from './Hud';
 
 // ───────── 타이틀 ─────────
@@ -259,9 +263,16 @@ export function Promotion() {
     { ok: false, text: `"저 ${RANKS[rank]} 됐어요! 감사합니다~"` },
     { ok: false, text: `"${b.salute}! 이제 저도 짬 좀 찼습니다!"` },
   ].sort(() => Math.random() - 0.5), [b.salute, rank, s.name]);
+  const [keyLines, setKeyLines] = useState<Line[] | null>(null);
   const answer = (ok: boolean) => {
     if (answered !== null) return;
     setAnswered(ok);
+    const kl = ok ? promotionKeyLines() : null;
+    if (kl) {
+      setKeyLines(kl);
+      s.storyFlag('archiveKey');
+      s.toast('🔑 기록 보관실 열쇠를 받았다. 도서관 안쪽 방으로!', 'good');
+    }
     s.applyEffects(ok ? { discipline: 5, affinity: { cpt: 5 } } : { discipline: -2, affinity: { cpt: -2 } }, '진급 신고');
     s.addTip('진급·전입·휴가 등은 지휘관에게 "신고"를 한다. 형식: "경례! 신고합니다. 계급 성명은 ○○부로 ○○을 명받았습니다. 이에 신고합니다. 경례!"');
   };
@@ -280,6 +291,7 @@ export function Promotion() {
         <div>
           <div className="speaker">{cpt.name} <span className="speaker-sub">{cpt.sub}</span></div>
           <div>{answered === null ? `${s.name}, 진급 축하한다. 신고해 봐라.` : answered ? '좋아. 아주 정확한 신고다. 계급에 맞는 책임감을 가져라.' : '…신고 형식부터 다시 배우자. 그래도 축하한다.'}</div>
+          {keyLines && keyLines.map((l, i) => <div key={i} className={l.who === 'narr' ? 'hud-dim' : ''}>{fmt(l.text, { branch: s.branch, name: s.name, day: s.day })}</div>)}
         </div>
       </div>
       {answered === null ? (
@@ -373,6 +385,31 @@ function Evolution({ name, look, cap, from, to, onDone }: {
   );
 }
 
+/** 📖 스토리 엔딩 대본 (한 줄씩) */
+function StoryEndingView({ end, unanswered, onDone }: { end: StoryEnding; unanswered: boolean; onDone: () => void }) {
+  const s = useGame();
+  const lines = useMemo(() => [
+    ...(unanswered ? [{ who: 'narr' as const, text: '구령대의 별은 끝내 대답을 듣지 못한 채, 저녁 하늘로 졌다.' }] : []),
+    ...endingLines(end),
+  ], [end, unanswered]);
+  const [i, setI] = useState(0);
+  const next = useCallback(() => { if (i < lines.length - 1) setI(i + 1); else onDone(); }, [i, lines.length, onDone]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'e' || e.key === 'E') { e.preventDefault(); next(); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [next]);
+  const l = lines[i];
+  return (
+    <div className={`story-ending end-${end}`} onClick={next}>
+      <div className="story-ending-line" key={i}>
+        {l.who === 'me' ? <b>{s.name}　</b> : null}{fmt(l.text, { branch: s.branch, name: s.name, day: s.day })}
+      </div>
+      <div className="night-hint">클릭 · Enter ({i + 1}/{lines.length})</div>
+    </div>
+  );
+}
+
 // ───────── 하루 결산 ─────────
 export function DayEnd() {
   const s = useGame();
@@ -429,7 +466,9 @@ export function Ending() {
   const s = useGame();
   const b = BRANCHES[s.branch];
   const sp = findSpecies(s.speciesId)!;
-  const [stage, setStage] = useState(0);
+  const storyEnd: StoryEnding | null = s.clues.length === 0 ? null
+    : s.flags.end_true ? 'true' : s.flags.end_normal ? 'normal' : 'bad';
+  const [stage, setStage] = useState(storyEnd ? -1 : 0);
   const present = presentNpcs(Math.min(s.day, TOTAL_DAYS));
   const avgAff = Math.round(NPC_IDS.reduce((a, id) => a + s.affinity[id], 0) / NPC_IDS.length);
   const st = s.stats;
@@ -443,6 +482,7 @@ export function Ending() {
 
   useEffect(() => { s.wipe(); }, [s]);
 
+  if (stage === -1 && storyEnd) return <StoryEndingView end={storyEnd} unanswered={!s.flags.f01} onDone={() => setStage(0)} />;
   if (stage === 0) {
     return (
       <div className="scene ending-scene">
