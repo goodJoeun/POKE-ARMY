@@ -272,6 +272,12 @@ function nightGoal(key: string, st: ReturnType<typeof useGame.getState>): Pos | 
   if (key === nd.next && nd.nextAwake) return ['room1', 7, 5]; // 새 불침번: 출입문 쪽에서 근무
   return null;
 }
+/** 야간 근무에 얽힌 사람인지 (깨우러 온 이전 근무자 · 사수/부사수 · 깨어난 다음 근무자). 그 밖의 인원은 이미 침상에서 자고 있다 */
+function dutyInvolved(key: string, st: ReturnType<typeof useGame.getState>): boolean {
+  const nd = st.nightDuty;
+  if (!nd) return false;
+  return key === nd.prev || key === nd.partner || (key === nd.next && nd.nextAwake);
+}
 /** 함께 하는 퀘스트(동기·후임·선임과 같이 가는 부탁)가 진행 중이면 그 사람이 나와 동행한다 (집합·점호·취침 준비 때는 제외) */
 function questCompanion(key: string, st: ReturnType<typeof useGame.getState>): boolean {
   if (st.minute < 6 * 60 + 15 || st.minute >= 21 * 60 || st.rollcall || st.lateCall) return false;
@@ -2242,6 +2248,15 @@ export default function World() {
       for (const id of present) {
         const n = npcs.current[id];
         if (!n) continue;
+        // 🌙 야간 근무 중: 근무와 상관없는 1분대원은 이미 자기 침상에서 자고 있다 (걸어가는 중이었어도)
+        const bxN = BED_X[id];
+        if (st.nightDuty && st.minute >= LIGHTS_OUT && bxN !== undefined && !dutyInvolved(id, st) && !npcAsleep(id, n, st.minute)) {
+          const tg = npcTarget(id);
+          n.map = 'room1'; n.x = bxN + 0.5; n.y = bedY('top'); n.dir = 'down';
+          n.path = []; n.viaDoor = null; n.moving = false; n.att = false;
+          n.targetKey = `${tg[0]}:${tg[1]},${tg[2]}`;
+          continue;
+        }
         const follow = followsMe(id, st);
         if (!follow) n.att = false;
         else if (followStep(n)) continue;
@@ -2285,6 +2300,13 @@ export default function World() {
           const ng0 = nightGoal(`x:${def.id}`, st);
           const [im, ix, iy] = ng0 ?? [def.map, def.x, def.y];
           e = extras.current[def.id] = { map: im, x: ix + 0.5, y: iy + 0.5, dir: 'down', moving: false, path: [], targetKey: '', viaDoor: null, wait: Math.random() * 2, routeIdx: 0 };
+        }
+        // 🌙 야간 근무 중: 근무와 상관없는 인원은 이미 침상에서 자고 있다 (깨우는 대화 중에도)
+        const bedN = EXTRA_BED[def.id];
+        if (bedN && st.nightDuty && st.minute >= LIGHTS_OUT && !cer.current && !dutyInvolved(`x:${def.id}`, st) && !nightGoal(`x:${def.id}`, st)) {
+          e.map = bedN[0]; e.x = bedN[1] + 0.5; e.y = bedY(bedN[2]); e.dir = 'down';
+          e.path = []; e.viaDoor = null; e.moving = false; e.att = false;
+          continue;
         }
         if (blocked) { e.moving = false; continue; }
         // 소등 후: 침상이 있으면 가서 눕고, 근무자·군견은 제자리, 나머지는 자기 부대 막사로(안 보임)
