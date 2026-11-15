@@ -3,7 +3,7 @@ import type { SpotId } from '../types';
 /**
  * 메인 스토리 「별이 지기 전에」 데이터
  * 설정: docs/lore/ (world · characters · map · story · missions)
- * - 단서(C-xx): 떡밥 수첩에 기록. 하나당 🌟 인간의 기억 +4
+ * - 단서(C-xx): 수첩의 「기억의 실마리」에 기록. 하나당 🌟 인간의 기억 +4
  * - 별 조각(★1~7): 다 모아야 마지막 밤 소원을 거둘 수 있다
  * - 꿈: 하루 끝 결산 화면 전에 보는 "별의 언덕" 장면
  */
@@ -20,7 +20,7 @@ export interface ClueDef {
   id: string;
   title: string;
   place: string;
-  /** 떡밥 수첩 문구 */
+  /** 기억의 실마리 문구 */
   text: string;
   chapter: 1 | 2 | 3 | 4;
 }
@@ -120,7 +120,7 @@ export const DREAMS: Record<number, DreamScript> = {
       { who: 'voice', text: '일곱 개. 별이 지기 전까지야. 기억해.' },
       { who: 'me', text: '잠깐, 너는 누구야? 여긴 어디야?!' },
       { who: 'voice', text: '…졸려. 내일 또 와.' },
-      { who: 'narr', text: '[떡밥 수첩(Tab)에 🔍 단서 탭이 생겼다. 부대 곳곳에서 단서를 찾아보자. 인간이었던 기억(🌟)은 매일 조금씩 흐려진다.]' },
+      { who: 'narr', text: '[수첩(Tab)에 🔍 기억의 실마리 탭이 생겼다. 부대 곳곳에서 단서를 찾아보자. 인간이었던 기억(🌟)은 매일 조금씩 흐려진다.]' },
     ],
     clue: 'C-01',
     star: 1,

@@ -885,12 +885,12 @@ export const useGame = create<Store>((set, get) => ({
     const clues = [...s.clues, id];
     set({ clues });
     get().applyEffects({ memory: MEMORY_PER_CLUE }, `🔍 단서: ${def.title}`);
-    get().log(`🔍 단서 「${def.title}」를 떡밥 수첩에 적었다.`);
+    get().log(`🔍 단서 「${def.title}」를 기억의 실마리에 적었다.`);
     // 장(章) 완료
     const ch = CHAPTERS.find((c) => c.n === def.chapter);
     if (ch && chapterDone(ch.n, clues) && !s.flags[`story_ch${ch.n}`]) {
       get().applyEffects({ flag: `story_ch${ch.n}` }, undefined, true);
-      get().toast(`📖 ${ch.n}장 「${ch.title}」 완료! 떡밥 ${clues.length}/${CLUES.length}`, 'good');
+      get().toast(`📖 ${ch.n}장 「${ch.title}」 완료! 실마리 ${clues.length}/${CLUES.length}`, 'good');
       get().log(`📖 ${ch.n}장 「${ch.title}」의 단서를 모두 모았다.`);
     }
     return true;

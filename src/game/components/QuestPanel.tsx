@@ -280,7 +280,7 @@ function StoryTab() {
         <b>📖 별이 지기 전에</b>
         <span className="hud-dim"> · 별 조각 {'★'.repeat(s.stars.length)}{'☆'.repeat(7 - s.stars.length)} · 🌟 기억 {s.memory} · 떡밥 {s.clues.length}/{CLUES.length}</span>
       </div>
-      <p className="hud-dim ql-hint">별이 지기 전(12일차 밤)까지 부대 곳곳의 떡밥을 모아 인간으로 돌아갈 방법을 찾자. 지도(M)와 화면의 ✨ 표시가 단서가 있는 곳이다.</p>
+      <p className="hud-dim ql-hint">별이 지기 전(12일차 밤)까지 부대 곳곳에서 기억의 실마리를 모아 인간으로 돌아갈 방법을 찾자. 지도(M)와 화면의 ✨ 표시가 단서가 있는 곳이다.</p>
       {CHAPTERS.map((ch) => {
         const ms = STORY_MISSIONS.filter((m) => m.chapter === ch.n);
         const future = s.day < ch.days[0];

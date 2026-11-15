@@ -29,7 +29,7 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const tabs: [Tab, string][] = [['me', '👤 나'], ['people', '🤝 관계'], ['quests', '📋 퀘스트'], ...(s.clues.length > 0 ? [['clues', '🔍 단서'] as [Tab, string]] : []), ['items', '🎒 소지품'], ['schedule', '🗓️ 일과표'], ['tips', '📘 군대 상식']];
+  const tabs: [Tab, string][] = [['me', '👤 나'], ['people', '🤝 관계'], ['quests', '📋 퀘스트'], ...(s.clues.length > 0 ? [['clues', '🔍 기억의 실마리'] as [Tab, string]] : []), ['items', '🎒 소지품'], ['schedule', '🗓️ 일과표'], ['tips', '📘 군대 상식']];
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -139,7 +139,7 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
                   <span className="hud-dim"> 별 조각 {s.stars.length}/7</span>
                 </div>
                 <div>🌟 인간의 기억 <b>{s.memory}</b>/100 <span className="hud-dim">· 하루마다 흐려진다. 단서와 꿈이 되살린다.</span></div>
-                <div className="hud-dim">떡밥 {s.clues.length}/{CLUES.length}</div>
+                <div className="hud-dim">실마리 {s.clues.length}/{CLUES.length}</div>
               </div>
               {CLUES.map((c) => s.clues.includes(c.id) ? (
                 <div key={c.id} className="clue-card">
