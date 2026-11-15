@@ -6,7 +6,7 @@ import { useGame, presentNpcs, questSlowActive, questOffers, dialogueById, PATRO
 import { BRANCHES, FACILITY_NAME, STORE_NAME, TOTAL_DAYS, fmtTime, rankIdxForDay, seasonForDay } from '../data/branches';
 import { findSpecies } from '../data/monsters';
 import { NPC_ROLES, NPC_SKINS, SOLDIER_IDS, birthdayNpcs, currentSquadLeader, npcDisplayName, npcRoleTitle } from '../data/npcs';
-import { FAREWELL_LINES, SMALL_TALK } from '../data/dialogues';
+import { EXTRA_TALK_MORE, FAREWELL_LINES, pickTalk, smallTalkPool } from '../data/dialogues';
 import { ITEMS } from '../data/items';
 import { QUESTS } from '../data/quests';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
@@ -340,7 +340,11 @@ const extraHiddenAtNight = (id: string, minute: number) => {
   if (id === 'guard' && nd?.kind === 'guard' && (nd.phase === 'shift' || nd.phase === 'return')) return true;
   return !EXTRA_BED[id] && !NIGHT_STAY.has(id);
 };
+/** 잠만보 취사병: 식사 시간 말고는 늘 잔다 (주방 구석이라 길은 막지 않는다) */
+const snorlaxCookAsleep = (id: string, minute: number) =>
+  id === 'cook' && useGame.getState().branch !== 'navy' && !isMealTime(minute) && minute < LIGHTS_OUT;
 const extraAsleep = (id: string, e: { map: MapId; y: number }, minute: number) => {
+  if (snorlaxCookAsleep(id, minute)) return true;
   if (minute < LIGHTS_OUT) return false;
   if (id === 'dog') return true;
   const bed = EXTRA_BED[id];
@@ -1272,10 +1276,9 @@ export default function World() {
       }
       const d: Dialogue | null = s2.pickDialogue(id);
       if (!d) {
-        const pool = SMALL_TALK[id] ?? ['…'];
         setOverlay({
           type: 'dialogue',
-          script: { npc: id, lines: [{ who: 'npc', text: pool[Math.floor(Math.random() * pool.length)] }] },
+          script: { npc: id, lines: [{ who: 'npc', text: pickTalk(id, smallTalkPool(s2.branch, id)) }] },
           onDone: () => useGame.getState().applyEffects({ affinity: { [id]: 1 } }, undefined, true),
         });
         return;
@@ -1346,9 +1349,8 @@ export default function World() {
     opts.push(
       { label: already ? '잡담하기' : '대화하기', hint: '10분', onSelect: () => {
         if (already) {
-          const pool = SMALL_TALK[id] ?? ['…'];
           useGame.getState().spend(5);
-          setOverlay({ type: 'dialogue', script: { npc: id, lines: [{ who: 'npc', text: pool[Math.floor(Math.random() * pool.length)] }] } });
+          setOverlay({ type: 'dialogue', script: { npc: id, lines: [{ who: 'npc', text: pickTalk(id, smallTalkPool(useGame.getState().branch, id)) }] } });
         } else talk();
       } },
     );
@@ -1574,7 +1576,7 @@ export default function World() {
       }
       case 'water1': case 'water2': {
         title = '🚰 정수기';
-        act('물 마시기', '2분 · 체력+3 (1일 1회)', 2, { hp: 3 }, '시원한 물 한 컵. 살 것 같다.', 'water');
+        act('🥤 시원한 물 마시기', '2분 · 체력+3 (1일 1회)', 2, { hp: 3 }, '정수기에서 "시원한 물" 한 컵. 옛날 백화점 옥상 자판기에서 200원 주고 뽑던 그 맛이다. …목마른 경비원이 있으면 한 잔 건네주고 싶어진다.', 'water');
         break;
       }
       case 'board1': case 'board2': {
@@ -1742,6 +1744,16 @@ export default function World() {
       return;
     }
     if (ex && extraAsleep(id, ex, st.minute)) {
+      if (snorlaxCookAsleep(id, st.minute)) {
+        setOverlay({ type: 'dialogue', script: { lines: [
+          { who: 'narr', text: pickTalk('x:cook-sleep', [
+            '잠만보가 쿨쿨 자고 있다. …다행히 길을 막고 있지는 않다.',
+            '잠만보가 배를 드러내고 자고 있다. 포켓몬의 피리가 있으면 깨울 수 있을 것 같다.',
+            '드르렁… 잠만보는 식사 시간이 아니면 일어나지 않는다. 주방 구석이라 지나다니는 데는 문제없다.',
+          ]) },
+        ] } });
+        return;
+      }
       setOverlay({ type: 'dialogue', script: { lines: [{ who: 'narr', text: id === 'dog' ? '(군견이 몸을 말고 새근새근 자고 있다.)' : '(곤히 자고 있다… 깨우지 말자.)' }] } });
       return;
     }
@@ -1754,7 +1766,7 @@ export default function World() {
     };
     const say = () => {
       useGame.getState().spend(5);
-      const line = def.lines[Math.floor(Math.random() * def.lines.length)];
+      const line = pickTalk(`x:${def.id}`, [...def.lines, ...(EXTRA_TALK_MORE[def.id] ?? [])]);
       setOverlay({ type: 'dialogue', script: { custom: speaker, lines: [{ who: 'npc', text: line }] } });
     };
     const mcE = st.mealCheck;
@@ -2312,6 +2324,8 @@ export default function World() {
           }
           continue;
         }
+        // 잠만보 취사병은 식사 시간이 아니면 그 자리에서 잔다
+        if (snorlaxCookAsleep(def.id, st.minute)) { e.moving = false; e.path = []; continue; }
         // 식사 시간엔 식당 자리로, 끝나면 자기 자리로 (다른 맵이면 문을 거쳐서)
         const seat = EXTRA_MEAL_SEAT[def.id];
         const xkey = `x:${def.id}`;
@@ -2711,6 +2725,15 @@ export default function World() {
         if (!e || e.map !== p.map || extraHiddenAtNight(def.id, st.minute)) continue;
         const elook = extraLook(def);
         if (extraAsleep(def.id, e, st.minute)) {
+          if (snorlaxCookAsleep(def.id, st.minute)) {
+            // 잠만보: 제자리에 드러누워 쿨쿨 (덩치 그대로, 모포 없이)
+            ents.push({ y: e.y, draw: () => {
+              drawMonster(g, elook, e.x * TILE, e.y * TILE + 12, 44, { dir: 'down', t, sleeping: true });
+              g.fillStyle = '#ffffff'; g.font = 'bold 11px sans-serif'; g.textAlign = 'center';
+              g.fillText('Z'.repeat(1 + (Math.floor(t * 1.5) % 3)), e.x * TILE + 18, e.y * TILE - 30 - (t * 6) % 8);
+            } });
+            continue;
+          }
           ents.push({ y: e.y, draw: () => drawSleeper(g, elook, e.x, e.y, t + def.id.length, def.id !== 'dog') });
           continue;
         }
