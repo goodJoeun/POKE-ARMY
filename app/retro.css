@@ -365,6 +365,13 @@ canvas { image-rendering: pixelated; }
   text-align: center; font-size: 15px; line-height: 1.7; text-shadow: 1px 1px 0 #000; max-width: 560px; animation: evoGlow 1.6s ease-in-out 2;
 }
 @keyframes evoGlow { 50% { background: #f8f8f8; color: #283048; text-shadow: none; } }
+/* ───── 지각: 집합 장소로 끌려가는 암전 ───── */
+.late-fade { position: absolute; inset: 0; z-index: 38; pointer-events: none; display: flex; align-items: center; justify-content: center;
+  background: #000; animation: lateFade 1.7s ease-in forwards; }
+.late-fade div { color: #fff; font-family: 'Galmuri11', sans-serif; font-size: 20px; animation: lateText 1.7s forwards; }
+@keyframes lateFade { 0%, 45% { background: rgba(0,0,0,1); } 100% { background: rgba(0,0,0,0); } }
+@keyframes lateText { 0%, 40% { opacity: 1; } 70%, 100% { opacity: 0; } }
+
 /* ───── 야간 근무: 잠든 화면 ───── */
 .night-sleep { position: absolute; inset: 0; z-index: 40; background: radial-gradient(circle at 50% 45%, #141a34 0%, #05060e 75%);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #dfe4ff; cursor: pointer;
@@ -452,7 +459,7 @@ canvas { image-rendering: pixelated; }
 .dream-box .dialogue-text, .dream-box .dialogue-text.narr { color: #f2f0ff; text-shadow: 1px 1px 0 #000; }
 .dream-box .speaker { background: #f0c040; color: #283048; text-shadow: none; }
 
-/* ───── 떡밥 수첩 · 스토리 탭 ───── */
+/* ───── 기억의 실마리 · 스토리 탭 ───── */
 .nb-clues { display: flex; flex-direction: column; gap: 6px; }
 .clue-head { background: #1a2350; color: #f2f0ff; border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
 .clue-head .hud-dim { color: #b8c0e8; }

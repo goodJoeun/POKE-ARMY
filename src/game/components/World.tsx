@@ -98,6 +98,8 @@ const EXTRA_MEAL_SEAT: Record<string, [number, number]> = {
   // 1분대 선임 · 2생활관 사람들 (식탁을 넓힌 자리)
   sq1: [2, 3], r2b: [9, 9], r2c: [10, 9], r2d: [11, 9],
 };
+/** 밥 먹으러 갈 땐 길을 걸어가지 않고 식당 입구(안쪽)에 바로 도착한다 */
+const MESS_DOOR_IN: [number, number] = [6.5, 11.5];
 /** 내 식사 자리: 1분대 줄, 맞선임 옆 */
 const MY_MEAL_SEAT: [number, number] = [4, 3];
 /** 1분대(1생활관) 식사 행군 순서 = 계급순. 맨 앞(있는 사람 중)이 식사를 이끈다 */
@@ -500,6 +502,7 @@ export default function World() {
   }, [rollcall, setOverlay]);
 
   // 지각: 집합 장소로 끌려와 혼난 뒤 일정 시작
+  const [lateFade, setLateFade] = useState<string | null>(null);
   const npcTargetRef = useRef<((id: NpcId) => Pos) | null>(null);
   useEffect(() => useGame.subscribe((st, prev) => {
     if (!st.lateCall || prev.lateCall) return;
@@ -525,6 +528,13 @@ export default function World() {
         w.targetKey = ''; // 꾸중이 끝나면 다시 대열 자리로
       }
     }
+    // 먼저 집합 장소(연병장 등)로 끌려간 화면을 보여 주고, 다들 서 있는 앞에서 혼난다
+    keys.current = {};
+    runtime.player.moving = false;
+    setLateFade(label);
+    setTimeout(() => {
+    setLateFade(null);
+    if (!useGame.getState().lateCall) return; // 그 사이 테스터 모드로 넘겼으면 생략
     setOverlay({
       type: 'dialogue',
       script: {
@@ -560,6 +570,7 @@ export default function World() {
       },
       onDone: () => useGame.getState().resolveLate(),
     });
+    }, 1700);
   }), [setOverlay, world]);
 
   // ───────────── 점호 의식 (아침: 연병장 정렬 / 저녁: 생활관 침상) ─────────────
@@ -980,6 +991,8 @@ export default function World() {
 
   // 🏠 생활관 바로 가기: 내 침상 앞으로 (문 이동과 같은 페이드)
   const warpReq = useRef<Door | null>(null);
+  /** 이번 끼니에 식당으로 같이 이동 처리를 했는지 */
+  const mealWarped = useRef('');
   const goHome = useCallback(() => {
     const st = useGame.getState();
     if (overlayRef.current || st.rollcall || st.lateCall || cer.current || useSettings.getState().open) return;
@@ -1735,7 +1748,11 @@ export default function World() {
       onChoice: (c) => {
         const s2 = useGame.getState();
         const mode = modes[Math.max(0, choices.indexOf(c))];
-        myMeal.eating = { meal, prog: 0, last: s2.minute, dur: mode === 'match' && lead ? Math.max(3, leadLeft) : EAT_MIN[mode], mode, lead, bonus: first && mode === 'match' };
+        const dur = mode === 'match' && lead ? Math.max(3, leadLeft) : EAT_MIN[mode];
+        // 고른 속도만큼 시간이 흐르고 바로 다 먹는다 (배식 시간 안에서)
+        const mealEnd = meal === 'lunch' ? 13 * 60 : 18 * 60 + 30;
+        s2.spend(Math.max(0, Math.min(dur, mealEnd - 1 - s2.minute)));
+        myMeal.eating = { meal, prog: 1, last: useGame.getState().minute, dur, mode, lead, bonus: first && mode === 'match' };
         s2.markDaily(`meal_${meal}`);
         if (lead && first) {
           useGame.setState({ flags: { ...useGame.getState().flags, mealPace: true } });
@@ -1863,7 +1880,7 @@ export default function World() {
       const t = now / 1000;
       const st = useGame.getState();
       const p = runtime.player;
-      const blocked = !!overlayRef.current || !!st.rollcall || useSettings.getState().open || st.nightDuty?.phase === 'sleep';
+      const blocked = !!overlayRef.current || !!st.rollcall || !!st.lateCall || useSettings.getState().open || st.nightDuty?.phase === 'sleep';
       // 🚶 식사 행군: 대열에 들어서면 분대와 같이 식당까지 걸어간다 (조작 없이 자동)
       let railed = false;
       const myAte = st.daily.includes(`meal_${mealOf(st.minute)}`) || !!myMeal.tray;
@@ -2051,7 +2068,11 @@ export default function World() {
             n = npcs.current[id] = { map: target[0], x: target[1] + 0.5, y: target[2] + 0.5, dir: 'down', moving: false, path: [], targetKey: key, viaDoor: null };
             continue;
           }
-          if (n.targetKey !== key) route(n, target);
+          if (n.targetKey !== key) {
+            // 식사하러 갈 땐 식당 입구에 바로 도착해서 자리로 걸어간다
+            if (target[0] === 'mess' && n.map !== 'mess' && isMealTime(st.minute)) { n.map = 'mess'; n.x = MESS_DOOR_IN[0]; n.y = MESS_DOOR_IN[1]; n.dir = 'up'; n.path = []; n.viaDoor = null; }
+            route(n, target);
+          }
         }
         for (const id of Object.keys(npcs.current) as NpcId[]) if (!present.includes(id)) delete npcs.current[id];
       }
@@ -2157,7 +2178,10 @@ export default function World() {
         const goal: Pos | null = mg !== 'free' ? mg : home;
         if (goal) {
           const gk = `${goal[0]}:${goal[1]},${goal[2]}`;
-          if (e.targetKey !== gk) route(e, goal);
+          if (e.targetKey !== gk) {
+            if (goal[0] === 'mess' && e.map !== 'mess') { e.map = 'mess'; e.x = MESS_DOOR_IN[0]; e.y = MESS_DOOR_IN[1]; e.dir = 'up'; e.path = []; e.viaDoor = null; }
+            route(e, goal);
+          }
           if (e.path.length) {
             const [px, py] = e.path[0];
             const gx = px + 0.5, gy = py + 0.5;
@@ -2237,11 +2261,22 @@ export default function World() {
           // 다 모이면 출발 (늦는 사람은 5분까지만 기다린다)
           const ready = st.minute >= mcM.marchAt + 5 || squadKeys(st.branch, st.day).every(atGather);
           if (lead && lg && le && atGather(lead) && ready) {
-            march.key = mkey; march.lead = lead; march.leadX = lg[1]; march.done = false; march.moving = false;
-            march.pts = [{ map: lg[0], x: GATHER_TAIL_X + 0.5, y: GATHER_Y + 0.5, d: 0 }, { map: lg[0], x: lg[1] + 0.5, y: GATHER_Y + 0.5, d: lg[1] - GATHER_TAIL_X }];
-            march.D = lg[1] - GATHER_TAIL_X;
-            // 내가 집합 자리 근처에 와 있으면 대열에 선다
-            march.me = !myAte && p.map === MY_GATHER[0] && Math.hypot(p.x - (MY_GATHER[1] + 0.5), p.y - (MY_GATHER[2] + 0.5)) < 5;
+            // 길을 걸어가지 않는다: 출발하는 순간 다 같이 병영식당 입구에 도착해서 각자 자리로 간다
+            march.key = mkey; march.lead = lead; march.leadX = lg[1]; march.done = true; march.moving = false; march.me = false;
+            march.pts = []; march.D = 0;
+            squadKeys(st.branch, st.day).forEach((k, i) => {
+              const en = entOf(k);
+              if (!en || en.map === 'mess') return;
+              en.map = 'mess'; en.x = MESS_DOOR_IN[0] - 1 + (i % 3); en.y = MESS_DOOR_IN[1] - Math.floor(i / 3); en.dir = 'up';
+              en.path = []; en.viaDoor = null; en.targetKey = ''; en.moving = false;
+              if ('rail' in en) (en as { rail?: boolean }).rail = false;
+            });
+            mealWarped.current = mkey;
+            const nearMe = !myAte && p.map === MY_GATHER[0] && Math.hypot(p.x - (MY_GATHER[1] + 0.5), p.y - (MY_GATHER[2] + 0.5)) < 5;
+            if (nearMe && !fading && !warpReq.current) {
+              warpReq.current = { tiles: [], to: 'mess', enterDir: 'up', arrive: { x: MESS_DOOR_IN[0], y: MESS_DOOR_IN[1] + 0.2, dir: 'up' } } as unknown as Door;
+              st.toast('🍚 1생활관과 함께 병영식당에 도착했다. 배식대에서 식판을 받고 내 자리에 앉자.', 'info');
+            }
           }
         }
         if (!march.done) {
@@ -2560,20 +2595,6 @@ export default function World() {
           const fx = fxOf('me', p.dir, p.x, p.y);
           drawMonster(g, look, p.x * TILE, p.y * TILE + 12 + fx.dy - fx.hop, 36, { dir: fx.dir, t, walking: p.moving, cap: b.cap });
           if (myMeal.tray && !myMeal.eating) drawTray(g, p.x * TILE - 10, p.y * TILE - (p.dir === 'up' ? 18 : 4), 1);
-          const me = myMeal.eating;
-          if (me) {
-            const bx = p.x * TILE - 34, by0 = p.y * TILE - 70;
-            const bar = (y: number, label: string, v: number, col: string) => {
-              g.fillStyle = 'rgba(20,22,30,0.82)'; g.fillRect(bx - 2, y - 2, 72, 13);
-              g.fillStyle = col; g.fillRect(bx + 22, y + 1, 46 * Math.min(1, v), 7);
-              g.fillStyle = '#fff'; g.font = 'bold 9px sans-serif'; g.textAlign = 'left'; g.fillText(label, bx, y + 8);
-            };
-            bar(by0, '🍚', me.prog, me.mode === 'fast' ? '#f0a030' : me.mode === 'slow' ? '#58a8e0' : '#58c058');
-            if (Math.sin(t * (me.mode === 'fast' ? 16 : me.mode === 'slow' ? 5 : 9)) > 0.6) {
-              g.textAlign = 'center'; g.font = 'bold 11px sans-serif'; g.fillStyle = '#fff';
-              g.fillText('냠!', p.x * TILE + 16, p.y * TILE - 30);
-            }
-          }
           if (march.me) {
             g.textAlign = 'center'; g.font = 'bold 10px "Galmuri11", sans-serif'; g.fillStyle = '#ffffff';
             g.fillText('🚶 분대와 함께 이동 중', p.x * TILE, p.y * TILE - 54);
@@ -2755,6 +2776,9 @@ export default function World() {
       {overlay?.type === 'map' && <MapView onClose={() => setOverlay(null)} />}
       {flash && <div className="white-flash" />}
       {cerShow && <RollcallCeremony info={cerShow.info} ctl={cerCtl} aide={cerShow.aide} onEnd={finishCeremony} />}
+      {lateFade && (
+        <div className="late-fade"><div>⏰ 「{lateFade}」 집합에 늦었다! 헐레벌떡 달려가는 중…</div></div>
+      )}
       {nightPhase === 'sleep' && (
         <div className="night-sleep" onClick={nightWake}>
           <div className="night-zzz">Z<span>z</span><i>z</i></div>
