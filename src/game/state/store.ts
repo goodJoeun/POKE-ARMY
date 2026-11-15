@@ -88,6 +88,9 @@ const PATROL_TEXT: Partial<Record<SpotId, string[]>> = {
 
 /** 식사 집합 시간(분): 식사 시작 후 이 시간 안에 선임들께 다 여쭤봐야 함께 간다 (시간 속도에 맞춰 늘어난다) */
 export const mealGatherMin = () => mealGatherMinutes();
+/** 맞후임이 여쭤보거나 알아서 모일 때: 식사 시작 후 막사 앞에서 출발하기까지(분) */
+export const MEAL_ASSEMBLE_MIN = 6;
+const fmtClock = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(Math.floor(min % 60)).padStart(2, '0')}`;
 
 export interface MealCheck {
   meal: 'lunch' | 'dinner';
@@ -96,8 +99,31 @@ export interface MealCheck {
   /** 여쭤봐야 할 선임 (주요 NPC id 또는 엑스트라 'x:<id>') */
   targets: string[];
   asked: string[];
-  /** asking: 여쭤보는 중(여쭌 선임은 막사 앞에서 대기) / together: 다 모여 함께 식당으로 / missed: 기다리다 먼저 감 */
+  /** asking: 여쭤보는 중(여쭌 선임은 막사 앞에서 대기) / together: 다 모여 함께 식당으로 / missed: 다 못 여쭸지만 생활관끼리 모여 감 */
   status: 'asking' | 'together' | 'missed';
+  /** 누가 여쭤보나: me(이병·일병이고 맞후임이 없을 때 — 내 의무) / junior(맞후임이 여쭤봄) / auto(알아서 모임) */
+  by?: 'me' | 'junior' | 'auto';
+  /** 1생활관이 막사 앞에서 식당으로 출발하는 시각 (null = 아직 모이는 중) */
+  marchAt?: number | null;
+}
+
+/**
+ * 야간 근무 (불침번 · 위병소): 소등 후 잠들었다가 근무 시간에 깨어나 근무하고, 교대 후 다시 잔다.
+ * - watch(불침번): 이전 근무자가 깨움 → 인수인계 → 근무(미니게임) → 끝나기 10분 전 다음 근무자를 깨워 교대 → 취침
+ * - guard(위병소): 사수(또는 부사수)가 조용히 깨움 → 같이 위병소로 → 이전 근무자와 교대 → 근무(미니게임) → 같이 복귀 → 취침
+ */
+export interface NightDuty {
+  kind: 'watch' | 'guard';
+  phase: 'sleep' | 'woken' | 'toPost' | 'shift' | 'wakeNext' | 'return';
+  /** 나를 깨우는 사람 (불침번: 이전 근무자 / 위병소: 같이 가는 사수·부사수). 주요 NPC id 또는 'x:<엑스트라>' */
+  prev: string;
+  /** 위병소: 같이 근무하는 사수·부사수 */
+  partner: string | null;
+  /** 불침번: 내가 깨울 다음 근무자 */
+  next: string;
+  nextAwake: boolean;
+  shiftStart: number;
+  shiftEnd: number;
 }
 
 export interface RollcallState {
@@ -108,6 +134,10 @@ export interface RollcallState {
 
 interface Store extends Persist {
   scene: Scene;
+  nightDuty: NightDuty | null;
+  setNightDuty: (patch: Partial<NightDuty>) => void;
+  /** 야간 근무를 마치고 침상에 누웠다 → 하루 끝 */
+  finishNightDuty: () => void;
   minigame: MinigameRequest | null;
   rollcall: RollcallState | null;
   /** 지각해서 혼나는 중 (월드가 꾸중 대화를 띄운다) */
@@ -272,6 +302,7 @@ export const useGame = create<Store>((set, get) => ({
   ...initialPersist(),
   scene: 'title',
   minigame: null,
+  nightDuty: null,
   rollcall: null,
   lateCall: null,
   toasts: [],
@@ -409,8 +440,17 @@ export const useGame = create<Store>((set, get) => ({
           ...SOLDIER_IDS.filter((id) => npcPresent(id, s.day) && NPC_ROLES[id].offset > 0),
           ...extrasForDay(s.branch, s.day).filter((d) => d.squad1Senior).map((d) => `x:${d.id}`),
         ];
-        if (!seniors.length) return;
-        set({ mealCheck: { meal, start: at, targets: seniors, asked: [], status: 'asking' } });
+        // 식사도 작전이다: 이병·일병이고 맞후임이 없으면 내가 여쭤본다. 맞후임이 생기면 맞후임 몫
+        const myDuty = rankIdxForDay(s.day) <= 1 && !npcPresent('junior', s.day);
+        if (!myDuty || !seniors.length) {
+          const by = npcPresent('junior', s.day) ? 'junior' : 'auto';
+          set({ mealCheck: { meal, start: at, targets: seniors, asked: [...seniors], status: 'together', by, marchAt: at + MEAL_ASSEMBLE_MIN } });
+          get().toast(by === 'junior'
+            ? `🍚 맞후임 ${memberName(s.branch, 'junior')}이(가) 선임들께 식사 여부를 여쭤봤다. 1생활관은 막사 앞에 모여 ${fmtClock(at + MEAL_ASSEMBLE_MIN)}에 식당으로!`
+            : `🍚 식사 시간. 1생활관은 막사 앞에 모여 ${fmtClock(at + MEAL_ASSEMBLE_MIN)}에 다 같이 식당으로 간다.`, 'info');
+          return;
+        }
+        set({ mealCheck: { meal, start: at, targets: seniors, asked: [], status: 'asking', by: 'me', marchAt: null } });
         const names = seniors.map((id) => memberName(s.branch, id)).join('·');
         get().toast(`📋 미션: 식사 집합 — ${mealGatherMin()}분 안에 ${names}께 "식사하러 가시겠습니까?" 여쭤보자`, 'info');
       };
@@ -420,12 +460,13 @@ export const useGame = create<Store>((set, get) => ({
         set({ announced: [...get().announced, key] });
         const mc = get().mealCheck;
         if (!mc || mc.meal !== meal || mc.status !== 'asking') return;
-        set({ mealCheck: { ...mc, status: 'missed' } });
+        // 다 못 여쭤봐도 같은 생활관 사람끼리는 막사 앞에 모여 다 같이 간다 (눈치는 좀 보인다)
+        set({ mealCheck: { ...mc, status: 'missed', marchAt: minute + 3 } });
         const left = mc.targets.filter((id) => !mc.asked.includes(id));
         const aff: Partial<Record<NpcId, number>> = {};
-        for (const id of left) if (!isExtraKey(id)) aff[id as NpcId] = -2;
+        for (const id of left) if (!isExtraKey(id)) aff[id as NpcId] = -1;
         get().applyEffects({ affinity: aff, mental: -1 }, '식사 집합 못 챙김');
-        get().toast(`🍚 ${left.map((id) => memberName(s.branch, id)).join('·')}께 여쭤보지 못했다… 선임들이 먼저 식당으로 갔다.`, 'bad');
+        get().toast(`🍚 ${left.map((id) => memberName(s.branch, id)).join('·')}께 여쭤보지 못했다… 1생활관 인원이 알아서 막사 앞에 모였다. 같이 식당으로!`, 'bad');
         get().log('🍚 식사 집합을 제때 챙기지 못했다.');
       };
       const endMeal = (key: string, at: number, meal: MealCheck['meal']) => {
@@ -437,6 +478,9 @@ export const useGame = create<Store>((set, get) => ({
       assignMeal('mealCheckDinner', 17 * 60 + 30, 'dinner');
       missGather('mealGatherLunch', 12 * 60 + mealGatherMin(), 'lunch');
       missGather('mealGatherDinner', 17 * 60 + 30 + mealGatherMin(), 'dinner');
+      // 막사 앞 집합 → 출발
+      const mcm = get().mealCheck;
+      if (mcm?.marchAt != null && minute >= mcm.marchAt) ann(`mealMarch_${mcm.meal}`, mcm.marchAt, '🚶 1생활관 출발! 다 같이 식당으로 이동한다.');
       endMeal('mealCheckLunchEnd', 13 * 60, 'lunch');
       endMeal('mealCheckDinnerEnd', 18 * 60 + 30, 'dinner');
     }
@@ -516,14 +560,32 @@ export const useGame = create<Store>((set, get) => ({
         break;
       }
       case 'work':
-      case 'night':
         get().startMinigame({
           game: ev.game!,
-          title: ev.id === 'guard_night' ? '🌙 야간 위병소 근무' : BRANCHES[s.branch].games[ev.game as Exclude<GameId, 'overlock'>],
+          title: BRANCHES[s.branch].games[ev.game as Exclude<GameId, 'overlock'>],
           eventId: ev.id,
-          returnTo: ev.kind === 'night' ? 'dayEnd' : 'world',
+          returnTo: 'world',
         });
         break;
+      case 'night': {
+        // 소등 → 잠들었다가 근무 시간에 깨어난다 (진행은 월드에서)
+        const xs = new Set(extrasForDay(s.branch, s.day).map((d) => `x:${d.id}`));
+        const has = (k: string) => (k.startsWith('x:') ? xs.has(k) : npcPresent(k as NpcId, s.day));
+        const pick = (...ks: string[]) => ks.find(has) ?? ks[ks.length - 1];
+        const rank = rankIdxForDay(s.day);
+        let nd: NightDuty;
+        if (ev.game === 'guard') {
+          // 이병·일병이면 사수(선임)를 따라가고, 상병부터는 부사수(후임)를 데려간다
+          const partner = rank <= 1 ? pick('senior', 'x:sq1', 'x:r2b', 'sgt') : pick('junior', 'junior2', 'buddy');
+          nd = { kind: 'guard', phase: 'sleep', prev: partner, partner, next: '', nextAwake: false, shiftStart: 24 * 60, shiftEnd: 26 * 60 };
+        } else {
+          const prev = pick('x:r2c', 'x:r2b', 'x:room2a', 'buddy');
+          const next = pick('buddy', 'junior', 'x:sq1', 'senior');
+          nd = { kind: 'watch', phase: 'sleep', prev, partner: null, next, nextAwake: false, shiftStart: 24 * 60, shiftEnd: 25 * 60 };
+        }
+        set({ nightDuty: nd, busy: false });
+        break;
+      }
       case 'farewell':
         set({ scene: 'ending' });
         break;
@@ -534,10 +596,25 @@ export const useGame = create<Store>((set, get) => ({
     }
   },
 
+  setNightDuty: (patch) => {
+    const nd = get().nightDuty;
+    if (nd) set({ nightDuty: { ...nd, ...patch } });
+  },
+
+  finishNightDuty: () => {
+    const nd = get().nightDuty;
+    if (!nd) return;
+    get().applyEffects({ discipline: 2 }, nd.kind === 'watch' ? '불침번 교대' : '위병소 근무 복귀');
+    get().log(nd.kind === 'watch' ? '🌙 불침번 근무를 마치고 다음 근무자와 교대했다.' : '🌙 위병소 야간 근무를 마치고 조용히 복귀했다.');
+    set({ nightDuty: null });
+    get().completeEvent();
+  },
+
   completeEvent: () => {
     const s = get();
     const ev = s.currentEvent();
     if (!ev) return;
+    if (s.nightDuty) set({ nightDuty: null });
     const minute = Math.max(s.minute, ev.end);
     set({ minute, eventIdx: s.eventIdx + 1, eventBegun: false, rollcall: null, busy: false });
     if (ev.kind === 'rollcall_am' && s.day < TOTAL_DAYS) get().toast('🍳 아침 식사와 청소를 마쳤다. 08:30 오전 일과 집합!', 'info');
@@ -669,6 +746,12 @@ export const useGame = create<Store>((set, get) => ({
     get().applyEffects(eff, req.title, true);
     set({ grades: [...s.grades, { day: s.day, game: req.game, score }], minigame: null });
     get().log(`🎯 ${req.title}: ${g}등급 (${Math.round(score)}점) — ${summary}`);
+    const nd = get().nightDuty;
+    if (nd && nd.phase === 'shift' && (req.game === 'night' || req.game === 'guard')) {
+      // 근무 끝: 불침번은 끝나기 10분 전 → 다음 근무자 깨우러 / 위병소는 다음 근무자와 교대 → 복귀
+      set({ nightDuty: { ...nd, phase: nd.kind === 'watch' ? 'wakeNext' : 'return' }, minute: nd.kind === 'watch' ? nd.shiftEnd - 10 : nd.shiftEnd, scene: 'world' });
+      return;
+    }
     if (req.eventId) {
       get().completeEvent();
       if (req.returnTo === 'dayEnd' && get().scene !== 'dayEnd') set({ scene: 'dayEnd' });
@@ -863,7 +946,7 @@ export const useGame = create<Store>((set, get) => ({
     const asked = [...mc.asked, npc];
     get().applyEffects(isExtraKey(npc) ? { mental: 1 } : { affinity: { [npc]: 2 } }, '식사 집합', true);
     if (asked.length >= mc.targets.length) {
-      set({ mealCheck: { ...mc, asked, status: 'together' } });
+      set({ mealCheck: { ...mc, asked, status: 'together', marchAt: get().minute + 2 } });
       get().applyEffects({ discipline: 2, mental: 1 }, '식사 집합 완료');
       get().toast('✅ 식사 집합 완료! 선임들과 다 같이 식당으로 간다 (군기 +2 · 멘탈 +1 · 선임 호감 +2씩)', 'good');
       get().log('🍚 선임들께 빠짐없이 여쭤보고 다 같이 식사하러 갔다.');
@@ -895,7 +978,7 @@ export const useGame = create<Store>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return false;
       const data = JSON.parse(raw) as Persist;
-      set({ ...initialPersist(), ...data, scene: 'world', minigame: null, rollcall: null, lateCall: null, toasts: [], busy: false });
+      set({ ...initialPersist(), ...data, scene: 'world', minigame: null, nightDuty: null, rollcall: null, lateCall: null, toasts: [], busy: false });
       teleportToBed(data.branch);
       return true;
     } catch {

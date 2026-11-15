@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Choice, Line, LineWho } from '../types';
 import { useGame } from '../state/store';
 import { BRANCHES, TOTAL_DAYS } from '../data/branches';
-import { buildSchedule, hasNightDuty } from '../data/schedule';
+import { buildSchedule, hasGuardNight, hasNightDuty } from '../data/schedule';
 import type { SpeakerInfo } from '../engine/speakers';
 import type { CeremonyCtl, CeremonyInfo } from '../engine/ceremony';
 import DialogueBox, { type DialogueScript } from './DialogueBox';
@@ -224,9 +224,49 @@ function build(info: CeremonyInfo, ctl: CeremonyCtl, aide: SpeakerInfo | null, s
     ],
   });
 
-  if (info.kind === 'am') {
+  const amClosing = (): Line[] => {
     const sched = buildSchedule(st.day, st.branch).filter((e) => e.kind === 'work');
     const plan = sched.map((e) => e.label.replace(/^(오전|오후) 일과: /, '')).join(', 오후는 ');
+    return st.day >= TOTAL_DAYS
+      ? [{ who: D, text: '전달 사항. 오늘 전역하는 인원이 있다. 그동안 정말 고생 많았다!' }, { who: D, text: '이상 아침 점호 끝!' }]
+      : [{ who: D, text: `전달 사항. 오늘 오전 일과는 ${plan}. 안전사고 유의하고.` }, { who: D, text: '이상 아침 점호 끝!' }];
+  };
+  const pmClosing = (): Line[] => [
+    { who: D, text: hasNightDuty(st.day) ? '오늘 불침번 근무자는 {me}지? 00시에 이전 근무자가 깨울 거다. 교대 시간 지키고, 이상 있으면 바로 보고해.'
+      : hasGuardNight(st.day) ? '{me}는 오늘 위병소 야간 근무다. 사수랑 같이 조용히 나가고, 다른 인원 깨우지 않게.'
+      : '내일 일과 확인하고 바로 취침 준비해라. 불침번 근무자는 근무 잘 서고.' },
+    { who: D, text: '이상 저녁 점호 끝!' },
+  ];
+
+  // 둘째 날부터: 절차(체조·애국가·행동강령·인원 보고…)는 생략, 당직사령(사관)의 마지막 한마디로 끝
+  if (st.day > 1) {
+    if (info.kind === 'am') {
+      steps.push(
+        { t: 'wait', secs: 1.4, before: () => ctl.move(D, info.marks.stage[0], info.marks.stage[1], 1.2, 'down') },
+        { t: 'talk', script: { lines: [
+          ...(info.late ? [{ who: 'me' as LineWho, text: '(늦게 끌려온 탓에 맨 뒷줄 끝자리에 섰다… 시선이 따갑다.)' }] : []),
+          { who: 'narr', text: `아침 점호. 구령대 위의 {r:${D}}이(가) 정렬한 장병들을 훑어본다.` },
+          ...amClosing(),
+        ] } },
+        salute('부대 차렷! 당직사관님께 경례!'),
+        { t: 'wait', secs: 0.5, before: calm },
+      );
+    } else {
+      steps.push(
+        { t: 'wait', secs: 1.5, before: () => ctl.move(D, info.marks.duty[0], info.marks.duty[1], 1.3, 'left') },
+        { t: 'talk', script: { lines: [
+          { who: 'narr', text: `저녁 점호. 당직사령 {r:${D}}이(가) 생활관 문을 열고 들어와 한 바퀴 둘러본다.` },
+          ...pmClosing(),
+        ] } },
+        salute('생활관 차렷! 당직사령님께 경례!'),
+        { t: 'act', title: '🌙 당직사령 퇴실', subs: ['다음 생활관으로…', '"취침 준비!"'], secs: 1.4,
+          before: () => { calm(); ctl.move(D, info.marks.door[0] + 1, info.marks.door[1], 1.2, 'up'); } },
+      );
+    }
+    return steps;
+  }
+
+  if (info.kind === 'am') {
     steps.push(
       {
         t: 'talk',
@@ -302,9 +342,7 @@ function build(info: CeremonyInfo, ctl: CeremonyCtl, aide: SpeakerInfo | null, s
       {
         t: 'talk',
         script: {
-          lines: st.day >= TOTAL_DAYS
-            ? [{ who: D, text: '전달 사항. 오늘 전역하는 인원이 있다. 그동안 정말 고생 많았다!' }, { who: D, text: '이상 아침 점호 끝!' }]
-            : [{ who: D, text: `전달 사항. 오늘 오전 일과는 ${plan}. 안전사고 유의하고.` }, { who: D, text: '이상 아침 점호 끝!' }],
+          lines: amClosing(),
         },
       },
       salute('부대 차렷! 당직사관님께 경례!'),
@@ -381,10 +419,7 @@ function build(info: CeremonyInfo, ctl: CeremonyCtl, aide: SpeakerInfo | null, s
   steps.push(
     {
       t: 'talk',
-      script: { lines: [
-        { who: D, text: hasNightDuty(st.day) ? '오늘 불침번 근무자는 {me}지? 근무 교대 시간 지키고, 이상 있으면 바로 보고해.' : '내일 일과 확인하고 바로 취침 준비해라. 불침번 근무자는 근무 잘 서고.' },
-        { who: D, text: '이상 저녁 점호 끝!' },
-      ] },
+      script: { lines: pmClosing() },
     },
     salute('생활관 차렷! 당직사령님께 경례!'),
     {

@@ -60,10 +60,14 @@ export function QuestTracker({ onOpen }: { onOpen: () => void }) {
   const items: { title: string; next: string; done?: boolean }[] = [];
   const story = s.clues.length > 0 ? nextStoryMission(s) : null;
   if (story) items.push({ title: `📖 ${story.chapter}장 · ${story.title}`, next: story.hint });
-  if (mc && mc.status !== 'missed') {
+  const ate = mc && s.daily.includes(`meal_${mc.meal}`);
+  if (mc && !ate) {
     const left = mc.targets.filter((id) => !mc.asked.includes(id));
-    items.push(mc.status === 'together'
-      ? { title: '🍚 식사 집합', next: '✅ 다 모였다! 식당으로 가서 같이 먹자', done: true }
+    const march = mc.marchAt ?? null;
+    items.push(mc.status !== 'asking'
+      ? (march === null || s.minute < march
+        ? { title: '🍚 식사 집합', next: `📍 막사 앞 집합 · ${march !== null ? fmtTime(march) : '곧'} 다 같이 출발` }
+        : { title: '🍚 식사', next: '🚶 1생활관이 식당으로 이동 중 — 배식대에서 식판 받고 내 자리(분대 줄)에 앉자', done: true })
       : { title: `🍚 식사 집합 (${mc.asked.length}/${mc.targets.length})`, next: `${left.map((id) => `👤 ${memberName(s.branch, id)} 📍${npcWhere(s.branch, id) ?? '?'}`).join(' / ')} · ${fmtTime(mc.start + mealGatherMin())}까지` });
   }
   if (s.patrol) {
@@ -140,15 +144,15 @@ export function QuestLog({ onClose }: { onClose: () => void }) {
               <b>🍚 식사 집합</b> <span className="hud-dim">({mc.asked.length}/{mc.targets.length}{mc.status === 'asking' ? ` · ${fmtTime(mc.start + mealGatherMin())}까지` : ''})</span>
               <div>밥 먹으러 가기 전에 선임들께 "식사하러 가시겠습니까?" 여쭤보고, 다 모이면 같이 식당으로 간다.</div>
               <div className="ql-faces">{mc.targets.map((id) => <Face key={id} branch={s.branch} who={id} day={s.day} />)}</div>
-              <ul className="ql-steps">
+              {(mc.by ?? 'me') === 'me' && <ul className="ql-steps">
                 {mc.targets.map((id) => (
                   <li key={id} className={mc.asked.includes(id) ? 'done' : 'cur'}>
                     {mc.asked.includes(id) ? '✓' : '▶'} {memberFullName(s.branch, id, s.day)}께 여쭤보기{mc.asked.includes(id) ? ' — 막사 앞에서 대기 중' : ` · 📍 ${npcWhere(s.branch, id) ?? '위치 확인 중'}`}
                   </li>
                 ))}
-              </ul>
+              </ul>}
               <div className="hud-dim">
-                {mc.status === 'together' ? '✅ 완료! 다 같이 식당으로.' : mc.status === 'missed' ? '❌ 시간 초과 — 선임들이 먼저 갔다.' : '보상: 군기 +2 · 멘탈 +1 · 선임 호감 +2씩'}
+                {mc.by === 'junior' ? `맞후임이 대신 여쭤봤다. 막사 앞에 모여 ${mc.marchAt != null ? fmtTime(mc.marchAt) : ''} 출발.` : mc.by === 'auto' ? '알아서 막사 앞에 모여 다 같이 간다.' : mc.status === 'together' ? '✅ 완료! 다 같이 식당으로.' : mc.status === 'missed' ? '❌ 시간 초과 — 생활관 인원끼리 모여 갔다. (눈치가 보인다)' : '보상: 군기 +2 · 멘탈 +1 · 선임 호감 +2씩'}
               </div>
             </div>
           )}

@@ -50,11 +50,17 @@ export const NIGHT_GUARD_START = 22 * 60 + 15;
 
 /** 식사 집합 미션 제한 시간 (식사 시작부터) */
 export function mealGatherMinutes(): number {
-  return Math.ceil(25 * timeScale());
+  // 시간이 빠를수록 늘려 주되, 모여서 식당까지 걸어가 먹을 시간은 남긴다
+  return Math.min(30, Math.ceil(25 * timeScale()));
 }
 
+/** 불침번(생활관 야간 근무)이 있는 날 */
 export function hasNightDuty(day: number) {
   return day % 2 === 0 && day < TOTAL_DAYS;
+}
+/** 야간 위병소 근무가 있는 날 */
+export function hasGuardNight(day: number) {
+  return !hasNightDuty(day) && day >= 3 && day % 4 === 3 && day < TOTAL_DAYS;
 }
 
 export function buildSchedule(day: number, branch: BranchId): ScheduleEvent[] {
@@ -73,10 +79,11 @@ export function buildSchedule(day: number, branch: BranchId): ScheduleEvent[] {
     { id: 'rollcall_pm', kind: 'rollcall_pm', label: '저녁 점호', start: 21 * 60 + 30, window: windowFor('barracks'), end: 22 * 60, spot: 'barracks' },
   ];
   if (hasNightDuty(day)) {
-    events.push({ id: 'night', kind: 'night', label: '불침번 근무', start: 22 * 60, window: 0, end: 23 * 60, spot: null, game: 'night', auto: true });
-  } else if (day >= 3 && day % 4 === 3) {
-    // 야간 위병소 근무: 점호 후 위병소 초소로 가서 경계근무
-    events.push({ id: 'guard_night', kind: 'work', label: '야간 위병소 근무', start: NIGHT_GUARD_START, window: windowFor('post'), end: 23 * 60 + 30, spot: 'post', game: 'guard' });
+    // 불침번: 소등 후 자다가 00:00 이전 근무자가 깨운다 → 00:50 다음 근무자를 깨워 교대
+    events.push({ id: 'night', kind: 'night', label: '불침번 근무 (00:00~01:00)', start: 22 * 60, window: 0, end: 25 * 60, spot: null, game: 'night', auto: true });
+  } else if (hasGuardNight(day)) {
+    // 야간 위병소 근무: 자다가 사수·부사수가 조용히 깨운다 → 같이 위병소로 → 00:00~02:00 경계근무
+    events.push({ id: 'guard_night', kind: 'night', label: '야간 위병소 근무 (00:00~02:00)', start: 22 * 60, window: 0, end: 26 * 60, spot: null, game: 'guard', auto: true });
   } else if (day >= 5 && day % 4 === 1) {
     // 야간 순찰: 점호 후 막사 1·2층 복도를 돌며 점검하고 당직사관에게 보고
     events.push({ id: 'patrol', kind: 'patrol', label: '야간 순찰 (막사 복도)', start: 22 * 60, window: 0, end: 23 * 60, spot: null, auto: true });

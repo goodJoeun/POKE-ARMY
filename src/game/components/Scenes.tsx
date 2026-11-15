@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Archetype, BranchId, NpcId } from '../types';
 import { useGame, presentNpcs, fmtDelta, fatigueOf } from '../state/store';
 import { TEXT_SPEED, useSettings } from '../state/settings';
-import { hasNightDuty } from '../data/schedule';
+import { hasGuardNight, hasNightDuty } from '../data/schedule';
 import { BRANCHES, RANKS, TOTAL_DAYS, fmtMoney, rankIdxForDay, serviceMonth } from '../data/branches';
 import { ARCHETYPE_INFO, PLAYER_SPECIES, findSpecies } from '../data/monsters';
 import { PERSONALITY_QUIZ } from '../data/quiz';
@@ -253,6 +253,7 @@ export function Promotion() {
   const b = BRANCHES[s.branch];
   const cpt = npcSpeaker(s.branch, 'cpt', s.day);
   const [answered, setAnswered] = useState<null | boolean>(null);
+  const [evolved, setEvolved] = useState(false);
   const opts = useMemo(() => [
     { ok: true, text: `"${b.salute}! 신고합니다. ${RANKS[rank - 1]} ${s.name}은(는) ${RANKS[rank]}(으)로 진급을 명받았습니다. 이에 신고합니다. ${b.salute}!"` },
     { ok: false, text: `"저 ${RANKS[rank]} 됐어요! 감사합니다~"` },
@@ -264,11 +265,13 @@ export function Promotion() {
     s.applyEffects(ok ? { discipline: 5, affinity: { cpt: 5 } } : { discipline: -2, affinity: { cpt: -2 } }, '진급 신고');
     s.addTip('진급·전입·휴가 등은 지휘관에게 "신고"를 한다. 형식: "경례! 신고합니다. 계급 성명은 ○○부로 ○○을 명받았습니다. 이에 신고합니다. 경례!"');
   };
+  if (!evolved) {
+    return <Evolution name={s.name} look={findSpecies(s.speciesId)!.look} cap={b.cap} from={rank - 1} to={rank} onDone={() => setEvolved(true)} />;
+  }
   return (
     <div className="scene promo-scene">
       <h2>🎖️ 진급 신고</h2>
       <div className="promo-evo">
-        <div>…어라? {s.name}의 모습이…!</div>
         <div>축하합니다! {s.name}은(는) <b>{RANKS[rank - 1]}</b>에서 <b>{RANKS[rank]}</b>(으)로 진화했다!</div>
       </div>
       <div className="promo-badge"><RankBadge rankIdx={rank} size={60} /><div>{RANKS[rank - 1]} → <b>{RANKS[rank]}</b></div></div>
@@ -292,6 +295,84 @@ export function Promotion() {
   );
 }
 
+/**
+ * 진급 = 진화: 클래식 포켓몬 진화 연출.
+ * "…어라!?" → 하얗게 빛나며 크기가 바뀌는 깜빡임(점점 빨라짐) → 섬광 → "축하합니다! …진화했다!"
+ * 깜빡이는 동안 B(Esc/Backspace)를 누르면… 진급은 멈출 수 없다.
+ */
+const EVO_START = 1.6, EVO_END = 6.4, EVO_FLASH = 6.4, EVO_DONE = 7.4;
+const EVO_TOGGLES = (() => {
+  const out: number[] = [];
+  let x = EVO_START, p = 0.62;
+  while (x < EVO_END) { out.push(x); x += p; p = Math.max(0.06, p * 0.84); }
+  return out;
+})();
+function Evolution({ name, look, cap, from, to, onDone }: {
+  name: string; look: Parameters<typeof MonsterCanvas>[0]['look']; cap: Parameters<typeof MonsterCanvas>[0]['cap'];
+  from: number; to: number; onDone: () => void;
+}) {
+  const [t, setT] = useState(0);
+  const [cancelTry, setCancelTry] = useState(0);
+  const t0 = useRef(0);
+  useEffect(() => {
+    t0.current = performance.now();
+    let raf = 0;
+    const loop = () => { setT((performance.now() - t0.current) / 1000); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const done = t >= EVO_DONE;
+  const advance = useCallback(() => {
+    if (done) onDone();
+    else if (t < EVO_START) t0.current -= (EVO_START - t) * 1000; // 첫 멘트는 넘길 수 있다
+  }, [done, t, onDone]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'e' || e.key === 'E') { e.preventDefault(); advance(); }
+      if ((e.key === 'Escape' || e.key === 'Backspace' || e.key === 'b' || e.key === 'B') && t >= EVO_START && t < EVO_FLASH) {
+        e.preventDefault(); setCancelTry((c) => c + 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [advance, t]);
+
+  const flicking = t >= EVO_START && t < EVO_END;
+  const toggles = EVO_TOGGLES.filter((x) => x <= t).length;
+  // 빛에 감싸이기 시작 → 깜빡임 동안은 내내 하얀 실루엣, 크기만 번갈아 바뀐다
+  const white = t >= EVO_START - 0.5 && t < EVO_FLASH + 0.15;
+  const scale = flicking ? (toggles % 2 ? 1.2 : 0.86) : t >= EVO_FLASH ? 1 + Math.max(0, 0.15 - (t - EVO_FLASH) * 0.3) : 1;
+  const flash = t >= EVO_FLASH ? Math.max(0, 1 - (t - EVO_FLASH) / 0.9) : 0;
+  const glow = flicking ? Math.min(1, (t - EVO_START) / (EVO_END - EVO_START)) : t >= EVO_FLASH ? Math.max(0, 1 - (t - EVO_FLASH) / 1.2) : 0;
+  const text = t < EVO_START ? `…어라!? ${name}의 모습이…!`
+    : t < EVO_FLASH ? (cancelTry > 0 ? '…진급은 멈출 수 없다! (B 버튼은 군대에서 통하지 않는다)' : `…어라!? ${name}의 모습이…!`)
+    : t < EVO_DONE - 0.4 ? '……!'
+    : `축하합니다! ${name}은(는) ${RANKS[from]}에서 ${RANKS[to]}(으)로 진화했다!`;
+  const shownRank = t >= EVO_FLASH ? to : from;
+  return (
+    <div className="evo-scene" onClick={advance}>
+      <div className="evo-rays" style={{ opacity: glow }} />
+      {flicking && Array.from({ length: 10 }, (_, i) => {
+        const a = (i / 10) * Math.PI * 2 + t * 1.6;
+        const r = 150 - ((t * 90 + i * 37) % 130);
+        return <i key={i} className="evo-spark" style={{ left: `calc(50% + ${Math.cos(a) * r}px)`, top: `calc(42% + ${Math.sin(a) * r}px)` }} />;
+      })}
+      <div className="evo-mon" style={{ transform: `scale(${scale})` }}>
+        <MonsterCanvas look={look} size={200} cap={cap} silhouette={white ? '#ffffff' : undefined} />
+      </div>
+      <div className={`evo-rank ${t >= EVO_FLASH ? 'new' : ''}`}>
+        <RankBadge rankIdx={shownRank} size={44} />
+        <span>{RANKS[shownRank]}</span>
+      </div>
+      {flash > 0 && <div className="evo-flash" style={{ opacity: flash }} />}
+      <div className="evo-text">
+        <div>{text}</div>
+        {(done || t < EVO_START) && <span className="next-indicator">▼</span>}
+      </div>
+    </div>
+  );
+}
+
 // ───────── 하루 결산 ─────────
 export function DayEnd() {
   const s = useGame();
@@ -299,7 +380,7 @@ export function DayEnd() {
   const diff = (k: keyof typeof ds) => s.stats[k] - ds[k];
   const affDiff = NPC_IDS.map((id) => [id, s.affinity[id] - s.dayStart.affinity[id]] as [NpcId, number]).filter(([, d]) => d !== 0);
   const sign = fmtDelta;
-  const nightDuty = hasNightDuty(s.day);
+  const nightDuty = hasNightDuty(s.day) || hasGuardNight(s.day);
   // 수면 회복: 불침번 선 날은 덜 회복된다
   const proceed = () => { s.applyEffects(nightDuty ? { hp: 12 } : { hp: 20, mental: 3 }, undefined, true); s.nextDay(); };
   const tomorrowFatigue = fatigueOf({

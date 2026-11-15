@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Choice, Dialogue, MonsterLook, NpcId, SpotId } from '../types';
+import type { Choice, Dialogue, LineWho, MonsterLook, NpcId, SpotId } from '../types';
 import { extraLook, extrasForDay } from '../data/extras';
 import { useGame, presentNpcs, questSlowActive, questOffers, dialogueById, PATROL_SPOTS } from '../state/store';
 import { BRANCHES, FACILITY_NAME, STORE_NAME, TOTAL_DAYS, fmtTime, rankIdxForDay, seasonForDay } from '../data/branches';
@@ -20,12 +20,13 @@ import { runtime } from '../engine/runtime';
 import { npcCap, type SpeakerInfo } from '../engine/speakers';
 import type { CerActor, CeremonyCtl, CeremonyInfo, CeremonyRt } from '../engine/ceremony';
 import { fmt } from '../engine/text';
+import { memberName } from '../engine/whereabouts';
 import Hud from './Hud';
 import DialogueBox, { type DialogueScript } from './DialogueBox';
 import Menu, { type MenuOption } from './Menu';
 import Notebook from './Notebook';
 import RollcallCeremony from './RollcallCeremony';
-import { STORY_MISSIONS, missionState } from '../data/story';
+import { NIGHT_STAR_LINES, STORY_MISSIONS, missionState } from '../data/story';
 import { QuestLog, QuestTracker } from './QuestPanel';
 import MapView from './MapView';
 import TouchPad from './TouchPad';
@@ -63,7 +64,7 @@ type Overlay =
 interface Interactable {
   key: string;
   label: string;
-  kind: 'event' | 'npc' | 'spot' | 'extra';
+  kind: 'event' | 'npc' | 'spot' | 'extra' | 'seat' | 'duty';
   extra?: string;
   npc?: NpcId;
   spot?: SpotId;
@@ -80,19 +81,91 @@ const FREE_POS: Record<NpcId, Pos> = {
  * 모두 식탁 바로 위 줄(y=3·6·9)에 앉아 아래(식탁)를 보고 먹는다 → 식판이 몸에 가리지 않는다
  */
 const MEAL_POS: Partial<Record<NpcId, Pos>> = {
-  // 1분대: 첫 줄
-  sgt: ['mess', 2, 3], senior: ['mess', 3, 3], buddy: ['mess', 4, 3], junior: ['mess', 8, 3], junior2: ['mess', 9, 3],
+  // 1분대: 첫 줄 (계급순: 분대장 · 1분대 상병 · 맞선임 · 나(4) | 통로 | 동기 · 후임들)
+  sgt: ['mess', 1, 3], senior: ['mess', 3, 3], buddy: ['mess', 8, 3], junior: ['mess', 9, 3], junior2: ['mess', 10, 3],
   // 간부: 둘째 줄 왼쪽
   lt: ['mess', 2, 6], cpt: ['mess', 3, 6], sgm: ['mess', 4, 6],
 };
 /** 엑스트라 식사 자리 (취사병·PX병·위병·군견은 자리를 지킨다) */
 const EXTRA_MEAL_SEAT: Record<string, [number, number]> = {
-  runner: [10, 3],
+  runner: [11, 3],
   medic: [8, 6], nco: [9, 6], clerk: [10, 6],
   gym: [2, 9], cyber: [3, 9], room2a: [4, 9], lounge: [8, 9],
   // 1분대 선임 · 2생활관 사람들 (식탁을 넓힌 자리)
-  sq1: [1, 3], r2b: [9, 9], r2c: [10, 9], r2d: [11, 9],
+  sq1: [2, 3], r2b: [9, 9], r2c: [10, 9], r2d: [11, 9],
 };
+/** 내 식사 자리: 1분대 줄, 맞선임 옆 */
+const MY_MEAL_SEAT: [number, number] = [4, 3];
+/** 1분대(1생활관) 식사 행군 순서 = 계급순. 맨 앞(있는 사람 중)이 식사를 이끈다 */
+const SQUAD_KEYS = ['sgt', 'x:sq1', 'senior', 'buddy', 'junior', 'junior2'];
+/** 막사 현관 앞 식사 집합 자리 */
+const MEAL_GATHER: Record<string, Pos> = {
+  sgt: ['outdoor', 10, 14], 'x:sq1': ['outdoor', 11, 14], senior: ['outdoor', 12, 14],
+  buddy: ['outdoor', 13, 14], junior: ['outdoor', 14, 14], junior2: ['outdoor', 15, 14],
+};
+const GATHER_KEYS = new Set(Object.values(MEAL_GATHER).map((g) => `${g[0]}:${g[1]},${g[2]}`));
+/** 분대 선두(분대장)가 앉아서 다 먹기까지(분) — 선임은 빨리 먹는다 / 내가 그냥 먹으면 걸리는 시간 */
+const SQUAD_EAT_MIN = 9;
+const MY_EAT_MIN = 13;
+const mealOf = (m: number): 'lunch' | 'dinner' => (m < 15 * 60 ? 'lunch' : 'dinner');
+const mealStartOf = (m: number) => (m < 15 * 60 ? 12 * 60 : 17 * 60 + 30);
+const hashStr = (str: string) => { let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return h >>> 0; };
+/** 이번 끼니에 각자 자리에 앉은 시각 (자리에 도착한 순간 기록) */
+const mealRt: { key: string; seated: Record<string, number> } = { key: '', seated: {} };
+function mealSeated(day: number, minute: number) {
+  const k = `${day}-${mealOf(minute)}`;
+  if (mealRt.key !== k) { mealRt.key = k; mealRt.seated = {}; }
+  return mealRt.seated;
+}
+/** 오늘 1분대(1생활관) 사람들, 계급순 */
+function squadKeys(branch: Parameters<typeof extrasForDay>[0], day: number): string[] {
+  const ps = presentNpcs(day);
+  const xs = new Set(extrasForDay(branch, day).map((d) => `x:${d.id}`));
+  return SQUAD_KEYS.filter((k) => (k.startsWith('x:') ? xs.has(k) : ps.includes(k as NpcId)));
+}
+/** 내 식사 상태 (식판 들고 있음 / 앉아서 먹는 중) */
+const myMeal: {
+  tray: '' | 'lunch' | 'dinner';
+  eating: null | { meal: 'lunch' | 'dinner'; prog: number; last: number; start: number; pace: null | { finish: number; lead: string }; bite: number };
+} = { tray: '', eating: null };
+/** 식판 (left: 남은 양 0~1) */
+function drawTray(g: CanvasRenderingContext2D, tx: number, ty: number, left: number) {
+  g.fillStyle = '#9aa0a8'; g.fillRect(tx, ty, 20, 13);
+  g.fillStyle = '#c8ccd4'; g.fillRect(tx + 1, ty + 1, 18, 11);
+  if (left <= 0.02) return;
+  const k = Math.max(0.2, left);
+  g.fillStyle = '#ffffff'; g.fillRect(tx + 2, ty + 2, Math.ceil(7 * k), 5);   // 밥
+  g.fillStyle = '#d0402a'; g.fillRect(tx + 11, ty + 2, Math.ceil(6 * k), 4);  // 김치
+  g.fillStyle = '#a0682a'; g.fillRect(tx + 2, ty + 8, Math.ceil(7 * k), 3);   // 반찬
+  g.fillStyle = '#e8b048'; g.fillRect(tx + 11, ty + 7, Math.ceil(6 * k), 4);  // 국
+}
+/**
+ * 식사 시간에 이 사람이 있어야 할 곳 ('free' = 평소 자리).
+ * - 1분대: (여쭤보는 중이면) 여쭌 사람은 막사 앞 대기 → 출발 시각에 계급순으로 줄지어 식당 → 분대장이 다 먹으면 차례로 일어남
+ * - 다른 사람(간부·다른 부대): 저마다 다른 시각에 와서, 저마다 다른 시간 동안 먹고 간다
+ */
+function mealGoal(key: string, seat: Pos, st: ReturnType<typeof useGame.getState>): Pos | 'free' {
+  const m = st.minute;
+  const seated = mealSeated(st.day, m);
+  const squad = squadKeys(st.branch, st.day);
+  const si = squad.indexOf(key);
+  if (si >= 0) {
+    const lead = seated[squad[0]];
+    if (lead !== undefined && m >= lead + SQUAD_EAT_MIN + si * 0.7) return 'free';
+    const mc = st.mealCheck;
+    if (!mc || mc.meal !== mealOf(m)) return lead !== undefined || m > mealStartOf(m) + 30 ? seat : 'free';
+    if (mc.status === 'asking') return mc.targets.includes(key) && !mc.asked.includes(key) ? 'free' : MEAL_GATHER[key] ?? seat;
+    if (mc.marchAt === null || (mc.marchAt !== undefined && m < mc.marchAt + si * 0.35)) return MEAL_GATHER[key] ?? seat;
+    return seat;
+  }
+  const h = hashStr(`${key}-${st.day}-${mealOf(m)}`);
+  const arrive = mealStartOf(m) + 2 + (h % 23);
+  const dur = 9 + ((h >>> 8) % 8);
+  if (m < arrive) return 'free';
+  const sAt = seated[key];
+  if (sAt !== undefined ? m >= sAt + dur : m >= arrive + dur + 14) return 'free';
+  return seat;
+}
 /** 식탁 쪽을 바라보는 방향 (모든 자리는 식탁 위쪽) */
 const seatFacing = (_y: number): Dir => 'down';
 /** 식사 중인지: 식사 시간이고 자기 자리에 앉아 있음 */
@@ -116,8 +189,31 @@ const EXTRA_BED: Record<string, [MapId, number, 'top' | 'bottom']> = {
   sq1: ['room1', 1, 'bottom'],
   room2a: ['room2', 13, 'top'], r2b: ['room2', 1, 'top'], r2c: ['room2', 5, 'top'], r2d: ['room2', 9, 'top'],
 };
-/** 밤에도 제자리를 지키는 근무자(위병·당직부사관)와 군견 */
-const NIGHT_STAY = new Set(['guard', 'nco', 'dog']);
+/** 밤에도 깨어 있는 근무자: 당직병(지휘통제실)·위병(이전 근무자)과 군견. 그 밖의 병력은 없다 */
+const NIGHT_STAY = new Set(['guard', 'clerk', 'dog']);
+/** 밤 근무 자리 (행정병 → 지휘통제실 당직병) */
+const NIGHT_SPOT: Record<string, Pos> = { clerk: ['command', 8, 4] };
+/** 야간 근무 중 별빛(지라치)이 떠 있는 곳 */
+const STAR_POS: Record<'watch' | 'guard', [MapId, number, number]> = { watch: ['room1', 7.5, 2.4], guard: ['depot', 16.6, 20.5] };
+/** 야간 근무: 깨우러 온 사람·사수/부사수·다음 근무자가 있어야 할 곳 (null = 평소 밤 규칙대로) */
+function nightGoal(key: string, st: ReturnType<typeof useGame.getState>): Pos | null {
+  const nd = st.nightDuty;
+  if (!nd) return null;
+  const p = runtime.player;
+  if (nd.partner && key === nd.partner) {
+    if (nd.phase === 'sleep' || nd.phase === 'woken') return ['room1', 4, 4];
+    if (nd.phase === 'shift') return ['depot', 14, 26];
+    return [p.map, Math.floor(p.x), Math.floor(p.y)]; // 같이 간다 (따라온다)
+  }
+  if (key === nd.prev) return nd.phase === 'sleep' || nd.phase === 'woken' ? ['room1', 4, 4] : null;
+  if (key === nd.next && nd.nextAwake) return ['room1', 7, 5]; // 새 불침번: 출입문 쪽에서 근무
+  return null;
+}
+/** 지금 나를 따라오는 사수·부사수인지 */
+const followsMe = (key: string, st: ReturnType<typeof useGame.getState>) => {
+  const nd = st.nightDuty;
+  return !!nd && nd.partner === key && (nd.phase === 'toPost' || nd.phase === 'return');
+};
 /** 누운 위치(발 기준 y) / 침상 앞 통로 y */
 const bedY = (row: 'top' | 'bottom') => (row === 'top' ? 2.62 : 7.62);
 const aisleY = (row: 'top' | 'bottom') => (row === 'top' ? 4 : 6);
@@ -134,7 +230,13 @@ function visibleNpcs(day: number, minute: number): NpcId[] {
 const npcAsleep = (id: NpcId, n: { map: MapId; y: number }, minute: number) =>
   minute >= LIGHTS_OUT && BED_X[id] !== undefined && n.map === 'room1' && Math.abs(n.y - bedY('top')) < 0.05;
 /** 엑스트라: 밤에 안 보임(자기 부대 막사로) / 침상에 누움 */
-const extraHiddenAtNight = (id: string, minute: number) => minute >= LIGHTS_OUT && !EXTRA_BED[id] && !NIGHT_STAY.has(id);
+const extraHiddenAtNight = (id: string, minute: number) => {
+  if (minute < LIGHTS_OUT) return false;
+  // 위병소 교대 후: 이전 근무자(위병)는 막사로 돌아갔다
+  const nd = useGame.getState().nightDuty;
+  if (id === 'guard' && nd?.kind === 'guard' && (nd.phase === 'shift' || nd.phase === 'return')) return true;
+  return !EXTRA_BED[id] && !NIGHT_STAY.has(id);
+};
 const extraAsleep = (id: string, e: { map: MapId; y: number }, minute: number) => {
   if (minute < LIGHTS_OUT) return false;
   if (id === 'dog') return true;
@@ -161,8 +263,6 @@ const MEAL_REPLY: Partial<Record<NpcId, string[]>> = {
   sgt: ['그래, 가자. 막사 앞으로 모여. 다른 애들도 다 챙기고.', '벌써 그렇게 됐나? 좋아, 다 모이면 같이 간다.'],
   senior: ['오~ 가자가자. 오늘 메뉴 뭐냐? …제육이면 뛰어간다.', '나 막사 앞에서 기다린다~ 다른 사람들도 빨리 데려와.'],
 };
-/** 여쭌 선임이 기다리는 식사 집합 장소 (막사 현관 앞) */
-const MEAL_GATHER_POS: Partial<Record<NpcId, Pos>> = { sgt: ['outdoor', 11, 14], senior: ['outdoor', 12, 14] };
 /** 달리기: 기력 소모(초당)·회복 시간, 속도 */
 const WALK_SPEED = 6;
 const DASH_SPEED = 10.5;
@@ -176,6 +276,8 @@ export default function World() {
   const day = useGame((s) => s.day);
   const speciesId = useGame((s) => s.speciesId);
   const rollcall = useGame((s) => s.rollcall);
+  const nightPhase = useGame((s) => s.nightDuty?.phase ?? null);
+  const nightKind = useGame((s) => s.nightDuty?.kind ?? null);
   const b = BRANCHES[branch];
   const season = seasonForDay(day);
   const world = useMemo<WorldDef>(() => getWorld(branch, b.trainArea), [branch, b.trainArea]);
@@ -192,6 +294,7 @@ export default function World() {
   if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
     (window as unknown as Record<string, unknown>).__npcs = npcs; // 개발용 디버그 핸들
     (window as unknown as Record<string, unknown>).__extras = extras;
+    (window as unknown as Record<string, unknown>).__meal = { myMeal, mealRt };
   }
   const [overlay, setOverlayState] = useState<Overlay>(null);
   const overlayRef = useRef<Overlay>(null);
@@ -520,6 +623,239 @@ export default function World() {
   // 📖 N-01 안개 너머: 위병소 정문 밖으로 나가면 하얘졌다가 초소 앞으로 돌아온다
   const [flash, setFlash] = useState(false);
   useEffect(() => { if (!flash) return; const tm = setTimeout(() => setFlash(false), 1200); return () => clearTimeout(tm); }, [flash]);
+  /** 키로 사람(주요 NPC 또는 'x:엑스트라') 런타임 찾기 */
+  const entityOf = useCallback((key: string) => (key.startsWith('x:') ? extras.current[key.slice(2)] : npcs.current[key as NpcId]) ?? null, []);
+  /** 대본용 화자: 주요 NPC면 npc, 엑스트라면 custom */
+  const speakerOf = useCallback((key: string): { npc?: NpcId; custom?: SpeakerInfo; who: LineWho } => {
+    if (!key.startsWith('x:')) return { npc: key as NpcId, who: key as NpcId };
+    const def = extraDefs.find((d) => d.id === key.slice(2));
+    if (!def) return { who: 'narr' };
+    const words = def.title.split(' ');
+    return {
+      who: 'npc',
+      custom: { name: `${def.name} ${words[words.length - 1]}`, sub: words.slice(0, -1).join(' '), look: extraLook(def), cap: BRANCHES[useGame.getState().branch].cap as CapType },
+    };
+  }, [extraDefs]);
+  /** 사람을 그 자리로 바로 옮긴다 (자다가 일어남 등) */
+  const placeAt = useCallback((key: string, map: MapId, x: number, y: number, dir: Dir) => {
+    const e = entityOf(key);
+    if (!e) return;
+    e.map = map; e.x = x; e.y = y; e.dir = dir; e.path = []; e.viaDoor = null; e.targetKey = `${map}:${Math.floor(x)},${Math.floor(y)}`; e.moving = false;
+  }, [entityOf]);
+
+  /** 🌙 소등 후 잠들어 있다가 → 근무 시간에 깨어난다 */
+  const nightWake = useCallback(() => {
+    const st = useGame.getState();
+    const nd = st.nightDuty;
+    if (!nd || nd.phase !== 'sleep') return;
+    useGame.setState({ minute: nd.kind === 'guard' ? nd.shiftStart - 20 : nd.shiftStart - 2 });
+    const p = runtime.player;
+    p.map = 'room1'; p.x = 3.5; p.y = 4.5; p.dir = 'right'; p.moving = false;
+    keys.current = {};
+    placeAt(nd.prev, 'room1', 4.5, 4.5, 'left');
+    st.setNightDuty({ phase: 'woken' });
+    const sp = speakerOf(nd.prev);
+    const prevName = memberName(st.branch, nd.prev);
+    if (nd.kind === 'watch') {
+      const nextName = memberName(st.branch, nd.next);
+      setOverlay({
+        type: 'dialogue',
+        script: { npc: sp.npc, custom: sp.custom, lines: [
+          { who: 'narr', text: '(누군가 어깨를 조심스럽게 흔든다…) 23:58. 생활관은 숨소리뿐이다.' },
+          { who: sp.who, text: '(속삭이며) {me}… {me}. 일어나. 불침번 근무 시간이다.' },
+          { who: 'me', text: '(비몽사몽) …네. 일어났습니다.' },
+          { who: sp.who, text: `근무 인수인계. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기. 다음 근무자는 ${nextName}, 00:50에 깨워서 교대해.` },
+          { who: 'me', text: '(작게) 네, 수고하셨습니다.' },
+          { who: 'narr', text: `${prevName}이(가) 조용히 자기 침상으로 돌아간다. 깨어 있는 건 이제 나, 그리고 지휘통제실의 당직병과 당직사령뿐.` },
+        ] },
+        onDone: () => {
+          const s2 = useGame.getState();
+          s2.setNightDuty({ phase: 'shift' });
+          useGame.setState({ minute: Math.max(s2.minute, s2.nightDuty!.shiftStart) });
+          s2.addTip('불침번: 취침 시간에 생활관을 지키는 근무. 이전 근무자가 깨우면 인수인계(특이사항·인원·물품)를 받고, 끝나기 10분 전쯤 다음 근무자를 깨워 교대한다.');
+          s2.startMinigame({ game: 'night', title: '🌙 불침번 근무 (00:00~01:00)', returnTo: 'world' });
+        },
+      });
+    } else {
+      const iAmJunior = rankIdxForDay(st.day) <= 1;
+      setOverlay({
+        type: 'dialogue',
+        script: { npc: sp.npc, custom: sp.custom, lines: iAmJunior ? [
+          { who: 'narr', text: '(누군가 발끝으로 다가와 이불을 툭툭 친다…) 23:40.' },
+          { who: sp.who, text: '(속삭이며) 야, {me}. 일어나. 위병소 근무 가자. …쉿, 조용히. 다른 애들 깬다.' },
+          { who: 'me', text: '(작게) …네, 일어났습니다.' },
+          { who: sp.who, text: '전투복 입고 나와. 00시 교대니까 늦지 않게 앞장서. 내가 뒤따라간다.' },
+          { who: 'narr', text: `[사수 ${prevName}와(과) 함께 위병소 초소로 가자. 깨어 있는 건 당직병과 당직사령뿐이다.]` },
+        ] : [
+          { who: 'narr', text: '(누군가 조심스럽게 어깨를 흔든다…) 23:40.' },
+          { who: sp.who, text: '(속삭이며) {me} {myrank}님… 근무 시간입니다.' },
+          { who: 'me', text: '(작게) 어, 그래. 조용히 준비하고 따라와.' },
+          { who: 'narr', text: `[부사수 ${prevName}을(를) 데리고 위병소 초소로 가자. 깨어 있는 건 당직병과 당직사령뿐이다.]` },
+        ] },
+        onDone: () => {
+          useGame.getState().setNightDuty({ phase: 'toPost' });
+          useGame.getState().addTip('야간 경계근무는 사수·부사수 2인 1조. 자는 인원이 깨지 않게 조용히 일어나 함께 이동하고, 초소에서 이전 근무자와 교대한다.');
+        },
+      });
+    }
+  }, [placeAt, speakerOf, setOverlay]);
+
+  useEffect(() => {
+    if (nightPhase === 'sleep') {
+      const p = runtime.player;
+      p.map = 'room1'; p.x = 3.5; p.y = 4.5; p.dir = 'up'; p.moving = false;
+      keys.current = {};
+      const tm = setTimeout(() => nightWake(), 3200);
+      return () => clearTimeout(tm);
+    }
+    const st = useGame.getState();
+    const nd = st.nightDuty;
+    if (!nd) return;
+    if (nightPhase === 'wakeNext') st.toast(`🔦 00:50 — 근무 끝나기 10분 전. 다음 근무자 ${memberName(st.branch, nd.next)}을(를) 깨워 교대하자.`, 'alert');
+    if (nightPhase === 'return' && nd.kind === 'guard') st.toast('🌙 02:00 — 다음 근무자와 교대했다. 사수·부사수와 함께 조용히 생활관으로 복귀하자.', 'info');
+    if (nightPhase === 'toPost') st.toast('🌙 위병소 초소로! 같이 근무 서는 사람이 뒤따라온다.', 'info');
+  }, [nightPhase, nightWake]);
+
+  /** 🌙 야간 근무 상호작용: 위병소 교대 · 다음 근무자 깨우기 · 취침 · 별빛 */
+  const nightActRef = useRef<(key: string) => void>(() => {});
+  nightActRef.current = (key: string) => {
+    const st = useGame.getState();
+    const nd = st.nightDuty;
+    if (!nd) return;
+    if (key === 'duty_star') {
+      const lines = NIGHT_STAR_LINES[st.day] ?? ['…(빛이 무언가 말하려다 흩어졌다)'];
+      setOverlay({
+        type: 'dialogue',
+        script: {
+          custom: { name: '??? (별빛)', sub: '', look: null, cap: null },
+          lines: [
+            { who: 'narr', text: nd.kind === 'watch' ? '창가에 작은 별빛이 떠 있다. 손전등을 비춰도 그림자가 생기지 않는다…' : '안개 낀 길 위에 작은 별빛이 둥실 떠 있다. 사수는 못 본 것 같다…' },
+            ...lines.map((t) => ({ who: 'npc' as const, text: t })),
+            { who: 'narr', text: '눈을 한 번 깜빡이자, 빛은 사라지고 없었다.' },
+          ],
+        },
+        onDone: () => {
+          const s2 = useGame.getState();
+          s2.applyEffects({ memory: 2, mental: 1, flag: `star_${s2.day}` }, '의문의 별빛');
+          s2.log('✨ 야간 근무 중 의문의 별빛을 만났다.');
+        },
+      });
+      return;
+    }
+    if (key === 'duty_post') {
+      const guard = extraDefs.find((d) => d.id === 'guard');
+      const gs = guard ? speakerOf('x:guard') : { who: 'narr' as const };
+      setOverlay({
+        type: 'dialogue',
+        script: { custom: gs.custom, lines: [
+          { who: 'me', text: '근무 교대! 근무자 {me} 외 1명, 근무 투입하겠습니다!' },
+          { who: gs.who, text: '수고. 특이사항 없음. 정문 쪽에 안개가 좀 꼈으니 잘 봐. 암구호는 근무일지에.' },
+          { who: 'narr', text: `이전 근무자들이 하품을 하며 막사로 돌아간다. 초소엔 나와 ${nd.partner ? memberName(st.branch, nd.partner) : '근무자'} 둘뿐.` },
+        ] },
+        onDone: () => {
+          const s2 = useGame.getState();
+          s2.setNightDuty({ phase: 'shift' });
+          useGame.setState({ minute: Math.max(s2.minute, s2.nightDuty!.shiftStart) });
+          s2.startMinigame({ game: 'guard', title: '🌙 야간 위병소 근무 (00:00~02:00)', returnTo: 'world' });
+        },
+      });
+      return;
+    }
+    if (key === 'duty_wake') {
+      const sp = speakerOf(nd.next);
+      const nextName = memberName(st.branch, nd.next);
+      const same = nd.next === 'buddy';
+      setOverlay({
+        type: 'dialogue',
+        script: { npc: sp.npc, custom: sp.custom, lines: [
+          { who: 'me', text: same ? `(속삭이며) 야, ${nextName}. 일어나. 근무다.` : `(속삭이며) ${nextName}님… 일어나십시오. 불침번 근무 시간입니다.` },
+          { who: sp.who, text: '…으음… 벌써 그렇게 됐어? …알았어, 일어날게.' },
+          { who: 'me', text: same ? '인수인계. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기.' : '근무 인수인계입니다. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기 있습니다.' },
+          { who: sp.who, text: '(하품) 수고했어. 들어가 자.' },
+        ] },
+        onDone: () => {
+          const s2 = useGame.getState();
+          const e = entityOf(nd.next);
+          if (e) { e.y = 4.5; e.path = []; e.viaDoor = null; e.targetKey = ''; }
+          s2.setNightDuty({ nextAwake: true, phase: 'return' });
+          s2.toast('🛏️ 교대 완료. 내 침상으로 돌아가 자자.', 'info');
+        },
+      });
+      return;
+    }
+    if (key === 'duty_sleep') {
+      const sp = nd.partner ? speakerOf(nd.partner) : null;
+      setOverlay({
+        type: 'dialogue',
+        script: { npc: sp?.npc, custom: sp?.custom, lines: nd.kind === 'guard' && sp ? [
+          { who: sp.who, text: rankIdxForDay(st.day) <= 1 ? '(속삭이며) 수고했다. 얼른 자라. 아침 점호 늦지 말고.' : '(속삭이며) 수고하셨습니다, {me} {myrank}님. 안녕히 주무십시오.' },
+          { who: 'narr', text: '조용히 모포를 덮었다. 발이 아직 차갑다.' },
+        ] : [
+          { who: 'narr', text: `모포를 덮었다. 이제 깨어 있는 건 ${memberName(st.branch, nd.next)}, 그리고 지휘통제실의 당직병뿐…` },
+        ] },
+        onDone: () => useGame.getState().finishNightDuty(),
+      });
+    }
+  };
+
+  /** 🍚 먹는 중 매 프레임: 진행, (처음 한 번) 선임 속도 맞추기, 다 먹으면 일어나기 */
+  const mealTickRef = useRef<() => void>(() => {});
+  mealTickRef.current = () => {
+    const st = useGame.getState();
+    const e = myMeal.eating;
+    if (!e) return;
+    const finish = (text: string, eff: Parameters<typeof st.applyEffects>[0], tone: 'good' | 'bad' | 'info' = 'info') => {
+      myMeal.eating = null; myMeal.tray = '';
+      st.applyEffects(eff, e.meal === 'lunch' ? '점심' : '저녁');
+      st.log(text);
+      st.toast(text, tone);
+    };
+    if (!isMealTime(st.minute)) { finish('🍚 배식 시간이 끝나 남은 밥을 급히 비웠다.', { hp: 12, mental: 1 }); return; }
+    const dm = Math.max(0, st.minute - e.last);
+    e.last = st.minute;
+    e.prog = Math.min(1, e.prog + dm / MY_EAT_MIN);
+    const squad = squadKeys(st.branch, st.day);
+    const lead = squad[0];
+    const leadAt = lead ? mealSeated(st.day, st.minute)[lead] : undefined;
+    // 🥄 처음 한 번: 선임 먹는 속도에 맞추는 군대 개념
+    if (!st.flags.mealPace && !e.pace && lead && leadAt !== undefined && st.minute >= e.start + 1 && st.minute < leadAt + SQUAD_EAT_MIN - 3) {
+      const teacher: NpcId | null = presentNpcs(st.day).includes('senior') ? 'senior' : lead.startsWith('x:') ? null : (lead as NpcId);
+      e.pace = { finish: leadAt + SQUAD_EAT_MIN, lead };
+      const leadName = memberName(st.branch, lead);
+      setOverlay({
+        type: 'dialogue',
+        script: {
+          npc: teacher ?? undefined,
+          lines: [
+            { who: 'narr', text: `같은 줄 끝의 ${leadName}. 숟가락이 무서운 속도로 움직인다. 식판이 벌써 반쯤 비었다…` },
+            teacher
+              ? { who: teacher, text: '(작게) 야, {me}. 천천히 먹는 건 좋은데… 군대에선 선임 먹는 속도에 맞추는 거다. 선임이 숟가락 내려놓으면 같이 일어나야 돼.' }
+              : { who: 'narr', text: '선임이 숟가락을 내려놓으면 같이 일어나야 한다. 서두르자!' },
+            { who: 'narr', text: '[Space를 연타해서 선임과 같이 다 먹자!]' },
+          ],
+        },
+        onDone: () => useGame.getState().addTip('식사 예절: 선임과 같이 밥을 먹을 땐 속도를 맞춘다. 선임이 다 먹었는데 혼자 천천히 먹고 있으면 눈치가 보인다… (요즘은 많이 사라진 문화지만, 아직 남아 있는 곳도 있다)'),
+      });
+      return;
+    }
+    if (e.pace && st.minute >= e.pace.finish) {
+      const ok = e.prog >= 0.85;
+      useGame.setState({ flags: { ...useGame.getState().flags, mealPace: true } });
+      const leadName = memberName(st.branch, e.pace.lead);
+      if (ok) finish(`🥄 ${leadName}이(가) 숟가락을 내려놓는 순간, 나도 식판을 비웠다. 완벽한 타이밍!`, { hp: 15, mental: 2, discipline: 2, affinity: e.pace.lead.startsWith('x:') ? {} : { [e.pace.lead]: 2 } }, 'good');
+      else finish(`🥄 ${leadName}이(가) 숟가락을 내려놓았다… 남은 밥을 허겁지겁 밀어 넣고 따라 일어났다.`, { hp: 10, mental: -2, discipline: -1 }, 'bad');
+      return;
+    }
+    if (e.prog >= 1 && e.pace) {
+      useGame.setState({ flags: { ...useGame.getState().flags, mealPace: true } });
+      finish(`🥄 ${memberName(st.branch, e.pace.lead)}보다 한발 먼저 식판을 비우고, 숟가락 놓기를 기다렸다. 눈치 백 점!`, { hp: 15, mental: 2, discipline: 2, affinity: e.pace.lead.startsWith('x:') ? {} : { [e.pace.lead]: 2 } }, 'good');
+      return;
+    }
+    if (e.prog >= 1) {
+      finish(e.meal === 'lunch' ? '🍚 점심 잘 먹었습니다! 제육볶음은 진리다.' : '🍚 저녁 잘 먹었습니다! 군대 카레는 왜 이렇게 맛있지?', e.pace ? { hp: 15, mental: 2, discipline: 2 } : { hp: 15, mental: 2 }, 'good');
+    }
+  };
+
   const fogEventRef = useRef<() => void>(() => {});
   fogEventRef.current = () => {
     const p = runtime.player;
@@ -548,6 +884,7 @@ export default function World() {
   const goHome = useCallback(() => {
     const st = useGame.getState();
     if (overlayRef.current || st.rollcall || st.lateCall || cer.current || useSettings.getState().open) return;
+    if (myMeal.eating) { st.toast('🍚 식사 중이다. 다 먹고 일어나자.', 'info'); return; }
     const bed = world.spots.bed;
     warpReq.current = { tiles: [], to: bed.map, enterDir: 'down', arrive: { x: bed.x + 0.5, y: bed.y + 0.5, dir: 'down' } };
   }, [world]);
@@ -611,6 +948,8 @@ export default function World() {
       const gate = world.spots.gate;
       return id === 'lt' || id === 'cpt' || id === 'sgm' ? ['outdoor', gate.x + (id === 'lt' ? -2 : id === 'cpt' ? 2 : 3), gate.y - 2] : FREE_POS[id];
     }
+    const ng = nightGoal(id, st);
+    if (ng) return ng;
     if (ev && !st.eventBegun && m >= ev.start && ev.spot) {
       const sp = world.spots[ev.spot];
       if (!officer) {
@@ -627,12 +966,8 @@ export default function World() {
       if (NIGHT_POS[id]) return NIGHT_POS[id]!;
     }
     if (isMealTime(m) && MEAL_POS[id]) {
-      const mc = st.mealCheck;
-      if (mc && mc.status === 'asking' && mc.targets.includes(id)) {
-        if (!mc.asked.includes(id)) return FREE_POS[id];
-        if (MEAL_GATHER_POS[id]) return MEAL_GATHER_POS[id]!;
-      }
-      return MEAL_POS[id]!;
+      const goal = mealGoal(id, MEAL_POS[id]!, st);
+      if (goal !== 'free') return goal;
     }
     if (officer && m >= LIGHTS_OUT) return ['command', id === 'lt' ? 5 : 7, 2];
     if (!officer && m >= 21 * 60 && NIGHT_POS[id]) return NIGHT_POS[id]!;
@@ -647,11 +982,35 @@ export default function World() {
     const p = runtime.player;
     const ev = st.currentEvent();
     const dist = (x: number, y: number) => Math.hypot(p.x - x, p.y - y);
+    const nd = st.nightDuty;
+    if (nd) {
+      const star = STAR_POS[nd.kind];
+      const starOn = !st.flags[`star_${st.day}`] && (nd.kind === 'watch' ? nd.phase === 'wakeNext' || nd.phase === 'return' : nd.phase === 'toPost' || nd.phase === 'return');
+      if (starOn && p.map === star[0] && dist(star[1], star[2]) < 1.9) return { key: 'duty_star', kind: 'duty', label: '✨ 희미한 별빛' };
+      if (nd.phase === 'toPost') {
+        const sp = world.spots.post;
+        if (p.map === sp.map && dist(sp.x + 0.5, sp.y + 0.5) < 2.2) return { key: 'duty_post', kind: 'duty', label: '근무 교대 (위병소 초소)' };
+      }
+      if (nd.phase === 'wakeNext') {
+        const n = entityOf(nd.next);
+        if (n && n.map === p.map && dist(n.x, n.y) < 2.3) return { key: 'duty_wake', kind: 'duty', label: `${memberName(st.branch, nd.next)} 깨우기 (근무 교대)` };
+      }
+      if (nd.phase === 'return') {
+        const bd = world.spots.bed;
+        if (p.map === bd.map && dist(bd.x + 0.5, bd.y + 0.5) < 1.6) return { key: 'duty_sleep', kind: 'duty', label: '침상에 누워 잠들기' };
+      }
+      // 근무 중엔 다른 일은 하지 않는다 (다들 자고 있다)
+      return null;
+    }
     if (ev && !st.eventBegun && ev.spot && (st.minute >= ev.start || ev.kind === 'farewell')) {
       const sp = world.spots[ev.spot];
       if (sp.map === p.map && dist(sp.x + 0.5, sp.y + 0.5) < 2.2) {
         return { key: `ev_${ev.id}`, kind: 'event', label: ev.kind === 'farewell' ? '위병소를 나선다 (전역!)' : `집합 완료 보고: ${ev.label}`, spot: ev.spot };
       }
+    }
+    // 🍱 식판을 들고 내 자리 근처에 오면 앉아서 먹기
+    if (myMeal.tray && !myMeal.eating && p.map === 'mess' && dist(MY_MEAL_SEAT[0] + 0.5, MY_MEAL_SEAT[1] + 0.5) < 1.4) {
+      return { key: 'meal_seat', kind: 'seat', label: '내 자리에 앉아 먹기' };
     }
     let best: Interactable | null = null;
     let bd = 1.5;
@@ -883,7 +1242,20 @@ export default function World() {
         title = '🍚 식당 배식대';
         const meal = m < 15 * 60 ? 'lunch' : 'dinner';
         const ok = isMealTime(m);
-        act(ok ? (meal === 'lunch' ? '점심 먹기' : '저녁 먹기') : '배식 시간이 아니다', ok ? '20분 · 체력+15 멘탈+2' : '12:00~13:00 / 17:30~18:30', 20, { hp: 15, mental: 2 }, meal === 'lunch' ? '오늘의 메뉴는 제육볶음! 짬밥이 이렇게 맛있을 줄이야.' : '저녁은 카레. 군대 카레는 왜 이렇게 맛있지?', `meal_${meal}`, !ok);
+        const ate = st.daily.includes(`meal_${meal}`);
+        opts.push({
+          label: !ok ? '배식 시간이 아니다' : ate ? '이미 먹었다' : myMeal.tray ? '식판을 이미 받았다' : '🍱 식판 받기 (배식)',
+          hint: ok ? '받아서 1분대 줄 내 자리(맞선임 옆)에 앉아 먹는다' : '12:00~13:00 / 17:30~18:30',
+          disabled: !ok || ate || !!myMeal.tray,
+          onSelect: () => {
+            useGame.getState().spend(1);
+            myMeal.tray = meal;
+            setOverlay({ type: 'dialogue', script: { lines: [
+              { who: 'narr', text: meal === 'lunch' ? '오늘의 메뉴는 제육볶음! 배식병이 밥을 꾹꾹 눌러 담아 준다.' : '저녁은 카레. 국자 가득 카레가 부어진다.' },
+              { who: 'narr', text: '식판을 들고 1분대 줄, 내 자리(맞선임 옆)로 가서 앉자.' },
+            ] } });
+          },
+        });
         break;
       }
       case 'px': {
@@ -943,7 +1315,7 @@ export default function World() {
               script: {
                 lines: [
                   { who: 'narr', text: `📋 오늘 일정: ${sc.map((e) => `${fmtTime(e.start)} ${e.label}`).join(' / ')}` },
-                  { who: 'narr', text: night ? '🌙 오늘 밤 불침번 명단에 내 이름이 있다…' : '🌙 오늘 밤 불침번 명단에는 내 이름이 없다. 휴~' },
+                  { who: 'narr', text: night ? (sc.some((e) => e.game === 'guard') ? '🌙 오늘 밤 위병소 근무 명단(00:00~02:00)에 내 이름이 있다…' : '🌙 오늘 밤 불침번 명단(00:00~01:00)에 내 이름이 있다…') : '🌙 오늘 밤 근무 명단에는 내 이름이 없다. 휴~' },
                   { who: 'narr', text: '암구호는 근무 투입 직전에만 공지된다. 보안!' },
                 ],
               },
@@ -1215,22 +1587,45 @@ export default function World() {
     });
   }, [extraDefs, setOverlay]);
 
+  /** 내 자리에 앉아서 먹기 시작 (실시간으로 먹는다 · Space로 빨리) */
+  const sitToEat = useCallback(() => {
+    const st = useGame.getState();
+    if (!myMeal.tray || myMeal.eating) return;
+    const p = runtime.player;
+    p.x = MY_MEAL_SEAT[0] + 0.5; p.y = MY_MEAL_SEAT[1] + 0.5; p.dir = 'down'; p.moving = false;
+    keys.current = {};
+    myMeal.eating = { meal: myMeal.tray, prog: 0, last: st.minute, start: st.minute, pace: null, bite: 0 };
+    st.markDaily(`meal_${myMeal.tray}`);
+    st.toast('🍚 자리에 앉았다. 잘 먹겠습니다! (Space: 빨리 먹기)', 'info');
+  }, []);
+
   const interact = useCallback(() => {
     const it = promptRef.current ?? findInteractable();
     if (!it) return;
     if (it.kind === 'event') { useGame.getState().beginEvent(); return; }
+    if (it.kind === 'seat') { sitToEat(); return; }
+    if (it.kind === 'duty') { nightActRef.current(it.key); return; }
     if (it.kind === 'extra' && it.extra) { openExtra(it.extra); return; }
     if (it.kind === 'npc' && it.npc) openNpc(it.npc);
     if (it.kind === 'spot' && it.spot) openSpot(it.spot);
-  }, [findInteractable, openNpc, openSpot, openExtra]);
+  }, [findInteractable, openNpc, openSpot, openExtra, sitToEat]);
 
   // 키 입력
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (overlayRef.current || useGame.getState().rollcall) return;
+      if (useGame.getState().nightDuty?.phase === 'sleep') {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'e' || e.key === 'E') { e.preventDefault(); nightWake(); }
+        return;
+      }
       if (e.key === 'Escape') { e.preventDefault(); keys.current = {}; useSettings.getState().openMenu(); return; }
       keys.current[e.key.toLowerCase()] = true;
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'tab'].includes(e.key.toLowerCase())) e.preventDefault();
+      // 🍚 먹는 중: Space/E 연타로 빨리 먹기 (선임 속도 맞추기)
+      if (myMeal.eating && (e.key === ' ' || e.key === 'e' || e.key === 'E' || e.key === 'Enter')) {
+        if (!e.repeat) { myMeal.eating.prog = Math.min(1, myMeal.eating.prog + 0.03); myMeal.eating.bite = performance.now(); }
+        return;
+      }
       if (e.key === 'e' || e.key === 'E' || e.key === ' ' || e.key === 'Enter') interact();
       if (e.key === 'Tab') setOverlay({ type: 'notebook' });
       if (e.key === 'q' || e.key === 'Q') setOverlay({ type: 'quests' });
@@ -1252,7 +1647,7 @@ export default function World() {
       window.removeEventListener('keyup', up);
       window.removeEventListener('blur', blur);
     };
-  }, [interact, setOverlay, goHome]);
+  }, [interact, setOverlay, goHome, nightWake]);
 
   // 메인 루프
   useEffect(() => {
@@ -1325,7 +1720,7 @@ export default function World() {
       const t = now / 1000;
       const st = useGame.getState();
       const p = runtime.player;
-      const blocked = !!overlayRef.current || !!st.rollcall || useSettings.getState().open;
+      const blocked = !!overlayRef.current || !!st.rollcall || useSettings.getState().open || st.nightDuty?.phase === 'sleep';
       const map = world.maps[p.map];
 
       // 📖 안개 정문: 정문 밖(맨 아래 줄)으로 나가려 하면
@@ -1357,7 +1752,7 @@ export default function World() {
 
       // 플레이어 이동
       let vx = 0, vy = 0;
-      if (!blocked && !fading) {
+      if (!blocked && !fading && !myMeal.eating) {
         const k = keys.current;
         if (k['arrowleft'] || k['a']) vx -= 1;
         if (k['arrowright'] || k['d']) vx += 1;
@@ -1442,12 +1837,15 @@ export default function World() {
       for (const id of present) {
         const n = npcs.current[id];
         if (!n) continue;
+        const follow = followsMe(id, st);
+        if (follow && n.map === p.map && Math.hypot(p.x - n.x, p.y - n.y) < 1.4) { n.path = []; n.viaDoor = null; }
         if (n.path.length && !blocked) {
           const [px, py] = n.path[0];
           const gx = px + 0.5, gy = py + 0.5;
           const dx = gx - n.x, dy = gy - n.y;
           const d = Math.hypot(dx, dy);
-          const sp = 4 * dt;
+          // 식사하러 줄지어 갈 땐 조금 빠른 걸음
+          const sp = (follow ? 5.6 : isMealTime(st.minute) && SQUAD_KEYS.includes(id) ? 5 : 4) * dt;
           if (d <= sp) { n.x = gx; n.y = gy; n.path.shift(); }
           else { n.x += (dx / d) * sp; n.y += (dy / d) * sp; }
           n.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
@@ -1475,23 +1873,35 @@ export default function World() {
       // 엑스트라: 정해진 길을 돌거나 집 주변을 어슬렁거린다
       for (const def of extraDefs) {
         let e = extras.current[def.id];
-        if (!e) e = extras.current[def.id] = { map: def.map, x: def.x + 0.5, y: def.y + 0.5, dir: 'down', moving: false, path: [], targetKey: '', viaDoor: null, wait: Math.random() * 2, routeIdx: 0 };
+        if (!e) {
+          // 야간 근무 중(미니게임 뒤 등)이면 맡은 자리에서 시작
+          const ng0 = nightGoal(`x:${def.id}`, st);
+          const [im, ix, iy] = ng0 ?? [def.map, def.x, def.y];
+          e = extras.current[def.id] = { map: im, x: ix + 0.5, y: iy + 0.5, dir: 'down', moving: false, path: [], targetKey: '', viaDoor: null, wait: Math.random() * 2, routeIdx: 0 };
+        }
         if (blocked) { e.moving = false; continue; }
         // 소등 후: 침상이 있으면 가서 눕고, 근무자·군견은 제자리, 나머지는 자기 부대 막사로(안 보임)
         if (st.minute >= LIGHTS_OUT && !cer.current) {
           const bed = EXTRA_BED[def.id];
-          if (!bed && !NIGHT_STAY.has(def.id)) { e.moving = false; continue; }
-          if (bed && e.map === bed[0] && Math.abs(e.y - bedY(bed[2])) < 0.05) { e.moving = false; continue; }
-          const goalN: Pos | null = bed ? [bed[0], bed[1], aisleY(bed[2])] : e.map !== def.map ? [def.map, def.x, def.y] : null;
+          const xk = `x:${def.id}`;
+          const duty = nightGoal(xk, st);
+          if (!duty) {
+            if (!bed && !NIGHT_STAY.has(def.id)) { e.moving = false; continue; }
+            if (bed && e.map === bed[0] && Math.abs(e.y - bedY(bed[2])) < 0.05) { e.moving = false; continue; }
+          }
+          const ns = NIGHT_SPOT[def.id];
+          const goalN: Pos | null = duty ?? (bed ? [bed[0], bed[1], aisleY(bed[2])] : ns ?? (e.map !== def.map ? [def.map, def.x, def.y] : null));
           if (!goalN) { e.moving = false; e.path = []; continue; }
           const gk = `${goalN[0]}:${goalN[1]},${goalN[2]}`;
-          if (e.targetKey !== gk) route(e, goalN);
+          const follow = followsMe(xk, st);
+          if (follow && e.map === p.map && Math.hypot(p.x - e.x, p.y - e.y) < 1.4) { e.path = []; e.viaDoor = null; e.moving = false; e.targetKey = gk; continue; }
+          if (e.targetKey !== gk && (!follow || npcRetarget >= 0.45)) route(e, goalN);
           if (e.path.length) {
             const [px, py] = e.path[0];
             const gx = px + 0.5, gy = py + 0.5;
             const dx = gx - e.x, dy = gy - e.y;
             const d = Math.hypot(dx, dy);
-            const sp = 3 * dt;
+            const sp = (follow ? 5.6 : 3) * dt;
             if (d <= sp) { e.x = gx; e.y = gy; e.path.shift(); } else { e.x += (dx / d) * sp; e.y += (dy / d) * sp; }
             e.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
             e.moving = true;
@@ -1502,19 +1912,16 @@ export default function World() {
             route(e, goalN);
           } else {
             e.moving = false;
-            if (bed && e.map === bed[0]) { e.x = bed[1] + 0.5; e.y = bedY(bed[2]); e.dir = 'down'; }
+            if (!duty && bed && e.map === bed[0]) { e.x = bed[1] + 0.5; e.y = bedY(bed[2]); e.dir = 'down'; }
           }
           continue;
         }
         // 식사 시간엔 식당 자리로, 끝나면 자기 자리로 (다른 맵이면 문을 거쳐서)
         const seat = EXTRA_MEAL_SEAT[def.id];
         const xkey = `x:${def.id}`;
-        const mcx = st.mealCheck;
-        const waiting = isMealTime(st.minute) && !!seat && !!mcx && mcx.status === 'asking' && mcx.targets.includes(xkey);
-        const home: Pos | null = e.map !== def.map || e.targetKey.startsWith('mess:') || e.targetKey === 'outdoor:13,14' ? [def.map, def.x, def.y] : null;
-        const goal: Pos | null = waiting
-          ? (mcx!.asked.includes(xkey) ? ['outdoor', 13, 14] : home)
-          : isMealTime(st.minute) && seat ? ['mess', seat[0], seat[1]] : home;
+        const mg = isMealTime(st.minute) && seat ? mealGoal(xkey, ['mess', seat[0], seat[1]], st) : 'free';
+        const home: Pos | null = e.map !== def.map || e.targetKey.startsWith('mess:') || GATHER_KEYS.has(e.targetKey) ? [def.map, def.x, def.y] : null;
+        const goal: Pos | null = mg !== 'free' ? mg : home;
         if (goal) {
           const gk = `${goal[0]}:${goal[1]},${goal[2]}`;
           if (e.targetKey !== gk) route(e, goal);
@@ -1523,7 +1930,7 @@ export default function World() {
             const gx = px + 0.5, gy = py + 0.5;
             const dx = gx - e.x, dy = gy - e.y;
             const d = Math.hypot(dx, dy);
-            const sp = 3 * dt;
+            const sp = (SQUAD_KEYS.includes(xkey) ? 5 : 3) * dt;
             if (d <= sp) { e.x = gx; e.y = gy; e.path.shift(); } else { e.x += (dx / d) * sp; e.y += (dy / d) * sp; }
             e.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
             e.moving = true;
@@ -1578,6 +1985,24 @@ export default function World() {
         }
         e.path = findPath(em, Math.floor(e.x), Math.floor(e.y), tx, ty).slice(1);
       }
+
+      // 🍚 식사: 자리에 앉은 시각 기록 → 각자 다 먹으면 일어난다
+      if (isMealTime(st.minute)) {
+        const seated = mealSeated(st.day, st.minute);
+        for (const id of present) {
+          const n = npcs.current[id];
+          if (n && seated[id] === undefined && eatingAt(n.map, n.x, n.y, MEAL_POS[id], st.minute)) seated[id] = st.minute;
+        }
+        for (const def of extraDefs) {
+          const e = extras.current[def.id];
+          const k = `x:${def.id}`;
+          if (e && seated[k] === undefined && eatingAt(e.map, e.x, e.y, EXTRA_MEAL_SEAT[def.id], st.minute)) seated[k] = st.minute;
+        }
+      } else if (myMeal.tray && !myMeal.eating) {
+        myMeal.tray = '';
+        st.toast('🍱 배식 시간이 끝나 식판을 반납했다…', 'bad');
+      }
+      if (myMeal.eating && !blocked) mealTickRef.current();
 
       // 상호작용 프롬프트
       const it = blocked || fading ? null : findInteractable();
@@ -1665,6 +2090,15 @@ export default function World() {
           if (gd) qTargets.push({ x: gd.x, y: gd.y - (gd.viaDoor ? 0.6 : 0) });
         }
       }
+      const ndm = st.nightDuty;
+      if (ndm && ndm.phase !== 'sleep' && ndm.phase !== 'woken' && ndm.phase !== 'shift') {
+        let tg: { m: MapId; x: number; y: number } | null = null;
+        if (ndm.phase === 'toPost') { const sp = world.spots.post; tg = { m: sp.map, x: sp.x + 0.5, y: sp.y + 0.5 }; }
+        if (ndm.phase === 'wakeNext') { const n = entityOf(ndm.next); if (n) tg = { m: n.map, x: n.x, y: n.y - 0.8 }; }
+        if (ndm.phase === 'return') { const bd = world.spots.bed; tg = { m: bd.map, x: bd.x + 0.5, y: bd.y + 0.5 }; }
+        const gd = tg && guide(tg.m, tg.x, tg.y);
+        if (gd) qTargets.push({ x: gd.x, y: gd.y - (gd.viaDoor ? 0.6 : 0) });
+      }
       if (st.mealCheck?.status === 'asking') {
         for (const id of st.mealCheck.targets) {
           const n = id.startsWith('x:') ? extras.current[id.slice(2)] : npcs.current[id as NpcId];
@@ -1675,9 +2109,12 @@ export default function World() {
       }
       if (isMealTime(st.minute) && st.day < TOTAL_DAYS) {
         const mealKey = st.minute < 15 * 60 ? 'meal_lunch' : 'meal_dinner';
+        const mcg = st.mealCheck;
         if (!st.daily.includes(mealKey)) {
-          const ms = world.spots.mess;
-          const gd = guide(ms.map, ms.x + 0.5, ms.y + 0.5);
+          // 막사 앞에 모이는 중이면 집합 자리 → 출발하면 배식대 → 식판을 받았으면 내 자리
+          const gp = mcg && mcg.status !== 'asking' && mcg.marchAt != null && st.minute < mcg.marchAt ? MEAL_GATHER.buddy : null;
+          const [gm, gx, gy]: Pos = gp ?? (myMeal.tray ? ['mess', MY_MEAL_SEAT[0], MY_MEAL_SEAT[1]] : [world.spots.mess.map, world.spots.mess.x, world.spots.mess.y]);
+          const gd = guide(gm, gx + 0.5, gy + 0.5);
           if (gd) qTargets.push({ x: gd.x, y: gd.y - (gd.viaDoor ? 0.6 : 0) });
         }
       }
@@ -1770,7 +2207,7 @@ export default function World() {
 
       // 식사 중인 자리 앞 식탁에 식판
       if (p.map === 'mess' && isMealTime(st.minute)) {
-        const trays: { x: number; y: number }[] = [];
+        const trays: { x: number; y: number; left?: number }[] = [];
         for (const id of present) {
           const n = npcs.current[id];
           const at = n && eatingAt(n.map, n.x, n.y, MEAL_POS[id], st.minute);
@@ -1781,15 +2218,8 @@ export default function World() {
           const at = e && eatingAt(e.map, e.x, e.y, EXTRA_MEAL_SEAT[def.id], st.minute);
           if (at) { trays.push({ x: at.x, y: at.face === 'down' ? at.y + 1 : at.y - 1 }); e!.dir = at.face; }
         }
-        for (const tr of trays) {
-          const tx = tr.x * TILE + 6, ty = tr.y * TILE + 9;
-          g.fillStyle = '#9aa0a8'; g.fillRect(tx, ty, 20, 13);
-          g.fillStyle = '#c8ccd4'; g.fillRect(tx + 1, ty + 1, 18, 11);
-          g.fillStyle = '#ffffff'; g.fillRect(tx + 2, ty + 2, 7, 5);   // 밥
-          g.fillStyle = '#d0402a'; g.fillRect(tx + 11, ty + 2, 6, 4);  // 김치
-          g.fillStyle = '#a0682a'; g.fillRect(tx + 2, ty + 8, 7, 3);   // 반찬
-          g.fillStyle = '#e8b048'; g.fillRect(tx + 11, ty + 7, 6, 4);  // 국
-        }
+        if (myMeal.eating) trays.push({ x: MY_MEAL_SEAT[0], y: MY_MEAL_SEAT[1] + 1, left: 1 - myMeal.eating.prog });
+        for (const tr of trays) drawTray(g, tr.x * TILE + 6, tr.y * TILE + 9, tr.left ?? 1);
       }
 
       // 엔티티 (y 정렬, 같은 맵만)
@@ -1859,6 +2289,27 @@ export default function World() {
         draw: () => {
           const fx = fxOf('me', p.dir, p.x, p.y);
           drawMonster(g, look, p.x * TILE, p.y * TILE + 12 + fx.dy - fx.hop, 36, { dir: fx.dir, t, walking: p.moving, cap: b.cap });
+          if (myMeal.tray && !myMeal.eating) drawTray(g, p.x * TILE - 10, p.y * TILE - (p.dir === 'up' ? 18 : 4), 1);
+          const me = myMeal.eating;
+          if (me) {
+            const bx = p.x * TILE - 34, by0 = p.y * TILE - 70;
+            const bar = (y: number, label: string, v: number, col: string) => {
+              g.fillStyle = 'rgba(20,22,30,0.82)'; g.fillRect(bx - 2, y - 2, 72, 13);
+              g.fillStyle = col; g.fillRect(bx + 22, y + 1, 46 * Math.min(1, v), 7);
+              g.fillStyle = '#fff'; g.font = 'bold 9px sans-serif'; g.textAlign = 'left'; g.fillText(label, bx, y + 8);
+            };
+            if (me.pace) {
+              const leadV = 1 - Math.max(0, me.pace.finish - st.minute) / SQUAD_EAT_MIN;
+              bar(by0 - 14, '선임', leadV, '#e86040');
+              bar(by0, '나', me.prog, '#58c058');
+              g.textAlign = 'center'; g.font = 'bold 10px sans-serif'; g.fillStyle = Math.floor(t * 3) % 2 ? '#ffe14a' : '#ffffff';
+              g.fillText('Space 연타! 선임 속도에 맞춰 먹자', p.x * TILE, by0 - 22);
+            } else bar(by0, '🍚', me.prog, '#58c058');
+            if (performance.now() - me.bite < 250) {
+              g.textAlign = 'center'; g.font = 'bold 11px sans-serif'; g.fillStyle = '#fff';
+              g.fillText('냠!', p.x * TILE + 16, p.y * TILE - 30);
+            }
+          }
           const sta2 = stamina.current;
           if (sta2.dashing && Math.floor(t * 14) % 2 === 0) {
             g.fillStyle = 'rgba(200,190,170,0.75)';
@@ -1882,6 +2333,31 @@ export default function World() {
         },
       });
       ents.sort((a, c) => a.y - c.y).forEach((e) => e.draw());
+      // ✨ 야간 근무 중 의문의 별빛 (지라치)
+      let starGlow: { x: number; y: number } | null = null;
+      const ndS = st.nightDuty;
+      if (ndS && !st.flags[`star_${st.day}`] && (ndS.kind === 'watch' ? ndS.phase === 'wakeNext' || ndS.phase === 'return' : ndS.phase === 'toPost' || ndS.phase === 'return')) {
+        const [sm, sx0, sy0] = STAR_POS[ndS.kind];
+        if (p.map === sm) {
+          const sx = sx0 * TILE, sy = sy0 * TILE - 18 + Math.sin(t * 1.8) * 5;
+          starGlow = { x: sx, y: sy };
+          const pulse = 0.7 + Math.sin(t * 3.2) * 0.3;
+          const gl = g.createRadialGradient(sx, sy, 0, sx, sy, 46 * pulse + 12);
+          gl.addColorStop(0, 'rgba(255,250,200,0.95)'); gl.addColorStop(0.4, 'rgba(255,230,120,0.45)'); gl.addColorStop(1, 'rgba(255,230,120,0)');
+          g.fillStyle = gl; g.beginPath(); g.arc(sx, sy, 60, 0, Math.PI * 2); g.fill();
+          g.fillStyle = '#fffbe0'; g.beginPath();
+          for (let i = 0; i < 10; i++) {
+            const a = (Math.PI / 5) * i - Math.PI / 2 + t * 0.6, rr = i % 2 === 0 ? 8 : 3.6;
+            g.lineTo(sx + Math.cos(a) * rr, sy + Math.sin(a) * rr);
+          }
+          g.closePath(); g.fill();
+          for (let i = 0; i < 3; i++) {
+            const a = t * 1.3 + i * 2.1;
+            g.fillStyle = `rgba(255,250,210,${0.5 + 0.5 * Math.sin(t * 4 + i)})`;
+            g.fillRect(sx + Math.cos(a) * 18 - 1, sy + Math.sin(a) * 12 - 1, 3, 3);
+          }
+        }
+      }
       // 🌫 위병소 정문 밖 안개
       if (p.map === 'depot' && (st.minute >= 21 * 60 + 30 || fogActive(st))) {
         const fy0 = 25.5 * TILE, fy1 = 30 * TILE;
@@ -1928,14 +2404,25 @@ export default function World() {
         g.fillStyle = `rgba(20,24,60,${dark})`;
         g.fillRect(0, 0, w, h);
       }
-      if (st.patrol && map.indoor) {
+      const dutyLight = !!st.nightDuty && st.nightDuty.phase !== 'sleep';
+      if ((st.patrol && map.indoor) || dutyLight) {
         const sx = (p.x * TILE - camX) * zoom, sy = (p.y * TILE - camY) * zoom;
         const r0 = 60 * zoom, r1 = 190 * zoom;
         const fl = g.createRadialGradient(sx, sy, r0, sx, sy, r1);
         fl.addColorStop(0, 'rgba(8,10,24,0)');
-        fl.addColorStop(1, 'rgba(8,10,24,0.82)');
+        fl.addColorStop(1, `rgba(8,10,24,${map.indoor ? 0.82 : 0.6})`);
         g.fillStyle = fl;
         g.fillRect(0, 0, w, h);
+      }
+      if (starGlow) {
+        const gx = (starGlow.x - camX) * zoom, gy = (starGlow.y - camY) * zoom;
+        const pulse = 0.75 + Math.sin(t * 3.2) * 0.25;
+        g.save();
+        g.globalCompositeOperation = 'lighter';
+        const sg = g.createRadialGradient(gx, gy, 0, gx, gy, 70 * zoom * pulse);
+        sg.addColorStop(0, 'rgba(255,245,190,0.85)'); sg.addColorStop(0.3, 'rgba(255,225,120,0.35)'); sg.addColorStop(1, 'rgba(255,225,120,0)');
+        g.fillStyle = sg; g.beginPath(); g.arc(gx, gy, 70 * zoom, 0, Math.PI * 2); g.fill();
+        g.restore();
       }
 
       // 화면 밖 목표 화살표
@@ -2000,6 +2487,14 @@ export default function World() {
       {overlay?.type === 'map' && <MapView onClose={() => setOverlay(null)} />}
       {flash && <div className="white-flash" />}
       {cerShow && <RollcallCeremony info={cerShow.info} ctl={cerCtl} aide={cerShow.aide} onEnd={finishCeremony} />}
+      {nightPhase === 'sleep' && (
+        <div className="night-sleep" onClick={nightWake}>
+          <div className="night-zzz">Z<span>z</span><i>z</i></div>
+          <div className="night-text">소등. 모포를 덮고 눈을 감았다…</div>
+          <div className="night-sub">{nightKind === 'guard' ? '오늘은 위병소 야간 근무가 있다. 사수가 깨우러 올 것이다.' : '오늘은 불침번 근무가 있다. 이전 근무자가 깨우러 올 것이다.'}</div>
+          <div className="night-hint">클릭 · Enter</div>
+        </div>
+      )}
       <div className="rank-hint">{rankIdxForDay(day) >= 3 ? '병장 · 전역이 코앞!' : ''}</div>
     </div>
   );

@@ -365,6 +365,34 @@ canvas { image-rendering: pixelated; }
   text-align: center; font-size: 15px; line-height: 1.7; text-shadow: 1px 1px 0 #000; max-width: 560px; animation: evoGlow 1.6s ease-in-out 2;
 }
 @keyframes evoGlow { 50% { background: #f8f8f8; color: #283048; text-shadow: none; } }
+/* ───── 야간 근무: 잠든 화면 ───── */
+.night-sleep { position: absolute; inset: 0; z-index: 40; background: radial-gradient(circle at 50% 45%, #141a34 0%, #05060e 75%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #dfe4ff; cursor: pointer;
+  font-family: 'Galmuri11', sans-serif; animation: nightIn 0.8s ease-out; }
+@keyframes nightIn { from { opacity: 0; } to { opacity: 1; } }
+.night-zzz { font-size: 44px; font-weight: 700; color: #aab4ff; letter-spacing: 6px; animation: zzz 2s ease-in-out infinite; }
+.night-zzz span { font-size: 32px; } .night-zzz i { font-size: 22px; font-style: normal; }
+@keyframes zzz { 50% { transform: translateY(-8px); opacity: 0.6; } }
+.night-text { font-size: 20px; } .night-sub { font-size: 15px; color: #9aa4d8; } .night-hint { font-size: 12px; color: #6a74a8; margin-top: 12px; }
+
+/* ───── 진급 = 진화 연출 ───── */
+.evo-scene { position: fixed; inset: 0; z-index: 60; background: radial-gradient(circle at 50% 42%, #3a4470 0%, #161a30 70%); overflow: hidden; cursor: pointer; }
+.evo-rays { position: absolute; left: 50%; top: 42%; width: 900px; height: 900px; margin: -450px 0 0 -450px; pointer-events: none;
+  background: repeating-conic-gradient(rgba(255,255,230,0.22) 0 8deg, transparent 8deg 22deg); border-radius: 50%;
+  -webkit-mask: radial-gradient(circle, #000 0%, transparent 65%); mask: radial-gradient(circle, #000 0%, transparent 65%);
+  animation: evoSpin 9s linear infinite; }
+@keyframes evoSpin { to { transform: rotate(360deg); } }
+.evo-spark { position: absolute; width: 8px; height: 8px; margin: -4px; background: #fffbe0; transform: rotate(45deg); box-shadow: 0 0 10px #fff6a0; pointer-events: none; }
+.evo-mon { position: absolute; left: 50%; top: 42%; width: 200px; height: 200px; margin: -100px 0 0 -100px; transition: transform 0.05s linear; filter: drop-shadow(0 0 18px rgba(255,255,255,0.6)); }
+.evo-rank { position: absolute; left: 50%; top: calc(42% + 118px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+  color: #fff; font-family: 'Galmuri11', sans-serif; font-weight: 700; font-size: 18px; text-shadow: 1px 1px 0 #000; }
+.evo-rank.new { animation: evoPop 0.6s ease-out; }
+@keyframes evoPop { 0% { transform: translateX(-50%) scale(0.4); } 70% { transform: translateX(-50%) scale(1.25); } 100% { transform: translateX(-50%) scale(1); } }
+.evo-flash { position: absolute; inset: 0; background: #fff; pointer-events: none; }
+.evo-text { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); width: min(680px, calc(100% - 32px)); min-height: 74px;
+  background: #f8f8f8; color: #202020; border: 4px solid #383848; border-radius: 8px; box-shadow: inset 0 0 0 3px #e0d8a0;
+  padding: 14px 18px; font-family: 'Galmuri11', sans-serif; font-size: 19px; line-height: 1.6; }
+.evo-text .next-indicator { position: absolute; right: 14px; bottom: 8px; }
 .mg-homage { font-family: 'Galmuri11', sans-serif; font-weight: 700; font-size: 15px; margin: -4px 0 6px; color: var(--win-ink); }
 .dex-eval { background: #fff8d8; border: 2px solid #c8a838; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; font-size: 14px; }
 
