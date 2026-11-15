@@ -491,7 +491,7 @@ export default function World() {
         lines: [
           { who: 'me', text: '(휴… 첫 점호는 어떻게든 넘겼다. 포켓몬 몸이라도 군대는 군대구나.)' },
           { who: 'me', text: '(유튜브에서 배운 대로만 하자. 집합은 무조건 5분 전, 대답은 크게, 모르면 솔직하게 물어보기!)' },
-          { who: 'narr', text: '[조작] WASD/방향키 이동 · Shift 달리기(기력 소모) · E/Space 상호작용 · R 생활관 바로 가기 · Tab 수첩 · F 빨리감기' },
+          { who: 'narr', text: '[조작] WASD/방향키 이동 · E/Space 상호작용 · R 생활관 바로 가기 · Tab 수첩 · F 빨리감기' },
           { who: 'narr', text: '상단에 다음 일정이 뜬다. 집합 시각(상단 "○○까지")에 표시된 장소에 있으면 정시에 시작된다. 미리 도착해서 E로 보고하면 바로 시작. 그 시각에 없으면 끌려가 혼난다!' },
           { who: 'narr', text: '건물 문으로 드나들고, 길 끝(표지판)으로 걸어가면 병영식당·PX·위병소 같은 다른 구역으로 이동한다. 막사 2층엔 체단실·싸지방·도서관이 있다. 체력·멘탈이 25 미만이면 훈련 점수가 깎인다.' },
         ],
@@ -729,6 +729,41 @@ export default function World() {
     if (!e) return;
     e.map = map; e.x = x; e.y = y; e.dir = dir; e.path = []; e.viaDoor = null; e.targetKey = `${map}:${Math.floor(x)},${Math.floor(y)}`; e.moving = false;
   }, [entityOf]);
+
+  // 👟 오마주: 전입 첫날, 첫 점호와 조작 안내가 끝나면 분대장이 런닝슈즈를 건넨다 (받기 전에는 달릴 수 없다)
+  useEffect(() => {
+    const st = useGame.getState();
+    if (overlay || rollcall || cer.current || st.day !== 1 || !st.flags.tutorial || st.flags.runShoes || st.lateCall || st.nightDuty) return;
+    st.applyEffects({ flag: 'runShoes' }, undefined, true);
+    // 분대장이 내 옆으로 다가와 선다
+    const p = runtime.player;
+    const map = world.maps[p.map];
+    const [ox, oy] = ([[1.1, 0], [-1.1, 0], [0, 1.1], [0, -1.1]] as const).find(([dx, dy]) => !collides(map, p.x + dx, p.y + dy)) ?? [0, 0];
+    p.dir = ox > 0 ? 'right' : ox < 0 ? 'left' : oy < 0 ? 'up' : 'down';
+    p.moving = false;
+    keys.current = {};
+    placeAt('sgt', p.map, p.x + ox, p.y + oy, ox > 0 ? 'left' : ox < 0 ? 'right' : oy < 0 ? 'down' : 'up');
+    setOverlay({
+      type: 'dialogue',
+      script: {
+        npc: 'sgt' as NpcId,
+        lines: [
+          { who: 'npc', text: '{me}. 잠깐 이리 와 봐.' },
+          { who: 'npc', text: '신병 보급품이다. 아까 늦잠 자느라 너만 못 받았지. 자, 받아라.' },
+          { who: 'narr', text: '분대장에게서 런닝슈즈를 받았다! {me}은(는) 그 자리에서 런닝슈즈로 갈아 신었다.' },
+          { who: 'npc', text: '상자에 설명서도 들어 있네. 어디 보자… "Shift를 누른 채 이동하면 달릴 수 있습니다. 숨이 차면 잠시 걸으며 기력을 회복하세요."' },
+          { who: 'npc', text: '…Shift가 뭔지는 모르겠다만. 군대는 뭐든 신속이다. 집합에 늦을 것 같으면 뛰어!' },
+          { who: 'me', text: '(런닝슈즈를 받고, 설명서를 읽어 주고… 이 전개, 어디서 많이 겪어 본 것 같은데. 그땐 엄마였던 것 같기도 하고.)' },
+        ],
+      },
+      onDone: () => {
+        const s2 = useGame.getState();
+        s2.toast('👟 런닝슈즈를 손에 넣었다! Shift(터치: 달리기 버튼)를 누른 채 이동하면 달린다.', 'good');
+        s2.log('👟 분대장에게 런닝슈즈를 받았다.');
+        s2.addTip('달리기: Shift를 누른 채 이동하면 달린다. 발밑의 기력 게이지가 바닥나면 잠시 걸으며 숨을 골라야 한다. 체력이 25 미만이면 회복이 느리다.');
+      },
+    });
+  }, [overlay, rollcall, world, placeAt, setOverlay]);
 
   /** 🌙 소등 후 잠들어 있다가 → 근무 시간에 깨어난다 */
   const nightWake = useCallback(() => {
@@ -1889,8 +1924,10 @@ export default function World() {
         if (k['arrowdown'] || k['s']) vy += 1;
       }
       // 🏃 Shift를 누른 채 이동하면 달리기 (기력 게이지 소모, 체력 25 미만이면 회복이 느리다)
+      // 👟 전입 첫날 런닝슈즈를 받기 전에는 달릴 수 없다
       const sta = stamina.current;
-      const dashing = !!keys.current['shift'] && !!(vx || vy) && !sta.lock && sta.v > 0;
+      const hasShoes = !!st.flags.runShoes || st.day > 1;
+      const dashing = hasShoes && !!keys.current['shift'] && !!(vx || vy) && !sta.lock && sta.v > 0;
       if (dashing) {
         sta.v = Math.max(0, sta.v - dt / DASH_DRAIN_SEC);
         sta.idle = 0;
