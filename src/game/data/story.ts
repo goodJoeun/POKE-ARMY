@@ -8,7 +8,10 @@ import type { SpotId } from '../types';
  * - 꿈: 하루 끝 결산 화면 전에 보는 "별의 언덕" 장면
  */
 
-export const MEMORY_START = 100;
+/**
+ * 시작 기억. 상한(100)보다 조금 낮게 둬서, 첫날 밤 첫 조각·첫 꿈으로 되살린 기억이 상한에 막혀 사라지지 않게 한다.
+ */
+export const MEMORY_START = 90;
 /** 하루가 지날 때마다 흐려지는 인간의 기억 (2일차부터) */
 export const MEMORY_DECAY = 14;
 /** 단서 하나를 찾을 때 되살아나는 기억 */

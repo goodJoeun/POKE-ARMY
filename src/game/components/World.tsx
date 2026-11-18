@@ -1214,6 +1214,25 @@ export default function World() {
         seated.add(id);
         members.push(id);
       });
+      // 1생활관에 사는 엑스트라(1분대 상병 등)도 빈 침상에 걸터앉고 인원에 들어간다
+      const usedX = new Set(
+        members.map((k) => {
+          const a = k === "me" ? runtime.player : npcs.current[k as NpcId];
+          return a ? Math.floor(a.x) : -1;
+        }),
+      );
+      let roomExtras = 0;
+      for (const def of extraDefs) {
+        if (def.map !== "room1" || def.officer) continue;
+        const a = extras.current[def.id];
+        const bx = [13, 11, 9, 1, 5, 7].find((x) => !usedX.has(x));
+        if (!a || bx === undefined) continue;
+        usedX.add(bx);
+        place(a, "room1", bx + 0.5, 3.55, "down");
+        seated.add("x:" + def.id);
+        members.push("x:" + def.id);
+        roomExtras++;
+      }
       place(ensure(duty), "room1", 7.5, 1.3, "down");
       if (nco) place(nco, "room1", 6.5, 1.3, "down");
       marks = {
@@ -1223,7 +1242,7 @@ export default function World() {
         aide: [10.5, 6.1],
         door: [6.5, 1.3],
       };
-      total = soldiers.length + 1;
+      total = soldiers.length + 1 + roomExtras;
     }
     cer.current = {
       kind,
@@ -1501,15 +1520,28 @@ export default function World() {
           holdRef.current = false;
           then();
         };
-        warpReq.current = {
+        const req = {
           tiles: [],
           to: map,
           enterDir: dir,
           arrive: { x, y, dir },
           onArrive: fire,
         } as unknown as Door;
-        // 화면이 멈춰 있어 전환이 끝나지 않을 때를 대비한 안전장치
-        setTimeout(fire, 4000);
+        warpReq.current = req;
+        // 화면이 멈춰 있어(탭이 가려져 프레임이 안 도는 등) 전환이 끝나지 않을 때를 대비한 안전장치.
+        // 대화가 엉뚱한 곳에서 시작되지 않도록, 먼저 그 자리로 옮기고 나서 다음 일을 시작한다.
+        setTimeout(() => {
+          if (fired) return;
+          if (warpReq.current === req) warpReq.current = null;
+          const p = runtime.player;
+          p.map = map;
+          p.x = x;
+          p.y = y;
+          p.dir = dir;
+          p.moving = false;
+          setLocation(map);
+          fire();
+        }, 2500);
       },
       place: (key, map, x, y, dir) => placeAt(key, map, x, y, dir),
       near: (key, d) => {
@@ -1828,7 +1860,29 @@ export default function World() {
                   if (c.effects)
                     useGame.getState().applyEffects(c.effects, "야간 근무");
                 },
-                onDone: () => useGame.getState().finishShift(),
+                onDone: () => {
+                  useGame.getState().finishShift();
+                  // 🎬 근무가 끝나 간다 → 먼저 1생활관 다음 근무자의 침상 앞으로 화면이 바뀌고, 그다음 안내
+                  const s4 = useGame.getState();
+                  const nk = s4.nightDuty?.next;
+                  const n = nk ? entityOf(nk) : null;
+                  const top = !n || n.y < 5;
+                  const [tx, ty] = n && n.map === "room1"
+                    ? [n.x, top ? n.y + 1 : n.y - 1]
+                    : [3.5, 4.5];
+                  storyCtxRef.current.goTo("room1", tx, ty, top ? "up" : "down", () => {
+                    const nm = nk ? memberName(s4.branch, nk) : "다음 근무자";
+                    setOverlay({
+                      type: "dialogue",
+                      script: {
+                        lines: [
+                          { who: "narr", text: "00:50. 생활관을 몇 바퀴 더 돌고 나니 근무가 끝나 간다." },
+                          { who: "narr", text: `${nm}의 침상 앞. 깨워서 근무를 넘겨주자.` },
+                        ],
+                      },
+                    });
+                  });
+                },
               });
             });
           }, 1400);
@@ -1901,7 +1955,7 @@ export default function World() {
     if (!nd) return;
     if (nightPhase === "wakeNext")
       st.toast(
-        `🔦 00:50 — 근무 끝나기 10분 전. 1생활관으로 돌아가 다음 근무자 ${memberName(st.branch, nd.next)}을(를) 깨워 교대하자.`,
+        `🔦 00:50 — 근무 끝나기 10분 전. 다음 근무자 ${josa(memberName(st.branch, nd.next), "을", "를")} 깨워 교대하자.`,
         "alert",
       );
     if (nightPhase === "return" && nd.kind === "guard")
@@ -2005,7 +2059,20 @@ export default function World() {
                 if (c.effects)
                   useGame.getState().applyEffects(c.effects, "야간 근무");
               },
-              onDone: () => useGame.getState().finishShift(),
+              onDone: () => {
+                useGame.getState().finishShift();
+                // 🎬 다음 근무자가 올라와 교대하는 장면을 보여 준 뒤 복귀
+                setOverlay({
+                  type: "dialogue",
+                  script: {
+                    lines: [
+                      { who: "narr", text: "02:00. 막사 쪽에서 다음 근무자들이 하품을 하며 걸어온다." },
+                      { who: "me", text: "근무 교대! 특이사항… 없음. 암구호는 근무일지에 있습니다." },
+                      { who: "narr", text: `교대를 마쳤다. ${josa(partner === "근무자" ? "같이 선 근무자" : partner, "과", "와")} 함께 조용히 생활관으로 돌아가자.` },
+                    ],
+                  },
+                });
+              },
             });
           }
         },
@@ -2038,6 +2105,10 @@ export default function World() {
                 ? "인수인계. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기."
                 : "근무 인수인계입니다. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기 있습니다.",
             },
+            // 별빛을 본 밤: 특이사항을 "없음"이라고 말하는 데 한 박자 걸린다
+            ...(st.flags[`star_${st.day}`]
+              ? [{ who: "narr" as const, text: "(창가의 별빛 이야기는 꺼내지 않았다. 말해도 아무도 믿지 않을 테니까.)" }]
+              : []),
             { who: sp.who, text: "(하품) 수고했어. 들어가 자." },
           ],
         },
@@ -3184,6 +3255,10 @@ export default function World() {
                     type: "dialogue",
                     script: {
                       lines: [
+                        {
+                          who: "me",
+                          text: "(…02시 51분? 지금은 아침인데. 돌아보니 벽의 시계는 정말로 새벽에 멈춰 있다.)",
+                        },
                         {
                           who: "narr",
                           text: "시계에서 눈을 떼는 순간 — 거울 속에… 까까머리 사람이 서 있다.",

@@ -12,7 +12,9 @@ import { npcCap, npcSpeaker } from '../engine/speakers';
 import MonsterCanvas from './MonsterCanvas';
 import { endingLines, promotionKeyLines } from './storyEvents';
 import type { StoryEnding } from '../data/story';
-import { fmt } from '../engine/text';
+import { fixJosa, fmt } from '../engine/text';
+/** 단어 뒤에 붙일 조사만 골라 준다: pj('리뷰어', '은(는)') → '는' */
+const pj = (w: string, p: string) => fixJosa(w + p).slice(w.length);
 import type { Line } from '../types';
 import { RankBadge } from './Hud';
 
@@ -64,7 +66,7 @@ const INTRO_LINES = [
 export function Intro() {
   const s = useGame();
   const [i, setI] = useState(0);
-  const lines = INTRO_LINES.map((l) => l.replace('{me}', s.name));
+  const lines = INTRO_LINES.map((l) => fixJosa(l.replace('{me}', s.name)));
   const next = () => (i < lines.length - 1 ? setI(i + 1) : s.go('quiz'));
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'e') { e.preventDefault(); next(); } };
@@ -259,7 +261,7 @@ export function Promotion() {
   const [answered, setAnswered] = useState<null | boolean>(null);
   const [evolved, setEvolved] = useState(false);
   const opts = useMemo(() => [
-    { ok: true, text: `"${b.salute}! 신고합니다. ${RANKS[rank - 1]} ${s.name}은(는) ${RANKS[rank]}(으)로 진급을 명받았습니다. 이에 신고합니다. ${b.salute}!"` },
+    { ok: true, text: fixJosa(`"${b.salute}! 신고합니다. ${RANKS[rank - 1]} ${s.name}은(는) ${RANKS[rank]}(으)로 진급을 명받았습니다. 이에 신고합니다. ${b.salute}!"`) },
     { ok: false, text: `"저 ${RANKS[rank]} 됐어요! 감사합니다~"` },
     { ok: false, text: `"${b.salute}! 이제 저도 짬 좀 찼습니다!"` },
   ].sort(() => Math.random() - 0.5), [b.salute, rank, s.name]);
@@ -283,7 +285,7 @@ export function Promotion() {
     <div className="scene promo-scene">
       <h2>🎖️ 진급 신고</h2>
       <div className="promo-evo">
-        <div>축하합니다! {s.name}은(는) <b>{RANKS[rank - 1]}</b>에서 <b>{RANKS[rank]}</b>(으)로 진화했다!</div>
+        <div>축하합니다! {s.name}{pj(s.name, '은(는)')} <b>{RANKS[rank - 1]}</b>에서 <b>{RANKS[rank]}</b>{pj(RANKS[rank], '(으)로')} 진화했다!</div>
       </div>
       <div className="promo-badge"><RankBadge rankIdx={rank} size={60} /><div>{RANKS[rank - 1]} → <b>{RANKS[rank]}</b></div></div>
       <div className="promo-cpt">
@@ -359,7 +361,7 @@ function Evolution({ name, look, cap, from, to, onDone }: {
   const text = t < EVO_START ? `…어라!? ${name}의 모습이…!`
     : t < EVO_FLASH ? (cancelTry > 0 ? '…진급은 멈출 수 없다! (B 버튼은 군대에서 통하지 않는다)' : `…어라!? ${name}의 모습이…!`)
     : t < EVO_DONE - 0.4 ? '……!'
-    : `축하합니다! ${name}은(는) ${RANKS[from]}에서 ${RANKS[to]}(으)로 진화했다!`;
+    : fixJosa(`축하합니다! ${name}은(는) ${RANKS[from]}에서 ${RANKS[to]}(으)로 진화했다!`);
   const shownRank = t >= EVO_FLASH ? to : from;
   return (
     <div className="evo-scene" onClick={advance}>
@@ -514,7 +516,7 @@ export function Ending() {
         <p className="fade-in d2">사람의 손이다. 꼬리도, {s.branch === 'air' ? '날개도' : s.branch === 'navy' ? '물갈퀴도' : '꼬리 불꽃도'} 없다. {sp.name}의 모습은 온데간데없다.</p>
         <p className="fade-in d3">여기는… <b>훈련소 첫날 밤</b>이다.</p>
         <p className="fade-in d4">옆 침상 훈련병이 속삭였다. "너 아까 잠꼬대로 '{b.salute}!' 외치던데? 무슨 꿈 꿨냐?"</p>
-        <p className="fade-in d5">{s.name}은(는) 피식 웃었다. 이번엔 왠지… 해낼 수 있을 것 같다.</p>
+        <p className="fade-in d5">{s.name}{pj(s.name, '은(는)')} 피식 웃었다. 이번엔 왠지… 해낼 수 있을 것 같다.</p>
         <h2 className="fade-in d6">— 그리고, 진짜 군 생활이 시작된다. —</h2>
         <p className="fade-in d6 hud-dim">THE END · 플레이해 주셔서 감사합니다</p>
         <button className="primary big fade-in d6" onClick={() => s.go('title')}>타이틀로</button>

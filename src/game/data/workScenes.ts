@@ -16,6 +16,12 @@ const say = (who: LineWho, text: string): Line => ({ who, text });
 const narr = (text: string) => say('narr', text);
 const me = (text: string) => say('me', text);
 
+/** 1일차 오전: 구호를 고른 다음 이어지는 지문 */
+const AFTER_1AM: Line[] = [
+  narr('시키는 대로 몸을 움직이다 보니 오전이 갔다. 꽤 힘들었는데, 힘들다는 말을 하는 사람이 없다.'),
+  me('(좋은 부대인 것 같다. …좋은 부대인 것 같은데.)'),
+];
+
 export const WORK_SCENES: Record<string, WorkScene> = {
   // ───────── 1장 「눈을 떠 보니」 ─────────
   '1-am': {
@@ -25,12 +31,12 @@ export const WORK_SCENES: Record<string, WorkScene> = {
       narr('"오늘도 좋은 하루!" 다들 활짝 웃으며 외친다. 엄격해 보이던 분대장까지도.'),
       say('senior', '야, 신병. 너도 해야지. 여기선 다 같이 웃고 시작하는 거다. 좋잖아?'),
       say('buddy', '(작게) …나도 어제 왔어. 그냥 따라 하면 돼. 안 하면 다들 쳐다봐.'),
-      narr('시키는 대로 몸을 움직이다 보니 오전이 갔다. 꽤 힘들었는데, 힘들다는 말을 하는 사람이 없다.'),
-      me('(좋은 부대인 것 같다. …좋은 부대인 것 같은데.)'),
+      narr('분대원들의 웃는 얼굴이 일제히 나를 향한다. 내 차례다.'),
     ],
+    // 구호를 따라 할지 고른 뒤에 오전이 지나간다 (고르기 전에 "오전이 갔다"가 나오지 않게)
     choices: [
-      { text: '(크게 따라 외친다) "오늘도 좋은 하루!"', grade: 'good', effects: { discipline: 2, affinity: { sgt: 2 } }, reply: [say('sgt', '그래. 그 얼굴이다. 여기선 그 얼굴로 지내면 된다.')] },
-      { text: '(입만 벙긋거린다)', grade: 'ok', effects: { affinity: { buddy: 2 } }, reply: [narr('분대원들이 웃는 얼굴 그대로 나를 본다. 한 박자. 그리고 아무 일 없었다는 듯 흩어진다.')] },
+      { text: '(크게 따라 외친다) "오늘도 좋은 하루!"', grade: 'good', effects: { discipline: 2, affinity: { sgt: 2 } }, reply: [say('sgt', '그래. 그 얼굴이다. 여기선 그 얼굴로 지내면 된다.'), ...AFTER_1AM] },
+      { text: '(입만 벙긋거린다)', grade: 'ok', effects: { affinity: { buddy: 2 } }, reply: [narr('분대원들이 웃는 얼굴 그대로 나를 본다. 한 박자. 그리고 아무 일 없었다는 듯 흩어진다.'), ...AFTER_1AM] },
     ],
   },
   '1-pm': {

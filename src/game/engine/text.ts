@@ -8,7 +8,29 @@ export interface TextCtx {
   day: number;
 }
 
+/**
+ * "리뷰어은(는)" 같은 겹친 조사를 앞 글자의 받침에 맞게 하나로 고른다.
+ * 은(는) · 이(가) · 을(를) · 과(와) · 와(과) · (으)로. 앞 글자가 한글이 아니면 그대로 둔다.
+ */
+export function fixJosa(text: string): string {
+  return text.replace(/([가-힣])(은\(는\)|는\(은\)|이\(가\)|가\(이\)|을\(를\)|를\(을\)|과\(와\)|와\(과\)|\(으\)로)/g, (_m, ch: string, pat: string) => {
+    const jong = (ch.charCodeAt(0) - 0xac00) % 28;
+    const has = jong !== 0;
+    if (pat === '(으)로') return ch + (has && jong !== 8 ? '으로' : '로');
+    const pair: Record<string, [string, string]> = {
+      '은(는)': ['은', '는'], '는(은)': ['은', '는'], '이(가)': ['이', '가'], '가(이)': ['이', '가'],
+      '을(를)': ['을', '를'], '를(을)': ['을', '를'], '과(와)': ['과', '와'], '와(과)': ['과', '와'],
+    };
+    const [withB, noB] = pair[pat];
+    return ch + (has ? withB : noB);
+  });
+}
+
 export function fmt(text: string, c: TextCtx): string {
+  return fixJosa(fmtRaw(text, c));
+}
+
+function fmtRaw(text: string, c: TextCtx): string {
   const b = BRANCHES[c.branch];
   return text
     .replace(/\{S\}/g, b.salute)

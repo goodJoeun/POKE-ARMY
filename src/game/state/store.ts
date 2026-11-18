@@ -12,7 +12,7 @@ import { DIALOGUES } from '../data/dialogues';
 import { QUESTS, QUEST_CHAINS, chainOf } from '../data/quests';
 import { ITEMS, GIFT_AFFINITY } from '../data/items';
 import { rollcallPool, type RollcallQuestion } from '../data/rollcall';
-import { fmt } from '../engine/text';
+import { fixJosa, fmt } from '../engine/text';
 import { runtime, teleport } from '../engine/runtime';
 import { inEventArea } from '../engine/eventArea';
 import { isExtraKey, memberName } from '../engine/whereabouts';
@@ -710,13 +710,13 @@ export const useGame = create<Store>((set, get) => ({
 
   toast: (text, tone = 'info') => {
     const id = toastId++;
-    set({ toasts: [...get().toasts.slice(-4), { id, text, tone }] });
+    set({ toasts: [...get().toasts.slice(-4), { id, text: fixJosa(text), tone }] });
     setTimeout(() => get().dismissToast(id), tone === 'alert' ? 5000 : 3800);
   },
 
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
-  log: (text) => set({ dayLog: [...get().dayLog, text] }),
+  log: (text) => set({ dayLog: [...get().dayLog, fixJosa(text)] }),
 
   spend: (mins) => {
     const s = get();
