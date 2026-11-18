@@ -4,6 +4,7 @@ import { useGame } from '../state/store';
 import { TEXT_SPEED, useSettings } from '../state/settings';
 import { fmt } from '../engine/text';
 import { DREAMS, DREAM_FADED, type DreamLine } from '../data/story';
+import PuzzleBox from './PuzzleBox';
 
 /**
  * 꿈: 별의 언덕 — 하루 끝(결산) 전에 보는 짧은 장면.
@@ -32,11 +33,16 @@ export default function Dream() {
     return () => clearInterval(iv);
   }, [text, typeMs, typeStep]);
 
+  // 🧩 P-01 첫 번째 조각: 첫날 밤, 언덕의 창문을 처음 본 직후에 조각을 끼운다
+  const [puzzle, setPuzzle] = useState(false);
+  const puzzleAt = lines.findIndex((l) => l.scene === 'hill');
   const advance = useCallback(() => {
+    if (puzzle) return;
     if (typed < text.length) { setTyped(text.length); return; }
+    if (s.day === 1 && idx === puzzleAt && !useGame.getState().puzzles['P-01']?.solved) { setPuzzle(true); return; }
     if (idx < lines.length - 1) setIdx(idx + 1);
     else useGame.getState().finishDream();
-  }, [typed, text.length, idx, lines.length]);
+  }, [puzzle, typed, text.length, idx, lines.length, s.day, puzzleAt]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -122,6 +128,19 @@ export default function Dream() {
           </div>
         </div>
       </div>
+      {puzzle && (
+        <PuzzleBox
+          id="P-01"
+          mustSolve
+          onClose={() => {}}
+          onSolved={(reward) => {
+            // 퍼즐 보상으로 첫 단서를 적는다 (꿈이 끝날 때의 기본 보상 대신)
+            if (dream?.clue) useGame.getState().findClue(dream.clue, reward);
+            setPuzzle(false);
+            setIdx((i) => Math.min(i + 1, lines.length - 1));
+          }}
+        />
+      )}
     </div>
   );
 }

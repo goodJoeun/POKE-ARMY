@@ -9,8 +9,6 @@ export interface Settings {
   textSpeed: 'slow' | 'normal' | 'fast' | 'instant';
   /** 집합 허용 시간 (지각 판정) */
   gatherWindow: 'relaxed' | 'normal' | 'strict';
-  /** 미니게임 난이도 (점수 보정) */
-  difficulty: 'easy' | 'normal' | 'hard';
   /** 화면 흔들림 연출 */
   screenShake: boolean;
   /** 대화 후 군대 상식 카드 표시 (끄더라도 수첩에는 모인다) */
@@ -33,7 +31,6 @@ export const DEFAULT_SETTINGS: Settings = {
   timeSpeed: 'normal',
   textSpeed: 'normal',
   gatherWindow: 'normal',
-  difficulty: 'normal',
   screenShake: true,
   showTips: true,
   mapZoom: 1,
@@ -46,8 +43,6 @@ export const DEFAULT_SETTINGS: Settings = {
 export const MS_PER_MINUTE: Record<Settings['timeSpeed'], number> = { slow: 1500, normal: 1000, fast: 600 };
 /** 집합 허용 시간(게임 분) */
 export const GATHER_MINUTES: Record<Settings['gatherWindow'], number> = { relaxed: 30, normal: 20, strict: 15 };
-/** 미니게임 점수 배율 */
-export const DIFFICULTY_MUL: Record<Settings['difficulty'], number> = { easy: 1.15, normal: 1, hard: 0.9 };
 /** 대사 타자 속도: [간격 ms, 한 번에 나오는 글자 수] */
 export const TEXT_SPEED: Record<Settings['textSpeed'], [number, number]> = {
   slow: [35, 1], normal: [18, 2], fast: [12, 4], instant: [0, 9999],
@@ -76,7 +71,7 @@ function persist(s: Settings) {
   try {
     const data: Settings = {
       timeSpeed: s.timeSpeed, textSpeed: s.textSpeed, gatherWindow: s.gatherWindow,
-      difficulty: s.difficulty, screenShake: s.screenShake, showTips: s.showTips, mapZoom: s.mapZoom,
+      screenShake: s.screenShake, showTips: s.showTips, mapZoom: s.mapZoom,
       testerMode: s.testerMode, bgmVolume: s.bgmVolume, sfxVolume: s.sfxVolume,
     };
     localStorage.setItem(KEY, JSON.stringify(data));

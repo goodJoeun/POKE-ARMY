@@ -21,6 +21,7 @@ import { NPC_IDS, NPC_ROLES, npcPresent } from '../data/npcs';
 import { extraLook, extrasForDay } from '../data/extras';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
 import { memberName } from '../engine/whereabouts';
+import { DUTY_BOARD, ORDERS } from '../data/orders';
 import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
@@ -45,6 +46,8 @@ export interface StoryCtx {
   near: (key: string, d: number) => boolean;
   resist: (o: ResistOpts, done: (ok: boolean) => void) => void;
   flash: () => void;
+  /** 🧩 두뇌 퍼즐을 띄운다. 풀면 solved(되살아날 기억). 미루고 닫으면 아무 일도 없다 (다시 와서 풀 수 있다) */
+  puzzle: (id: string, solved: (reward: number) => void, failed?: () => void) => void;
 }
 
 const G = () => useGame.getState();
@@ -89,6 +92,32 @@ const jirachiSpeaker = (named: boolean): SpeakerInfo => ({
 /** 단서와 함께 오는 장(章) 완료 체크까지 하는 플래그 */
 const setFlag = (k: string) => G().storyFlag(k);
 
+/**
+ * 📋 임무 보고: 명령을 받고 한 일이면, 끝난 뒤 시킨 사람에게 돌아가 보고하는 짧은 장면을 보여 준다.
+ * 시킨 사람이 그사이 전역해 부대에 없으면 지문 한 줄로 대신한다. 명령 없이 스스로 찾아간 일은 보고하지 않는다.
+ */
+export function withReport(ctx: StoryCtx, id: string, done?: () => void) {
+  const o = ORDERS[id];
+  const s = G();
+  if (!o || !s.flags[`order_${id}`] || s.flags[`report_${id}`]) { done?.(); return; }
+  const present = npcPresent(o.giver, s.day);
+  // 🎬 먼저 보고할 사람이 있는 곳으로 화면이 바뀌고, 그 사람과 마주 선 다음에 말을 꺼낸다
+  const at = present ? o.reportAt : DUTY_BOARD;
+  ctx.goTo(at.map, at.me[0], at.me[1], at.me[2], () => {
+    if (present) ctx.place(o.giver, at.map, at.giver[0], at.giver[1], at.giver[2]);
+    ctx.play({
+      script: present
+        ? { npc: o.giver, lines: o.report }
+        : { lines: [{ who: 'narr', text: '보고하러 갔지만, 일을 시킨 사람의 자리는 비어 있다. 당번표에 "완료"라고만 적어 두었다. 아무도 그 이름을 묻지 않는다.' }] },
+      onDone: () => {
+        G().applyEffects({ flag: `report_${id}`, discipline: 1, affinity: present ? { [o.giver]: 2 } : undefined }, '임무 보고', true);
+        G().log(`📋 임무를 마치고 보고했다: ${o.brief.replace('{ammo}', FACILITY_NAME[G().branch])}`);
+        done?.();
+      },
+    });
+  });
+}
+
 const say = (who: LineWho, text: string): Line => ({ who, text });
 const narr = (text: string) => say('narr', text);
 const me = (text: string) => say('me', text);
@@ -102,12 +131,20 @@ function m05(ctx: StoryCtx) {
     script: { lines: [
       narr('싸지방 컴퓨터로 인터넷 편지함을 열었다.'),
       narr('받은 편지함 맨 위에, 날짜 칸이 비어 있는 편지가 한 통 있다. 보낸 사람: 엄마.'),
-      narr('『아들, 어디 아프니? 아침에 아무리 깨워도 안 일어나서 병원에 왔어.』'),
-      narr('『의사 선생님은 그냥 깊이 잠든 거래. 엄마가 계속 옆에 있을게.』'),
-      narr('답장 버튼을 눌러 본다. …딸깍. 딸깍. 눌리지 않는다.'),
-      me('(현실의 나는… 자고 있구나. 입대 날 아침에도 못 일어난 채로.)'),
+      narr('『아들, 어디 아프니? 어젯밤이 네가 집에서 자는 마지막 밤이었는데, 아침에 아무리 깨워도 안 일어나서 병원에 왔어.』'),
+      narr('『의사 선생님은 그냥 깊이 잠든 거래. 입영 시간까지 아직 세 시간 남았다는데, 병무청에는 엄마가 전화해 둘게. 엄마가 계속 옆에 있을게.』'),
+      me('(…이 편지, 언제 쓴 거지?)'),
     ] },
-    onDone: () => G().findClue('C-05'),
+    // 🧩 P-06: 편지를 쓴 날과 시각을 알아내야 현실의 시간이 보인다
+    onDone: () => ctx.puzzle('P-06', (reward) => ctx.play({
+      script: { lines: [
+        narr('비어 있던 날짜 칸에 글자가 떠오른다. 입대일, 오전 11시.'),
+        me('(나는 여기서 며칠을 보냈는데… 현실은 아직 그날 오전이야.)'),
+        narr('답장 버튼을 눌러 본다. …딸깍. 딸깍. 눌리지 않는다.'),
+        me('(현실의 나는… 자고 있구나. 입대 날 아침에도 못 일어난 채로.)'),
+      ] },
+      onDone: () => { G().findClue('C-05', reward); withReport(ctx, 'M-05'); },
+    })),
   });
 }
 
@@ -123,6 +160,14 @@ function m06(ctx: StoryCtx) {
         lines: [
           narr('동기와 나란히 세탁기 앞에 섰다. 탈수가 끝난 세탁기 뚜껑을 열자—'),
           narr('우리 것이 아닌 낡은 전투복 한 벌이 섞여 나왔다. 빛바랜 명찰이 붙어 있다.'),
+          narr('명찰은 다 해져서, 글자가 실밥 조각으로 흩어져 있다.'),
+        ],
+      },
+      // 🧩 P-07: 명찰 조각을 맞춰야 이름이 돌아온다
+      onDone: () => ctx.puzzle('P-07', (reward) => ctx.play({
+      script: {
+        npc: 'buddy',
+        lines: [
           narr('「이준서」'),
           say('buddy', '……'),
           narr(`(${buddyName()}의 눈에서 갑자기 눈물이 뚝뚝 떨어진다.)`),
@@ -137,7 +182,8 @@ function m06(ctx: StoryCtx) {
         ],
       },
       onChoice: (c) => { if (c.effects) G().applyEffects(c.effects, '낯선 명찰'); },
-      onDone: () => G().findClue('C-06'),
+      onDone: () => { G().findClue('C-06', reward); withReport(ctx, 'M-06'); },
+      })),
     });
   });
 }
@@ -151,12 +197,19 @@ function m07(ctx: StoryCtx) {
     script: { lines: [
       narr('상황판 옆에 걸린 지휘통제실 근무 일지를 넘겨 본다.'),
       narr('「00:00 시계 정지 (1분)」 「00:00 시계 정지 (1분)」 「00:00 시계 정지 (1분)」…'),
-      narr('날짜만 다를 뿐, 매일 같은 줄이 적혀 있다. 그리고 마지막 칸엔 낯선 필체로 —'),
-      narr(`「별이 질 때까지 D-${left}」`),
-      me(`(D-${left}… 별이 지는 날이 전역일이라면.)`),
-      narr('벽시계를 올려다본다. 초침이 아주 잠깐, 멈췄다 간 것 같다.'),
+      narr('날짜만 다를 뿐, 매일 같은 줄이 적혀 있다.'),
+      me('(자정마다 1분씩… 그럼 이 시계는 지금 얼마나 늦은 거지?)'),
     ] },
-    onDone: () => G().findClue('C-07'),
+    // 🧩 P-08: 멈춘 시간을 세어 보면 마지막 줄이 눈에 들어온다
+    onDone: () => ctx.puzzle('P-08', (reward) => ctx.play({
+      script: { lines: [
+        narr('계산을 마치고 일지를 덮으려는데, 마지막 칸이 눈에 들어온다. 낯선 필체로 —'),
+        narr(`「별이 질 때까지 D-${left}」`),
+        me(`(D-${left}… 별이 지는 날이 전역일이라면.)`),
+        narr('벽시계를 올려다본다. 초침이 아주 잠깐, 멈췄다 간 것 같다.'),
+      ] },
+      onDone: () => { G().findClue('C-07', reward); withReport(ctx, 'M-07'); },
+    })),
   });
 }
 
@@ -166,37 +219,36 @@ function d01(ctx: StoryCtx, retry = false) {
     ? [narr('다시 단서 카드를 하나씩 짚어 본다. 별 조각 · 거울 · 생일자 명단 · 엄마의 편지.'), me('"우리가 포켓몬이 된 건…"')]
     : [
       me(`"…${buddyName()}. 할 얘기가 있어."`),
-      narr('침상에 걸터앉아 그동안 모은 것들을 하나씩 늘어놓았다. 별 조각 · 거울 · 생일자 명단 · 엄마의 편지.'),
+      narr('체력단련이 끝나고 다들 나갔다. 아령을 제자리에 놓고, 매트 위에 그동안 모은 것들을 하나씩 늘어놓았다.'),
       say('buddy', '이게… 다 뭐야?'),
       me('"우리가 포켓몬이 된 건…"'),
     ];
   ctx.play({
-    script: {
-      npc: 'buddy',
-      lines,
-      choices: [
-        { text: '입대 스트레스 때문에 꾸는 악몽이다', grade: 'bad', reply: [say('buddy', '악몽이라기엔… 밥이 너무 맛있잖아. 그건 좀 아닌 것 같아.')] },
-        { text: '입대 전날 밤, 별똥별에게 빈 소원 때문이다', grade: 'good', reply: [
+    script: { npc: 'buddy', lines },
+    // 🧩 P-09 추리 보드: 단서 카드를 이야기의 빈칸에 놓는다 (찍을 수 없다)
+    onDone: () => ctx.puzzle('P-09', (reward) => ctx.play({
+      script: {
+        npc: 'buddy',
+        lines: [
+          me('"…입대 전날 밤, 별똥별에 빈 소원 때문이야."'),
           say('buddy', '……'),
           say('buddy', '나도… 그날 밤 별을 봤어.'),
           say('buddy', '엄마 곁을 떠나기 싫다고 빌었어. 그거 하나는 확실히 기억나.'),
           narr(`(${josa(buddyName(), '이', '가')} 주머니에서 꺼낸 별 조각이, 내 것과 똑같이 반짝인다.)`),
           say('buddy', '이거, 네가 가져. 너라면 끝까지 갈 것 같아.'),
           say('buddy', '…아, 그리고. 2층 계단 옆 옥상 문이 열려 있더라. 나중에 별 보러 가자.'),
-        ] },
-        { text: '부대에 숨겨진 비밀 실험 때문이다', grade: 'bad', reply: [say('buddy', '실험이면 간부님들이 저렇게 태평하겠어? 행보관님은 오늘도 제초 얘기만 하셨는데.')] },
-      ],
-    },
-    onChoice: (c) => {
-      const s = G();
-      if (c.grade === 'good') {
-        s.applyEffects({ memory: 6, affinity: { buddy: 3 }, flag: 'roof' }, '추리 정리 1');
+        ],
+      },
+      onDone: () => {
+        const s = G();
+        s.applyEffects({ memory: reward, affinity: { buddy: 3 }, flag: 'roof' }, '추리 정리 1');
         s.gainStar(2);
         setFlag('d01');
         s.log('🧩 추리 정리 1: 우리가 포켓몬이 된 건 입대 전날 밤 별에 빈 소원 때문이다.');
-      } else s.applyEffects({ memory: -2 }, '추리 정리 1');
-    },
-    onDone: () => { if (!flag('d01')) d01(ctx, true); else G().toast('🔓 막사 2층 계단 옆 옥상 철문이 열렸다 (19:00~21:20).', 'info'); },
+        s.toast('🔓 막사 2층 계단 옆 옥상 철문이 열렸다 (19:00~21:20).', 'info');
+        withReport(ctx, 'D-01');
+      },
+    })),
   });
 }
 
@@ -208,25 +260,70 @@ export function libraryLightsOut(ctx: StoryCtx, byDay: boolean) {
   if (second && s.day < 9) return false;
   const words = second ? '『소 · 원 · 을 · 거 · 둬 · 라』' : '『별 · 이 · 지 · 기 · 전 · 에』';
   const natu = extraSpeaker('librarian');
+  if (!second) {
+    // 🧩 P-10: 밤 순찰 중 2층 복도 게시판 (놓쳤으면 낮에 도서관에서 네이티오가 불을 꺼 준다)
+    ctx.play({
+      bg: 'library',
+      script: {
+        custom: natu,
+        lines: byDay
+          ? [
+            narr('네이티오가 말없이 스위치를 내린다. 도서관이 깜깜해진다.'),
+            narr('어둠 속에서 종이 조각 같은 것들이 사르르 모여든다. 글자다. 아니, 포켓몬이다 — 안농.'),
+            narr('안농들이 둥글게 맴돈다. 무슨 말을 하려는 것 같은데, 순서가 뒤죽박죽이다.'),
+          ]
+          : [
+            narr('게시판 공지를 확인하려는데, 손전등 빛 속에서 글자들이 종이를 떠나 떠오른다. 손전등을 껐다.'),
+            narr('어둠 속에서 더 또렷하다. 공지문에서 떨어져 나온 글자들. 아니, 포켓몬이다 — 안농.'),
+            narr('안농들이 둥글게 맴돈다. 무슨 말을 하려는 것 같은데, 순서가 뒤죽박죽이다.'),
+          ],
+      },
+      onDone: () => ctx.puzzle('P-10', (reward) => ctx.play({
+        bg: 'library',
+        script: {
+          custom: natu,
+          lines: [
+            narr(byDay ? '서가 위에 안농들이 한 줄로 늘어선다.' : '게시판 앞 허공에 안농들이 한 줄로 늘어선다.'),
+            narr(words),
+            narr(byDay ? '네이티오가 스위치를 다시 올리자, 안농들이 흩어진다.' : '손전등을 다시 켜자, 글자들은 공지문 속으로 돌아간다. 공지문에는 원래 그런 문장이 없다.'),
+            narr('그 자리에 별 조각 하나가 떨어져 있다.'),
+          ],
+        },
+        onDone: () => { const s2 = G(); s2.findClue('C-11', reward); s2.gainStar(3); },
+      })),
+    });
+    return true;
+  }
+  // 🧩 P-18: 밤 순찰 중 휴게실 (놓쳤으면 낮에 도서관에서)
   ctx.play({
     bg: 'library',
     script: {
       custom: natu,
-      lines: [
-        byDay ? narr('네이티오가 말없이 스위치를 내린다. 도서관이 깜깜해진다.') : narr('손전등을 껐다. 불 꺼진 도서관이 완전한 어둠에 잠긴다.'),
-        narr('어둠 속에서 종이 조각 같은 것들이 사르르 모여든다. 글자다. 아니, 포켓몬이다 — 안농.'),
-        narr(second ? '이번엔 끝까지 모인다. 서가 위에 한 줄이 완성된다.' : '서가 위에 안농들이 한 줄로 늘어선다.'),
-        narr(words),
-        ...(second
-          ? [narr(byDay ? '어느새 네이티오가 서가 꼭대기에 올라앉아, 어두운 창밖을 보고 있다.' : '서가 꼭대기에 네이티오가 앉아 있다. 해가 없는 밤인데도, 창밖을 보고 있다.'), say('npc', '…이제 반은 왔다. 나머지 반은, 네 마음이다.')]
-          : [narr(byDay ? '네이티오가 스위치를 다시 올리자, 안농들이 흩어진다.' : '손전등을 다시 켜자 안농들이 흩어진다.'), narr('그 자리에 별 조각 하나가 떨어져 있다.')]),
-      ],
+      lines: byDay
+        ? [
+          narr('네이티오가 말없이 스위치를 내린다. 도서관이 깜깜해진다.'),
+          narr('어둠 속에서 안농들이 다시 모여든다. 지난번보다 급하게 맴돈다.'),
+          narr('두 마리는 거꾸로 뒤집힌 채다.'),
+        ]
+        : [
+          narr('휴게실. 켜져 있다던 TV는 꺼져 있다. 그런데 검은 화면 앞 허공에 글자들이 떠 있다. 손전등을 껐다.'),
+          narr('지난번의 안농들이다. 이번에는 더 급하게 맴돈다.'),
+          narr('두 마리는 거꾸로 뒤집힌 채다.'),
+        ],
     },
-    onDone: () => {
-      const s2 = G();
-      if (!second) { s2.findClue('C-11'); s2.gainStar(3); }
-      else s2.findClue('C-15');
-    },
+    onDone: () => ctx.puzzle('P-18', (reward) => ctx.play({
+      bg: 'library',
+      script: {
+        custom: natu,
+        lines: [
+          narr(byDay ? '이번엔 끝까지 모인다. 서가 위에 한 줄이 완성된다.' : '이번엔 끝까지 모인다. 꺼진 화면 앞에 한 줄이 완성된다.'),
+          narr(words),
+          narr(byDay ? '어느새 네이티오가 서가 꼭대기에 올라앉아, 어두운 창밖을 보고 있다.' : '소파 등받이 위에 네이티오가 앉아 있다. 도서관에 있어야 할 관리병이, 언제 왔는지.'),
+          say('npc', '…이제 반은 왔다. 나머지 반은, 네 마음이다.'),
+        ],
+      },
+      onDone: () => G().findClue('C-15', reward),
+    })),
   });
   return true;
 }
@@ -239,47 +336,39 @@ function m08(ctx: StoryCtx) {
       narr('폐지 더미를 정리하다 손이 멈췄다. 종이 사이로 봉투들이 쏟아진다. 우표도, 주소도 없다.'),
       narr('해마다 다른 필체로 쓴 편지들. 내용은 전부 같다.'),
       narr('『집에 가고 싶다』 『집에 가고 싶다』 『집에 가고 싶다』'),
-      narr('한 장만 내용이 다르다.'),
-      narr('『다음에 오는 사람에게. 도서관 안쪽 방을 봐라. — 강』'),
-      me('(…나보다 먼저 온 사람이 있었어. 그것도 여러 명.)'),
+      narr('뒤집어 보니, 뒷면마다 다른 종이를 대고 눌러 쓴 자국이 남아 있다. 한 장만으로는 읽을 수 없다.'),
     ] },
-    onDone: () => G().findClue('C-09'),
+    // 🧩 P-11: 편지를 쓴 순서대로 놓으면 눌린 글자가 말이 된다
+    onDone: () => ctx.puzzle('P-11', (reward) => ctx.play({
+      script: { lines: [
+        narr('여섯 장을 순서대로 포개자, 눌린 자국이 겹쳐 한 장의 쪽지가 된다.'),
+        narr('『다음에 오는 사람에게. 도서관 안쪽 방을 봐라. — 강』'),
+        me('(…나보다 먼저 온 사람이 있었어. 그것도 여러 명.)'),
+      ] },
+      onDone: () => { G().findClue('C-09', reward); withReport(ctx, 'M-08'); },
+    })),
   });
 }
 
-/** M-09 정비실: 라디오 다이얼 맞추기 (3번) */
-function m09(ctx: StoryCtx, step = 0, seq = Array.from({ length: 3 }, () => (Math.random() < 0.5 ? 0 : 1)), retry = false) {
-  if (step === 0 && !retry) G().spend(15);
-  const noise = ['치이익…', '지지직… 치익…', '…삐… 치이…'][step];
+/** M-09 정비실: 라디오의 삐 소리를 읽어 주파수를 맞춘다 (🧩 P-12) */
+function m09(ctx: StoryCtx) {
+  G().spend(15);
   ctx.play({
     bg: 'radio',
-    script: {
-      lines: retry
-        ? [narr(`${noise} 다이얼을 반대로 돌려 보자.`)]
-        : step === 0
-        ? [narr('공구함 뒤 구석에 먼지 쌓인 라디오가 있다. 전원을 켜자 잡음이 쏟아진다.'), narr(`${noise} 다이얼을 천천히 돌려 보자.`)]
-        : [narr(`${noise} 조금만 더…`)],
-      choices: [
-        { text: '◀ 다이얼을 왼쪽으로', grade: 'ok', reply: [narr(seq[step] === 0 ? '…잡음이 줄어든다!' : '지지직! 오히려 시끄러워졌다.')] },
-        { text: '다이얼을 오른쪽으로 ▶', grade: 'ok', reply: [narr(seq[step] === 1 ? '…잡음이 줄어든다!' : '지지직! 오히려 시끄러워졌다.')] },
-      ],
-    },
-    onChoice: (c) => { (ctx as unknown as { _ok?: boolean })._ok = (c.text.startsWith('◀') ? 0 : 1) === seq[step]; },
-    onDone: () => {
-      const ok = (ctx as unknown as { _ok?: boolean })._ok;
-      if (!ok) { m09(ctx, step, seq, true); return; }
-      if (step < 2) { m09(ctx, step + 1, seq); return; }
-      ctx.play({
-        bg: 'radio',
-        script: { lines: [
-          narr('잡음이 걷히고, 규칙적인 소리가 들린다. 삐… 삐… 심전도 소리다.'),
-          narr('『…아직 깨어나지 않았습니다. 같은 날 밤 쓰러진 청년이 또 한 명…』'),
-          narr('치이익. 다시 잡음.'),
-          me(`(또 한 명… ${josa(buddyName(), '이', '')}다.)`),
-        ] },
-        onDone: () => G().findClue('C-10'),
-      });
-    },
+    script: { lines: [
+      narr('공구함 뒤 구석에 먼지 쌓인 라디오가 있다. 전원을 켜자 잡음이 쏟아진다.'),
+      narr('치이익… 잡음 사이로 규칙적인 소리가 섞여 들린다. 삐―, 삐, 삐…'),
+    ] },
+    onDone: () => ctx.puzzle('P-12', (reward) => ctx.play({
+      bg: 'radio',
+      script: { lines: [
+        narr('잡음이 걷히고, 규칙적인 소리가 또렷해진다. 삐… 삐… 심전도 소리다.'),
+        narr('『…아직 깨어나지 않았습니다. 같은 날 밤 쓰러진 청년이 또 한 명…』'),
+        narr('치이익. 다시 잡음.'),
+        me(`(또 한 명… ${josa(buddyName(), '이', '')}다.)`),
+      ] },
+      onDone: () => { G().findClue('C-10', reward); withReport(ctx, 'M-09'); },
+    })),
   });
 }
 
@@ -297,12 +386,19 @@ function m10(ctx: StoryCtx) {
       narr('책상 위에 「별똥별 부대사」 원본이 있다. 이번엔 페이지가 바싹 말라 있다.'),
       narr('『별이 깨어난 해마다, 소원을 빈 자가 부대에 온다. 별이 지기 전에 소원을 거두지 못한 자는, 부대가 된다.』'),
       narr('벽에는 해마다 찍은 부대 단체 사진이 빼곡하다.'),
-      narr('…이상하다. 사진마다 맨 앞줄 같은 자리에, 같은 얼굴의 이병이 서 있다.'),
-      narr(`10년 전 사진. 그 이병은 — 2분대의 말 없는 병장, ${sg?.name ?? '그 병장'}이다.`),
-      narr('바닥 먼지 위에 누군가의 발자국이 있다. 오래된 것과… 오늘 것.'),
-      me('(사진을 한 장 챙겼다. 직접 물어봐야겠어.)'),
+      me('(…뭔가 걸린다. 몇 장을 떼어 나란히 놓아 보자.)'),
     ] },
-    onDone: () => G().findClue('C-12'),
+    // 🧩 P-13: 해마다 같은 자리에 선 같은 얼굴을 찾는다
+    onDone: () => ctx.puzzle('P-13', (reward) => ctx.play({
+      bg: 'archive',
+      script: { lines: [
+        narr('…이상하다. 사진마다 둘째 줄 같은 자리에, 같은 얼굴의 이병이 서 있다.'),
+        narr(`10년 전 사진. 그 이병은 — 2분대의 말 없는 병장, ${sg?.name ?? '그 병장'}이다.`),
+        narr('바닥 먼지 위에 누군가의 발자국이 있다. 오래된 것과… 오늘 것.'),
+        me('(사진을 한 장 챙겼다. 직접 물어봐야겠어.)'),
+      ] },
+      onDone: () => { G().findClue('C-12', reward); withReport(ctx, 'M-10'); },
+    })),
   });
 }
 
@@ -323,10 +419,12 @@ export function slipperCorridor(ctx: StoryCtx, onEnd: (ok: boolean) => void) {
         say('npc', `고생이 많군, ${['이병', '일병', '상병', '병장'][rankIdxForDay(s.day)]}. 좀 쉬어.`),
         narr('똑딱… 똑딱… 어디선가 진자 소리. 손에 든 무언가가 천천히 흔들린다.'),
         say('npc', '눈을 감으면 편해져…'),
-        narr('[졸음을 버텨라! Space 연타]'),
+        say('npc', '읽지 마. 생각하지 마…'),
+        narr('[생각을 멈추지 마라! 글자의 "색"을 답한다]'),
       ],
     },
-    onDone: () => ctx.resist({ title: '🌀 똑딱, 똑딱…', sub: 'Space 연타! 눈을 감으면 안 된다', mode: 'mash', secs: 5, rise: 0.45 }, (ok) => {
+    // 🧩 P-14: Space 연타 대신, 졸음 속에서도 생각을 놓지 않는 집중 퍼즐
+    onDone: () => { const end = (ok: boolean) => {
       const s2 = G();
       setFlag('n03');
       if (ok) {
@@ -351,7 +449,7 @@ export function slipperCorridor(ctx: StoryCtx, onEnd: (ok: boolean) => void) {
           onDone: () => onEnd(false),
         });
       }
-    }),
+    }; ctx.puzzle('P-14', () => end(true), () => end(false)); },
   });
 }
 
@@ -368,6 +466,14 @@ function m11(ctx: StoryCtx) {
         say('npc', '…오랜만에… 그 얼굴을 보는군.'),
         say('npc', '강민혁. 그게… 내 이름이었다. 거의 다 잊었지만.'),
         narr('병장이 관물대 깊숙한 곳에서 찢어진 일기장을 꺼낸다.'),
+        narr('낱장이 다섯 조각으로 찢겨 뒤섞여 있다.'),
+      ],
+    },
+    // 🧩 P-15: 찢어진 일기를 순서대로 맞춘다
+    onDone: () => ctx.puzzle('P-15', (reward) => ctx.play({
+    script: {
+      custom: sp,
+      lines: [
         narr('『별 조각을 일곱 개 모았다. 마지막 밤, 별이 물었다. 돌아가겠느냐고.』'),
         narr('『나는 겁이 났다. 돌아가면, 다시 가야 하니까. 그래서 아무 말도 못 했다.』'),
         say('npc', '지휘통제실 일지에 날짜를 적은 것도, 분리수거장에 편지를 둔 것도 나다. …다음 사람에게 주려고.'),
@@ -375,7 +481,8 @@ function m11(ctx: StoryCtx) {
         narr('일기장 사이에 별 조각 하나가 끼워져 있다.'),
       ],
     },
-    onDone: () => { const s = G(); s.findClue('C-13'); s.gainStar(4); },
+    onDone: () => { const s = G(); s.findClue('C-13', reward); s.gainStar(4); withReport(ctx, 'M-11'); },
+    })),
   });
 }
 
@@ -409,35 +516,39 @@ export function roofOptions(ctx: StoryCtx): MenuOption[] {
   return opts;
 }
 
-/** D-02 추리 정리 2 「돌아가지 못한 사람들」 */
-function d02(ctx: StoryCtx, retry = false) {
+/** D-02 추리 정리 2 「돌아가지 못한 사람들」 (🧩 P-16 추리 보드) */
+function d02(ctx: StoryCtx) {
   ctx.play({
     bg: 'roof',
     script: {
       npc: 'buddy',
-      lines: retry ? [me('"…다시 생각해 보자. 그 사람들은 왜…"')] : [
+      lines: [
         narr('옥상 난간에 동기와 나란히 기댔다. 별이 어제보다 크다. 낮아졌다.'),
         say('buddy', '편지, 명찰, 사진, 일기장… 다 같은 얘기 같아.'),
         me('"이 부대에 갇힌 사람들은 왜 돌아가지 못했을까."'),
       ],
-      choices: [
-        { text: '탈출구를 끝내 못 찾아서', grade: 'bad', reply: [say('buddy', '병장님은 별 조각을 일곱 개나 모았다잖아. 길은 찾았던 거야.')] },
-        { text: '별이 지기 전에 소원을 거두지 못했고, 돌아가길 포기해서', grade: 'good', reply: [
+    },
+    onDone: () => ctx.puzzle('P-16', (reward) => ctx.play({
+      bg: 'roof',
+      script: {
+        npc: 'buddy',
+        lines: [
+          me('"길을 못 찾은 게 아니야. 별이 지기 전에 소원을 거두지 못한 거야. 겁이 나서."'),
           say('buddy', '……응. 겁이 나서.'),
           say('buddy', '…나도 사실 조금 무서워.'),
           say('buddy', '돌아가면 엄마가 울고 있을 것 같아서. 여기선 그냥… 엄마가 날 기다린다고 믿으면 되잖아.'),
           me('"그래도 진짜 엄마는 지금 옆에서 기다리고 있어. 편지 봤잖아."'),
           say('buddy', '……. 응.'),
-        ] },
-        { text: '간부들이 몰래 막고 있어서', grade: 'bad', reply: [say('buddy', '중대장님이 열쇠까지 주셨는데? 막을 생각이면 그러진 않았겠지.')] },
-      ],
-    },
-    onChoice: (c) => {
-      const s = G();
-      if (c.grade === 'good') { s.applyEffects({ memory: 6, affinity: { buddy: 2 } }, '추리 정리 2'); setFlag('d02'); s.log('🧩 추리 정리 2: 돌아가지 못한 사람들은 마지막 밤, 겁이 나서 소원을 거두지 못했다.'); }
-      else s.applyEffects({ memory: -2 }, '추리 정리 2');
-    },
-    onDone: () => { if (!flag('d02')) d02(ctx, true); },
+        ],
+      },
+      onDone: () => {
+        const s = G();
+        s.applyEffects({ memory: reward, affinity: { buddy: 2 } }, '추리 정리 2');
+        setFlag('d02');
+        s.log('🧩 추리 정리 2: 돌아가지 못한 사람들은 마지막 밤, 겁이 나서 소원을 거두지 못했다.');
+        withReport(ctx, 'D-02');
+      },
+    })),
   });
 }
 
@@ -450,9 +561,21 @@ function m12Box(ctx: StoryCtx) {
       narr(`${fac} 울타리 옆, 자물쇠가 채워진 낡은 상자.`),
       narr('상자 둘레에 동그란 자국이 겹겹이 나 있다. 무언가를 바닥에 끌며 빙빙 돈 것 같은.'),
       me('(진자… 그날 밤 복도에서 본 그 자국이랑 똑같아.)'),
-      narr('자국이 위병소 쪽으로 이어진다.'),
+      narr('자국은 여기서 시작된 게 아니다. 상자를 빙 돌고는 또 어딘가로 뻗어 있다. 수첩을 꺼내 약도를 그렸다.'),
     ] },
-    onDone: () => { setFlag('trail1'); G().toast('👣 자국이 위병소 초소 쪽으로 이어진다.', 'info'); },
+    // 🧩 P-17: 약도 위에서 자국을 끝까지 따라가 봐야 어디로 갈지 안다
+    onDone: () => ctx.puzzle('P-17', (reward) => ctx.play({
+      script: { lines: [
+        narr('약도 위의 선이 하나로 이어진다. 막사에서 나와, 분리수거장에서 끝난다.'),
+        narr('먼저 위병소 쪽 자국부터 눈으로 확인해 보자.'),
+      ] },
+      onDone: () => {
+        // 단서(+4)는 자국 끝에서 얻는다. 퍼즐 보상의 나머지는 여기서 준다
+        if (reward > 4) G().applyEffects({ memory: reward - 4 }, '진자 자국');
+        setFlag('trail1');
+        G().toast('👣 자국이 위병소 초소 쪽으로 이어진다.', 'info');
+      },
+    })),
   });
 }
 function m12Post(ctx: StoryCtx) {
@@ -470,7 +593,7 @@ function m12End(ctx: StoryCtx) {
       narr('뚜껑을 열자… 쓰레기 사이에서 별 조각이 반짝인다.'),
       me('(누군가 일부러 숨겼어. 그 당직부관이다.)'),
     ] },
-    onDone: () => { const s = G(); s.findClue('C-14'); s.gainStar(5); },
+    onDone: () => { const s = G(); s.findClue('C-14'); s.gainStar(5); withReport(ctx, 'M-12'); },
   });
 }
 
@@ -489,7 +612,7 @@ export function buddyForgets(ctx: StoryCtx) {
         say('buddy', '어… 죄송합니다. 분명 아는 얼굴 같은데, 이름이…'),
         narr('달력이 한 장 거꾸로 넘어가 있다. 동기의 눈이 낯선 사람을 보듯 흔들린다.'),
         me('(기억이 먼저 사라진다더니… 이렇게 빨리.)'),
-        narr('[동기와 함께했던 곳을 다시 찾아가자: 세탁실 → 싸지방 → 농구장 → 막사 옥상. 동기가 뒤따라온다.]'),
+        narr('[동기와 함께 되짚어 보자: 행정반 분실물함 → 싸지방 → 농구장 → 막사 옥상. 동기가 뒤따라온다.]'),
       ],
     },
     onDone: () => { setFlag('m13'); G().addTip('잊힌 기억은 함께한 장소에서 되살아나기도 한다. "추억이 약이야." — 의무병'); },
@@ -498,9 +621,9 @@ export function buddyForgets(ctx: StoryCtx) {
 }
 
 const M13_SPOT: Partial<Record<SpotId, { key: string; lines: () => Line[]; bonus: () => Line[] | null }>> = {
-  laundry1: {
+  admin: {
     key: 'm13_laundry',
-    lines: () => [narr('세탁기 앞. 그날 나온 낡은 전투복이 아직 선반에 개켜져 있다.'), say('buddy', '이 명찰… 준서. 이준서.'), say('buddy', '…이준서. 이거, 내 이름이야.')],
+    lines: () => [say('buddy', '이 명찰… 준서. 이준서.'), say('buddy', '…이준서. 이거, 내 이름이야.')],
     bonus: () => (G().doneQuests.includes('q_buddy_laundry') ? [say('buddy', '여기서 같이 빨래 갰잖아. 네가 각 잡는 거 알려 줬어. 손바닥으로 탁탁.')] : null),
   },
   cyber: {
@@ -518,9 +641,19 @@ function m13Spot(ctx: StoryCtx, spot: SpotId) {
   const def = M13_SPOT[spot]!;
   const bonus = def.bonus();
   G().spend(15);
-  ctx.play({
+  const scene = (reward = 0) => ctx.play({
     script: { npc: 'buddy', lines: [...def.lines(), ...(bonus ?? [])] },
-    onDone: () => { setFlag(def.key); G().applyEffects({ memory: bonus ? 5 : 2, affinity: { buddy: 2 } }, '잊혀 가는 이름'); },
+    onDone: () => { setFlag(def.key); G().applyEffects({ memory: Math.max(bonus ? 5 : 2, reward), affinity: { buddy: 2 } }, '잊혀 가는 이름'); },
+  });
+  if (spot !== 'admin') { scene(); return; }
+  // 🧩 P-19: 그날의 명찰을 이번엔 동기와 나눠 맞춘다
+  ctx.play({
+    script: { npc: 'buddy', lines: [
+      narr('행정반 분실물함. 주인 없는 장갑, 한 짝뿐인 양말, 그리고 바닥에 그 낡은 명찰.'),
+      narr('명찰의 실밥이 다시 풀려 있다. 동기가 조각 몇 개를 집어 들고 한참 들여다본다.'),
+      say('buddy', '…이거, 전에 같이 맞췄던 것 같은데. 절반은 제가 해 볼게요.'),
+    ] },
+    onDone: () => ctx.puzzle('P-19', (reward) => scene(reward)),
   });
 }
 function m13Roof(ctx: StoryCtx) {
@@ -534,7 +667,7 @@ function m13Roof(ctx: StoryCtx) {
       narr('동기가 마지막까지 꼭 쥐고 있던 별 조각을 내 손바닥에 올려놓는다.'),
       say('buddy', '내 것까지 가져가. 그리고… 같이 가자. 이번엔 진짜로.'),
     ] },
-    onDone: () => { const s = G(); s.applyEffects({ memory: 5, affinity: { buddy: 5 } }, '잊혀 가는 이름'); s.gainStar(7); setFlag('buddyBack'); s.log('💭 동기가 내 이름을, 그리고 자기 이름을 되찾았다.'); },
+    onDone: () => { const s = G(); s.applyEffects({ memory: 5, affinity: { buddy: 5 } }, '잊혀 가는 이름'); s.gainStar(7); setFlag('buddyBack'); s.log('💭 동기가 내 이름을, 그리고 자기 이름을 되찾았다.'); withReport(ctx, 'M-13'); },
   });
 }
 
@@ -593,11 +726,9 @@ export function slipperBoss(ctx: StoryCtx, onEnd: () => void, tries = 0) {
   const mates = presentNpcs(s.day).filter((id) => !NPC_ROLES[id].officer).sort((a, b) => s.affinity[b] - s.affinity[a]).slice(0, 2);
   let wins = 0;
   const round3 = () => {
-    // 군기·호감이 높을수록 졸음이 천천히 찬다
-    const avg = NPC_IDS.reduce((a, id) => a + s.affinity[id], 0) / NPC_IDS.length;
-    const rise = Math.max(0.3, 0.62 - s.stats.discipline / 400 - Math.max(0, avg) / 300);
-    ctx.play({ script: { custom: slipperSpeaker(true), lines: [say('npc', '그럼 그냥… 자. 푹 자. 아무도 안 깨울게…'), narr('[3라운드: 버텨라! Space 연타]')] }, onDone: () =>
-      ctx.resist({ title: '💤 3라운드: 버티기', sub: 'Space 연타! 잠들면 끝이다', mode: 'mash', secs: 6, rise }, (ok) => { if (ok) wins++; finish(); }) });
+    // 🧩 P-20c: 주어진 대답은 모두 오답. 내 이름을 직접 써야 한다
+    ctx.play({ script: { custom: slipperSpeaker(true), lines: [say('npc', '그럼 그냥… 자. 푹 자. 아무도 안 깨울게…'), say('npc', '어차피 넌 이름도 없는 병사잖아. 마지막이야. 넌 누구지?'), narr('[3라운드: 대답하라]')] }, onDone: () =>
+      ctx.puzzle('P-20c', () => { wins++; finish(); }, () => finish()) });
   };
   const finish = () => {
     const s2 = G();
@@ -639,27 +770,27 @@ export function slipperBoss(ctx: StoryCtx, onEnd: () => void, tries = 0) {
           say('npc', '왜 돌아가? 거기선 또 18개월이야. 새벽 기상, 혹한기, 불침번…'),
           say('npc', '여기선 영원히 편하게 지내면 돼. 저 말 없는 병장처럼.'),
         ] : [say('npc', '아직도 버티는 거야? …좋아, 한 번 더.')]),
-        narr('[1라운드: 진자를 보지 마라! ←→ 번갈아 눌러 시선 돌리기]'),
+        narr('[1라운드: 진자가 가려도 끝까지 세어라]'),
       ],
     },
-    onDone: () => ctx.resist({ title: '🌀 1라운드: 진자를 보지 마라', sub: '← → 번갈아 누르기', mode: 'alt', secs: 5, rise: 0.5 }, (ok1) => {
-      if (ok1) wins++;
-      ctx.play({
+    // 🧩 P-20a → P-20b → P-20c
+    onDone: () => {
+      const round2 = () => ctx.play({
         script: {
           custom: slipperSpeaker(true),
-          lines: [say('npc', '여기 친구들도 다 있잖아. 돌아가면 다 잊혀. 어차피 꿈이었으니까.'), narr('[2라운드: 반박하라]')],
-          choices: [
-            ...mates.map((id) => ({
-              text: `"${josa(memberName(s.branch, id), '이랑', '랑')} 쌓은 건 안 잊혀. 그게 날 여기까지 데려왔어."`, grade: 'good' as const,
-              reply: [say('npc', '…쳇. 기억이 단단하군.')],
-            })),
-            { text: '"…그건, 그렇네. 어차피 꿈이니까."', grade: 'bad' as const, reply: [say('npc', '그래, 그래. 그렇게 생각하면 편하지.')] },
-          ],
+          lines: [say('npc', '여기 친구들도 다 있잖아. 돌아가면 다 잊혀. 어차피 꿈이었으니까.'), narr('[2라운드: 거짓을 짚어라]')],
         },
-        onChoice: (c) => { if (c.grade === 'good') wins++; },
-        onDone: round3,
+        onDone: () => ctx.puzzle('P-20b', () => {
+          wins++;
+          // 병장의 일기가 있으면 그것으로, 없으면 가장 가까운 동료와의 추억으로 반박한다
+          const rebut = G().clues.includes('C-13')
+            ? '"병장님 일기엔 겁이 나서 거두지 못했다고 적혀 있었어. 잘했다고 생각한 적, 한 번도 없어."'
+            : `"${josa(memberName(s.branch, mates[0] ?? 'buddy'), '이랑', '랑')} 쌓은 건 안 잊혀. 남은 사람이 행복한지는, 네가 정하는 게 아니야."`;
+          ctx.play({ script: { custom: slipperSpeaker(true), lines: [me(rebut), say('npc', '…쳇. 기억이 단단하군.')] }, onDone: round3 });
+        }, () => ctx.play({ script: { custom: slipperSpeaker(true), lines: [say('npc', '그래, 그래. 그건 네가 제일 잘 알잖아.')] }, onDone: round3 })),
       });
-    }),
+      ctx.puzzle('P-20a', () => { wins++; round2(); }, () => round2());
+    },
   });
 }
 
@@ -680,6 +811,15 @@ export function finalStar(ctx: StoryCtx) {
         narr('대낮인데 별 하나가 천천히 내려와, 구령대 위에 내려앉는다.'),
         narr(`${sgJoin ? josa(flag('buddyBack') ? buddyName() : '동기', '과', '와') + ' ' + sgName : flag('buddyBack') ? buddyName() : '동기'}도 말없이 곁에 섰다.`),
         say('npc', n >= 7 ? '별 조각 일곱 개. 다 모았구나.' : `별 조각… ${n}개. 조금 모자라네.`),
+        say('npc', '첫날 밤의 창문, 기억해? 가진 조각을 끼워 봐.'),
+      ],
+    },
+    onDone: () => { const ask = (done: boolean) => ctx.play({
+    bg: 'parade',
+    script: {
+      custom: jirachiSpeaker(true),
+      lines: [
+        narr(done ? '창문 너머로 입대 전날 밤의 내 방이 보인다. 책상 위에는 입영통지서가 그대로 놓여 있다.' : '창문은 끝내 채워지지 않았다. 빈자리 너머는 안개뿐이다.'),
         say('npc', '소원을 거둘래? 돌아가면 넌 내일 아침, 진짜 훈련소에 가야 해.'),
         say('npc', '여기 남으면, 다신 아무 데도 안 가도 돼.'),
       ],
@@ -695,6 +835,7 @@ export function finalStar(ctx: StoryCtx) {
       G().log(end === 'true' ? '🌠 소원을 거뒀다. 함께.' : end === 'normal' ? '🌠 소원을 거뒀다. …혼자서.' : '🌠 별이 졌다.');
     },
     onDone: () => G().toast('🎖️ 이제 위병소 정문으로 가자. 전역이다.', 'info'),
+    }); ctx.puzzle('P-21', () => ask(true), () => ask(false)); },
   });
 }
 
@@ -791,7 +932,7 @@ export function storyNpcOptions(id: NpcId, ctx: StoryCtx): MenuOption[] {
     if (isOpen('M-06')) opts.push({ label: '🧺 "같이 빨래하러 가자"', hint: free ? '📖 스토리' : '점심·개인정비 시간에', disabled: !free, onSelect: () => m06(ctx) });
     if (isOpen('D-01')) {
       const ev = eveningNow();
-      opts.push({ label: '🗣️ "할 얘기가 있어" (추리 정리 1)', hint: ev ? '1생활관에서' : '19:00~21:20', disabled: !ev, onSelect: () => ctx.goTo('room1', 3.5, 4.5, 'right', () => { ctx.place('buddy', 'room1', 4.5, 4.5, 'left'); d01(ctx); }) });
+      opts.push({ label: '🗣️ "남아서 같이 정리하자" (추리 정리 1)', hint: ev ? '체단실에서' : '19:00~21:20', disabled: !ev, onSelect: () => ctx.goTo('gymroom', 6.5, 6.5, 'right', () => { ctx.place('buddy', 'gymroom', 7.5, 6.5, 'left'); d01(ctx); }) });
     }
   }
   // 7일차 밤 당직 간부: "어젯밤 당직부관?"

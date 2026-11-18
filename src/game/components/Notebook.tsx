@@ -12,8 +12,10 @@ import { fmtTime } from '../data/branches';
 import MonsterCanvas from './MonsterCanvas';
 import { npcCap } from '../engine/speakers';
 import { CLUES } from '../data/story';
+import { PUZZLES } from '../data/puzzles';
+import { SUSPICIONS, suspicionLeads, suspicionState } from '../data/suspicions';
 
-type Tab = 'me' | 'people' | 'quests' | 'items' | 'tips' | 'schedule' | 'clues';
+type Tab = 'me' | 'people' | 'quests' | 'items' | 'tips' | 'schedule' | 'clues' | 'sus';
 
 export default function Notebook({ onClose }: { onClose: () => void }) {
   const s = useGame();
@@ -29,7 +31,7 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const tabs: [Tab, string][] = [['me', '👤 나'], ['people', '🤝 관계'], ['quests', '📋 퀘스트'], ...(s.clues.length > 0 ? [['clues', '🔍 기억의 실마리'] as [Tab, string]] : []), ['items', '🎒 소지품'], ['schedule', '🗓️ 일과표'], ['tips', '📘 군대 상식']];
+  const tabs: [Tab, string][] = [['me', '👤 나'], ['people', '🤝 관계'], ['quests', '📋 퀘스트'], ...(s.clues.length > 0 ? [['sus', '❓ 의혹'] as [Tab, string], ['clues', '🔍 기억의 실마리'] as [Tab, string]] : []), ['items', '🎒 소지품'], ['schedule', '🗓️ 일과표'], ['tips', '📘 군대 상식']];
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -131,6 +133,27 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
               </table>
             </div>
           )}
+          {tab === 'sus' && (
+            <div className="nb-clues">
+              <div className="clue-head">
+                <div>❓ <b>의혹 수첩</b> <span className="hud-dim">· 이 부대의 미심쩍은 점들. 단서를 찾으면 실마리가 붙고, 결정적인 단서로 풀린다.</span></div>
+                <div className="hud-dim">풀린 의혹 {SUSPICIONS.filter((d) => suspicionState(d, s) === 'solved').length} / {SUSPICIONS.length}</div>
+              </div>
+              {SUSPICIONS.map((d) => {
+                const st = suspicionState(d, s);
+                if (st === 'hidden') return <div key={d.id} className="clue-card locked"><b>❓ ???</b> <span className="hud-dim">· 아직 눈에 띄지 않은 의혹</span></div>;
+                return (
+                  <div key={d.id} className={`clue-card sus ${st}`}>
+                    <div><b>{st === 'solved' ? '✅' : '❓'} {d.title}</b> <span className="hud-dim">· {d.question}</span></div>
+                    <ul className="sus-leads">
+                      {suspicionLeads(d, s).map((t, i) => <li key={i}>{t}</li>)}
+                    </ul>
+                    {st === 'solved' && <div className="sus-answer">→ {d.answer}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {tab === 'clues' && (
             <div className="nb-clues">
               <div className="clue-head">
@@ -139,7 +162,7 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
                   <span className="hud-dim"> 별 조각 {s.stars.length}/7</span>
                 </div>
                 <div>🌟 인간의 기억 <b>{s.memory}</b>/100 <span className="hud-dim">· 하루마다 흐려진다. 단서와 꿈이 되살린다.</span></div>
-                <div className="hud-dim">실마리 {s.clues.length}/{CLUES.length}</div>
+                <div className="hud-dim">실마리 {s.clues.length}/{CLUES.length} · 🧩 푼 퍼즐 {Object.values(PUZZLES).filter((p) => s.puzzles[p.id]?.solved).length}/{Object.keys(PUZZLES).length} · 🍬 별사탕 {s.candy}개</div>
               </div>
               {CLUES.map((c) => s.clues.includes(c.id) ? (
                 <div key={c.id} className="clue-card">

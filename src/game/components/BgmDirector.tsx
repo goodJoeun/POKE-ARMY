@@ -47,13 +47,6 @@ export function pickBgm(s: GameState): [BgmId, boolean] {
     case 'quiz':
     case 'transform': return ['bgm_03_dream_star_hill', true];
     case 'world': return [worldBgm(s), true];
-    case 'minigame': {
-      const g = s.minigame?.game;
-      // 불침번·야간 위병소는 밤 분위기 그대로, 오버로크(바느질)는 느긋하게, 나머지 훈련은 빠른 곡
-      if (g === 'night' || (g === 'guard' && s.nightDuty)) return ['bgm_08_night_duty_fog', true];
-      if (g === 'overlock') return ['bgm_06_messhall_free', true];
-      return ['bgm_07_training_minigame', true];
-    }
     case 'promotion': return ['bgm_05_rollcall_march', true];
     case 'dayEnd': return [dreamPending(s) ? 'bgm_03_dream_star_hill' : 'bgm_02_bedroom_night', true];
     case 'ending': return ['bgm_11_ending_same_star', false];
@@ -64,7 +57,7 @@ export function pickBgm(s: GameState): [BgmId, boolean] {
 /**
  * 화면에는 아무것도 그리지 않는다. 게임 상태를 지켜보다가
  * - 상황에 맞는 BGM으로 바꾸고 (0.3초마다 확인: 플레이어가 있는 맵은 React 상태가 아니라서)
- * - 단서·별 조각·퀘스트·지각·미니게임 결과·진급·취침에 징글을 울린다
+ * - 단서·별 조각·퀘스트·지각·진급·취침에 징글을 울린다
  */
 export default function BgmDirector() {
   const bgmVolume = useSettings((s) => s.bgmVolume);
@@ -124,10 +117,6 @@ export default function BgmDirector() {
       else if (s.clues.length > p.clues.length) jingle('jingle_clue_found', 8);
       else if (s.doneQuests.length > p.doneQuests.length) jingle('jingle_quest_complete', 5);
       if (s.lateCall && !p.lateCall) jingle('jingle_late_scolded', 7);
-      if (s.grades.length > p.grades.length) {
-        const g = s.grades[s.grades.length - 1];
-        jingle(g.score >= 50 ? 'jingle_minigame_clear' : 'jingle_minigame_fail', 3);
-      }
     });
 
     if (process.env.NODE_ENV === 'development') {

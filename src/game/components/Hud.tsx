@@ -1,5 +1,5 @@
 'use client';
-import { useGame, spotLabel, fatigueOf, questSlowActive } from '../state/store';
+import { useGame, spotLabel, questSlowActive } from '../state/store';
 import { useSettings } from '../state/settings';
 import { BRANCHES, RANKS, SEASON_LABEL, TOTAL_DAYS, fmtMoney, fmtTime, rankIdxForDay, seasonForDay, serviceMonth } from '../data/branches';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
@@ -35,7 +35,6 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome, fast, onToggl
   const rank = rankIdxForDay(s.day);
   const ev = s.currentEvent();
   const called = ev && !s.eventBegun && s.minute >= ev.start;
-  const fatigue = fatigueOf(s.stats).reasons;
   let objective = '';
   if (ev) {
     if (ev.kind === 'farewell') objective = `🎊 모두에게 작별 인사 후 ${spotLabel(s.branch, 'gate')}으로!`;
@@ -77,7 +76,6 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome, fast, onToggl
         <Bar label="숙련" value={s.stats.skill} color="#e0a030" icon="🛠️" />
         {s.clues.length > 0 && <Bar label="기억" value={s.memory} color={s.memory <= 30 ? '#c86ad8' : '#f0c040'} icon="🌟" />}
         <div className="stat money">💰 {fmtMoney(s.stats.money)}</div>
-        {fatigue.length > 0 && <div className="fatigue-warn">😫 지침: 훈련 점수 {fatigue.join(', ')}</div>}
       </div>
       {objective && <div className={`hud-objective ${called ? 'urgent' : ''}`}>{objective}</div>}
       <div className="hud-buttons">

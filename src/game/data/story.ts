@@ -10,7 +10,7 @@ import type { SpotId } from '../types';
 
 export const MEMORY_START = 100;
 /** 하루가 지날 때마다 흐려지는 인간의 기억 (2일차부터) */
-export const MEMORY_DECAY = 8;
+export const MEMORY_DECAY = 14;
 /** 단서 하나를 찾을 때 되살아나는 기억 */
 export const MEMORY_PER_CLUE = 4;
 /** 꿈에서 되살아나는 기억 */
@@ -87,19 +87,19 @@ export const STORY_MISSIONS: StoryMission[] = [
   { id: 'M-05', chapter: 2, title: '보낸 날짜가 없는 편지', hint: '막사 2층 싸지방에서 인터넷 편지 확인 (점심·개인정비 시간)', from: 4, clue: 'C-05', spot: 'cyber' },
   { id: 'M-06', chapter: 2, title: '낯선 명찰', hint: '동기에게 "같이 빨래하러 가자"고 말 걸기 (점심·개인정비 시간)', from: 4, clue: 'C-06' },
   { id: 'M-07', chapter: 2, title: '멈춘 시계', hint: '막사 1층 지휘통제실 상황판에서 근무 일지 보기', from: 5, clue: 'C-07', spot: 'command' },
-  { id: 'D-01', chapter: 2, title: '추리 정리 1 「우리는 왜?」', hint: '19:00~21:20, 동기에게 "할 얘기가 있어"', from: 5, flag: 'd01', needClues: ['C-01', 'C-02', 'C-03', 'C-05'] },
-  { id: 'N-02', chapter: 2, title: '불 꺼진 서가', hint: '5일차 밤 야간 순찰 때, 도서관에서 손전등 끄기 [L]', hintLate: '도서관 관리병 네이티오에게 "밤의 서가"에 대해 묻기', from: 5, nightFrom: 5, clue: 'C-11', spot: 'library' },
+  { id: 'D-01', chapter: 2, title: '추리 정리 1 「우리는 왜?」', hint: '19:00~21:20, 동기에게 "남아서 같이 정리하자" → 체단실', from: 5, flag: 'd01', needClues: ['C-01', 'C-02', 'C-03', 'C-05'] },
+  { id: 'N-02', chapter: 2, title: '불 꺼진 서가', hint: '5일차 밤 야간 순찰 때, 2층 복도 게시판 앞에서 손전등 끄기 [L]', hintLate: '도서관 관리병 네이티오에게 "밤의 서가"에 대해 묻기', from: 5, nightFrom: 5, clue: 'C-11', spot: 'board2' },
   { id: 'M-08', chapter: 2, title: '부치지 못한 편지', hint: '분리수거장에서 분리수거하기', from: 6, clue: 'C-09', spot: 'recycle' },
   { id: 'M-09', chapter: 2, title: '잡음 속의 목소리', hint: '막사 1층 정비실 구석의 라디오 켜기', from: 6, clue: 'C-10', spot: 'maint' },
   // ── 3장 「떡밥을 따라서」 (7~9일차)
   { id: 'M-10', chapter: 3, title: '서고의 열쇠', hint: '기록 보관실 열쇠로 도서관 안쪽 방 열기 (열쇠: 진급 신고 때 중대장 / 행정반 루브도)', from: 7, clue: 'C-12', needClues: ['C-09'], spot: 'library' },
   { id: 'N-03', chapter: 3, title: '똑딱, 똑딱', hint: '7일차 밤 위병소 근무 가는 길, 막사 1층 복도', from: 7, nightFrom: 7, flag: 'n03', optional: true },
   { id: 'M-11', chapter: 3, title: '말 없는 병장', hint: '2생활관의 말 없는 병장에게 단체 사진 보여 드리기', from: 8, clue: 'C-13', needClues: ['C-12'] },
-  { id: 'D-02', chapter: 3, title: '추리 정리 2 「돌아가지 못한 사람들」', hint: '19:00~21:20, 막사 2층 계단 옆 옥상 철문 → 동기와 별 보기', from: 8, flag: 'd02', needClues: ['C-06', 'C-07', 'C-09', 'C-10', 'C-12', 'C-13'], needMin: 5 },
+  { id: 'D-02', chapter: 3, title: '추리 정리 2 「돌아가지 못한 사람들」', hint: '19:00~21:20, 막사 2층 계단 옆 옥상 철문 → 동기와 별 보기', from: 8, flag: 'd02', needClues: ['C-07', 'C-09', 'C-13'] },
   { id: 'M-12', chapter: 3, title: '진자 자국', hint: `${'탄약고·격납고·부두'}의 잠긴 상자 살펴보기 → 자국 따라가기`, from: 9, clue: 'C-14', spot: 'ammo' },
-  { id: 'N-04', chapter: 3, title: '소원을 거둬라', hint: '9일차 밤 야간 순찰 때, 도서관에서 손전등 끄기 [L]', hintLate: '도서관 관리병 네이티오에게 말 걸기', from: 9, nightFrom: 9, clue: 'C-15', spot: 'library' },
+  { id: 'N-04', chapter: 3, title: '소원을 거둬라', hint: '9일차 밤 야간 순찰 때, 2층 휴게실에서 손전등 끄기 [L]', hintLate: '도서관 관리병 네이티오에게 말 걸기', from: 9, nightFrom: 9, clue: 'C-15', spot: 'tv' },
   // ── 4장 「별이 지기 전에」 (10~12일차)
-  { id: 'M-13', chapter: 4, title: '잊혀 가는 이름', hint: '동기와 함께 세탁실 → 싸지방 → 농구장 → 막사 옥상 (점심·개인정비 시간)', from: 10, flag: 'buddyBack' },
+  { id: 'M-13', chapter: 4, title: '잊혀 가는 이름', hint: '동기와 함께 행정반 분실물함 → 싸지방 → 농구장 → 막사 옥상 (점심·개인정비 시간)', from: 10, flag: 'buddyBack' },
   { id: 'D-03', chapter: 4, title: '추리 정리 3 「돌아가는 방법」', hint: '19:00~21:20, 막사 옥상에서 동기와', from: 10, flag: 'd03', needClues: ['C-11', 'C-13', 'C-14', 'C-15'] },
   { id: 'B-01', chapter: 4, title: '꿈을 먹는 자', hint: '11일차 밤 야간 위병소 근무, 초소에서', from: 11, nightFrom: 11, flag: 'b01' },
   { id: 'F-01', chapter: 4, title: '별이 지기 전에', hint: '전역일, 연병장 구령대에 내려온 별에게', from: 12, flag: 'f01', spot: 'parade' },

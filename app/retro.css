@@ -491,3 +491,150 @@ canvas { image-rendering: pixelated; }
 /* 거울·안개 연출: 화면이 하얘졌다 돌아온다 */
 .white-flash { position: absolute; inset: 0; z-index: 35; background: #fff; pointer-events: none; animation: whiteFlash 1.2s ease-out forwards; }
 @keyframes whiteFlash { 0% { opacity: 0; } 20% { opacity: 0.95; } 100% { opacity: 0; } }
+
+/* 두뇌 퍼즐 창 */
+.menu.puzzle { width: min(560px, 100%); gap: 10px; padding: 14px 16px; }
+.pz-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.pz-meta { font-size: 12px; color: var(--ink-dim); text-shadow: none; }
+.pz-main { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.pz-art { width: 150px; height: 150px; flex: none; margin: 0 auto; }
+.pz-prompt { flex: 1 1 220px; font-size: 15px; line-height: 1.7; }
+.pz-prompt p { margin: 0 0 4px; }
+.pz-prompt p:last-child { font-weight: 700; }
+.pz-answer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pz-answer input {
+  width: 58px; padding: 6px 4px; text-align: center; font-family: 'Galmuri14', sans-serif; font-size: 20px;
+  border: 3px solid var(--win-frame); border-radius: 6px; background: #fff; color: var(--win-ink);
+}
+.pz-answer input:focus { outline: 3px solid var(--win-ring); outline-offset: 1px; }
+.pz-answer button { margin-left: auto; padding: 8px 14px; }
+.pz-answer button:disabled { opacity: 0.45; cursor: not-allowed; }
+.pz-result { border-radius: 6px; padding: 8px 10px; font-size: 14px; line-height: 1.6; }
+.pz-result.wrong { background: #f8d8d0; }
+.pz-result.right { background: #d8f0d8; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pz-result.right button { margin-left: auto; padding: 8px 14px; }
+.pz-hints { display: flex; flex-direction: column; gap: 4px; }
+.pz-hint { background: #fbf4d8; border: 2px solid #d8c070; border-radius: 6px; padding: 5px 9px; font-size: 13px; line-height: 1.6; }
+.pz-hint-btn { align-self: flex-start; border: 2px dashed var(--win-frame); background: transparent; border-radius: 6px; padding: 5px 9px; font-size: 13px; color: var(--win-ink); }
+.pz-hint-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.pz-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pz-notes { background: #fff; border: 2px solid var(--win-frame); border-radius: 4px; padding: 7px 10px; font-size: 14px; line-height: 1.7; box-shadow: 2px 2px 0 var(--win-shade); }
+.pz-choices { display: flex; gap: 6px; flex-wrap: wrap; }
+.pz-choice {
+  flex: 1 1 80px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 6px;
+  border: 3px solid var(--win-frame); border-radius: 6px; background: #fff; color: var(--win-ink);
+  font-family: 'Galmuri14', sans-serif; font-size: 17px;
+}
+.pz-choice.on { background: var(--panel-2); box-shadow: inset 0 0 0 3px var(--win-ring); }
+.pz-choice.right { background: #d8f0d8; }
+.pz-choice:disabled { cursor: default; }
+.pz-shelf { display: flex; gap: 6px; justify-content: center; align-items: flex-end; padding: 8px 8px 0; border-bottom: 8px solid #8a6038; background: #f0e8d8; border-radius: 4px 4px 0 0; }
+.pz-book {
+  width: 62px; height: 132px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 8px 2px 6px;
+  border: 3px solid var(--win-frame); border-bottom: none; border-radius: 4px 4px 0 0; color: #fff; text-shadow: 1px 1px 0 #0008;
+  transition: transform 0.12s;
+}
+.pz-book.held { transform: translateY(-12px); box-shadow: 0 0 0 3px var(--win-ring); }
+.pz-book:disabled { cursor: default; opacity: 1; }
+.pz-book-letter { font-family: 'Galmuri14', sans-serif; font-size: 26px; min-height: 34px; }
+.pz-book-name { font-size: 13px; font-weight: 700; }
+.pz-book-num { font-size: 11px; background: #0005; border-radius: 99px; padding: 0 6px; text-shadow: none; }
+.pz-answer button.primary:only-child { margin-left: auto; }
+.pz-maze-log { min-height: 58px; background: #eef0f4; border-radius: 6px; padding: 7px 10px; font-size: 14px; line-height: 1.6; }
+.pz-choice.giveup { flex-basis: 100%; background: #e8e4f4; }
+.pz-tangram { display: flex; gap: 16px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.pz-tan-frame { width: 200px; height: 200px; }
+.pz-tan-slot { fill: transparent; stroke: none; cursor: pointer; }
+.pz-tan-slot:hover, .pz-tan-slot:focus-visible { fill: #ffe89040; outline: none; }
+.pz-tan-slot.on { fill: #ffe890; stroke: #c89820; stroke-width: 0.06; }
+.pz-tan-num { fill: #c8d0f0; font-size: 0.42px; text-anchor: middle; pointer-events: none; font-family: 'Galmuri14', sans-serif; }
+.pz-tan-hand { text-align: center; }
+.pz-tan-hand svg { width: 110px; height: 110px; }
+.pz-answer button:not(.primary) { margin-left: 0; border: 3px solid var(--win-frame); border-radius: 6px; background: #fff; color: var(--win-ink); padding: 6px 10px; font-size: 13px; }
+.pz-field { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.pz-tiles { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.pz-tile {
+  min-width: 62px; flex: 1 1 62px; max-width: 130px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px 8px;
+  border: 3px solid var(--win-frame); border-radius: 6px; color: #fff; text-shadow: 1px 1px 0 #0008; transition: transform 0.12s;
+}
+.pz-tile.held { transform: translateY(-8px); box-shadow: 0 0 0 3px var(--win-ring); }
+.pz-tile:disabled { cursor: default; opacity: 1; }
+.pz-tile-label { font-family: 'Galmuri14', sans-serif; font-size: 18px; line-height: 1.3; word-break: keep-all; text-align: center; }
+.pz-tile-sub { font-size: 12px; opacity: 0.9; }
+.pz-nametag {
+  align-self: center; min-width: 190px; text-align: center; letter-spacing: 10px; padding: 6px 10px 6px 20px;
+  font-family: 'Galmuri14', sans-serif; font-size: 30px; color: #f4f0d8; background: #3c4a34; border: 3px dashed #c8c098; border-radius: 4px; text-shadow: none;
+}
+.pz-ring { position: relative; width: 230px; height: 230px; margin: 0 auto; border-radius: 12px; background: radial-gradient(circle at 50% 54%, #1c2448 0%, #0a0c18 75%); }
+.pz-ring-mark { position: absolute; left: 50%; top: 0; transform: translateX(-50%); color: #ffe890; font-size: 14px; text-shadow: none; }
+.pz-unown {
+  position: absolute; width: 42px; height: 42px; margin: -21px 0 0 -21px; display: grid; place-items: center; border-radius: 50%;
+  background: #e8e8f0; color: #181820; border: 3px solid #181820; font-family: 'Galmuri14', sans-serif; font-size: 20px; text-shadow: none;
+  transition: left 0.15s, top 0.15s;
+}
+.pz-unown.front { border-color: #ffe890; box-shadow: 0 0 8px #ffe89099; }
+.pz-unown.flipped { transform: rotate(180deg); background: #a8a8c0; }
+.pz-ring-goal { position: absolute; left: 0; right: 0; top: 50%; text-align: center; color: #8890c0; font-size: 12px; text-shadow: none; }
+.pz-tiles.rows { flex-direction: column; flex-wrap: nowrap; }
+.pz-tiles.rows .pz-tile { max-width: none; flex: none; flex-direction: row; justify-content: flex-start; gap: 10px; padding: 7px 10px; text-align: left; }
+.pz-tiles.rows .pz-tile.held { transform: translateX(10px); }
+.pz-tiles.rows .pz-tile-label { font-size: 15px; flex: 1; text-align: left; }
+.pz-tiles.rows .pz-tile-sub { flex: none; }
+.pz-tile.spare { opacity: 0.55; border-style: dashed; }
+.pz-photos { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.pz-photo { background: #e8dcc0; border: 3px solid #8a6038; border-radius: 3px; padding: 4px 4px 2px; }
+.pz-photo-grid { display: grid; gap: 1px; }
+.pz-photo-grid button { width: 23px; height: 24px; padding: 0; border: 2px solid transparent; border-radius: 4px; background: #f8f0dc; font-size: 15px; line-height: 1; text-shadow: none; }
+.pz-photo-grid button.on { border-color: #c84838; background: #fff; }
+.pz-photo-grid button:disabled { cursor: default; opacity: 1; }
+.pz-photo-label { text-align: center; font-size: 11px; color: #5a4030; text-shadow: none; }
+.pz-stroop { background: #12142a; border-radius: 8px; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 170px; justify-content: center; }
+.pz-stroop-word { font-family: 'Galmuri14', sans-serif; font-size: 44px; text-shadow: none; animation: fadeIn 0.15s ease both; }
+.pz-stroop-bar { width: 70%; height: 6px; background: #ffffff22; border-radius: 3px; overflow: hidden; }
+.pz-stroop-bar i { display: block; height: 100%; background: #ffe890; transform-origin: left; animation: pzShrink linear forwards; }
+@keyframes pzShrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.pz-stroop-keys { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.pz-stroop-keys button { border: 2px solid #8890c0; background: #1c2448; color: #e8ecff; border-radius: 6px; padding: 6px 10px; font-size: 13px; text-shadow: none; }
+.pz-path { width: 100%; max-width: 420px; margin: 0 auto; background: #f4ecd8; border: 3px solid #8a6038; border-radius: 4px; }
+.pz-path line { stroke: #b8a888; stroke-width: 5; stroke-dasharray: 2 7; stroke-linecap: round; }
+.pz-path line.used { stroke: #c84838; stroke-dasharray: none; }
+.pz-node { cursor: pointer; }
+.pz-node circle { fill: #fff; stroke: #283048; stroke-width: 3; }
+.pz-node.here circle { fill: #ffe890; stroke: #c84838; }
+.pz-node:focus-visible circle { stroke: #78a0c8; }
+.pz-node text { text-anchor: middle; font-family: 'Galmuri11', sans-serif; fill: #283048; pointer-events: none; }
+.pz-node text.num { font-size: 12px; font-weight: 700; }
+.pz-node text.name { font-size: 11px; }
+.pz-main { position: relative; }
+.pz-pendulum { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.pz-pendulum i { position: absolute; top: -10%; left: 50%; width: 34%; height: 120%; margin-left: -17%; background: radial-gradient(ellipse at center, #f2d050 0%, #f2d050dd 45%, #f2d05000 72%); animation: pzSwing 2.4s ease-in-out infinite alternate; }
+@keyframes pzSwing { from { transform: translateX(-110%); } to { transform: translateX(110%); } }
+@media (prefers-reduced-motion: reduce) { .pz-pendulum i { animation-duration: 9s; } }
+.pz-decoys { display: flex; flex-direction: column; gap: 5px; transition: opacity 0.4s; }
+.pz-decoys .pz-choice { flex: none; justify-content: flex-start; font-size: 15px; padding: 7px 10px; }
+.pz-answer input.pz-text { width: auto; flex: 1 1 160px; text-align: left; padding: 6px 10px; font-size: 17px; border-style: dashed; }
+.pz-tan-slot.lined { stroke: #8890c0; stroke-width: 0.03; stroke-dasharray: 0.1 0.08; }
+.pz-tan-slot.lined.on { stroke: #c89820; stroke-width: 0.06; stroke-dasharray: none; }
+.pz-tan-tray { display: flex; flex-wrap: wrap; gap: 4px; max-width: 190px; justify-content: center; align-items: center; }
+.pz-tan-tray button { width: 56px; height: 56px; padding: 0; border: 3px solid transparent; border-radius: 8px; background: #141a3822; }
+.pz-tan-tray button.on { border-color: var(--win-frame); background: #fff; box-shadow: 0 0 0 2px var(--win-ring); }
+.pz-tan-tray svg { width: 100%; height: 100%; }
+.pz-jugs { display: flex; gap: 28px; justify-content: center; align-items: flex-end; padding-bottom: 22px; }
+.pz-jug { position: relative; width: 84px; border: 4px solid var(--win-frame); border-top: none; border-radius: 0 0 14px 14px; background: #fff; display: grid; place-items: center; }
+.pz-jug i { position: absolute; left: 0; right: 0; bottom: 0; background: #e8a858; border-radius: 0 0 9px 9px; transition: height 0.2s; }
+.pz-jug b { position: relative; font-family: 'Galmuri14', sans-serif; font-size: 22px; font-weight: 400; }
+.pz-jug b span { font-size: 12px; color: var(--ink-dim); }
+.pz-jug em { position: absolute; left: -20px; right: -20px; bottom: -24px; text-align: center; font-style: normal; font-size: 12px; }
+
+/* 의혹 수첩 */
+.clue-card.sus.open { background: #fbf6e4; border-color: #c8a848; }
+.clue-card.sus.solved { background: #eaf4ea; border-color: #78a878; }
+.sus-leads { margin: 4px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.65; color: #484038; }
+.sus-answer { margin-top: 5px; padding-top: 5px; border-top: 1px dashed #78a878; font-size: 14px; line-height: 1.6; color: #2a4a30; font-weight: 700; }
+.nb-clues .clue-head .hud-dim { color: #c8cce0; }
+.pz-digital {
+  flex: none; margin: 0 auto; padding: 14px 18px; border-radius: 8px; border: 4px solid #283048; background: #101418;
+  color: #7cf0a0; font-family: 'Galmuri14', monospace; font-size: 40px; letter-spacing: 4px; text-shadow: 0 0 8px #7cf0a088;
+  box-shadow: inset 0 0 0 3px #cfe4ee;
+}
+.pz-tile-reveal { font-family: 'Galmuri14', sans-serif; font-size: 22px; color: #ffe890; }

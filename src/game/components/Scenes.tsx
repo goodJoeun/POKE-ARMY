@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Archetype, BranchId, NpcId } from '../types';
-import { useGame, presentNpcs, fmtDelta, fatigueOf } from '../state/store';
+import { useGame, presentNpcs, fmtDelta } from '../state/store';
 import { TEXT_SPEED, useSettings } from '../state/settings';
 import { hasGuardNight, hasNightDuty } from '../data/schedule';
 import { BRANCHES, RANKS, TOTAL_DAYS, fmtMoney, rankIdxForDay, serviceMonth } from '../data/branches';
@@ -299,8 +299,8 @@ export function Promotion() {
           {opts.map((o, i) => <button key={i} className="choice" onClick={() => answer(o.ok)}><span className="choice-num">{i + 1}</span> {o.text}</button>)}
         </div>
       ) : (
-        <button className="primary big" onClick={() => s.startMinigame({ game: 'overlock', title: `${RANKS[rank]} 계급장 오버로크`, returnTo: 'world' })}>
-          새 계급장 달러 가기 (오버로크) ▶
+        <button className="primary big" onClick={() => { s.go('world'); s.save(); }}>
+          새 계급장을 달고 생활관으로 ▶
         </button>
       )}
     </div>
@@ -420,11 +420,6 @@ export function DayEnd() {
   const nightDuty = hasNightDuty(s.day) || hasGuardNight(s.day);
   // 수면 회복: 불침번 선 날은 덜 회복된다
   const proceed = () => { s.applyEffects(nightDuty ? { hp: 12 } : { hp: 20, mental: 3 }, undefined, true); s.nextDay(); };
-  const tomorrowFatigue = fatigueOf({
-    ...s.stats,
-    hp: Math.min(100, s.stats.hp + (nightDuty ? 12 : 20)),
-    mental: Math.min(100, s.stats.mental + (nightDuty ? 0 : 3)),
-  }).reasons;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') proceed(); };
     window.addEventListener('keydown', onKey);
@@ -452,7 +447,6 @@ export function DayEnd() {
           </div>
         )}
         <p className="diary-sleep">💤 {nightDuty ? '불침번 근무를 마치고 녹초가 되어 잠들었다. (수면 회복: 체력 +12)' : '취침 나팔과 함께 스르륵 잠들었다. (수면 회복: 체력 +20, 멘탈 +3)'}</p>
-        {tomorrowFatigue.length > 0 && <p className="diary-warn">😫 자고 일어나도 지친 상태: 내일 훈련 점수 {tomorrowFatigue.join(', ')} — 식사와 휴식을 챙기자.</p>}
         <button className="primary big" onClick={proceed}>
           {s.day >= TOTAL_DAYS - 1 ? '내일은 드디어… 전역일! ▶' : '다음 날 ▶ (Enter)'}
         </button>
@@ -478,7 +472,7 @@ export function Ending() {
   else if (avgAff >= 35) { title = '🤝 인싸 전역 · 생활관의 전설'; desc = '모두가 아쉬워하는 전역. 위병소 앞까지 배웅 행렬이 이어졌다.'; }
   else if (st.skill >= 70) { title = '🛠️ 주특기 장인 전역'; desc = `${b.games.specialty.replace('주특기: ', '')}라면 누구보다 자신 있다.`; }
   else if (st.discipline < 30) { title = '😅 아슬아슬 전역'; desc = '지각과 실수투성이였지만… 어쨌든 전역은 전역이다!'; }
-  const avgScore = s.grades.length ? Math.round(s.grades.reduce((a, g) => a + g.score, 0) / s.grades.length) : 0;
+  const solvedPuzzles = Object.values(s.puzzles).filter((p) => p.solved).length;
 
   useEffect(() => { s.wipe(); }, [s]);
 
@@ -492,7 +486,7 @@ export function Ending() {
         <p>{desc}</p>
         <div className="ending-stats">
           <span>군기 {Math.round(st.discipline)}</span><span>숙련도 {Math.round(st.skill)}</span><span>평균 호감 {avgAff}</span>
-          <span>훈련 평균 {avgScore}점</span><span>지각 {s.lateCount}회</span><span>군대 상식 {s.tips.length}개</span>
+          <span>푼 퍼즐 {solvedPuzzles}개</span><span>지각 {s.lateCount}회</span><span>군대 상식 {s.tips.length}개</span>
         </div>
         <div className="ending-crew">
           {present.map((id) => {

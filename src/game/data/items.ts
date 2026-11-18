@@ -15,6 +15,7 @@ export const ITEMS: Record<string, ItemDef> = {
   chocopie: { id: 'chocopie', name: '초코파이', icon: '🍫', price: 1000, use: { mental: 4 }, desc: '정(情)을 나누는 군대 간식. 선물용으로 최고.' },
   sports: { id: 'sports', name: '이온음료', icon: '🧃', price: 1800, use: { hp: 10 }, desc: '체력 회복에 좋다.' },
   ramen: { id: 'ramen', name: '컵라면', icon: '🍜', price: 1300, use: { hp: 6, mental: 8 }, desc: '불침번 후 먹으면 두 배로 맛있다.' },
+  hardtack: { id: 'hardtack', name: '건빵', icon: '🍘', price: 1200, use: { hp: 3, candy: 1 }, desc: '봉지 속에 별사탕이 하나 들어 있다. 별사탕은 퍼즐 힌트를 여는 데 쓴다.' },
   rarecandy: { id: 'rarecandy', name: '이상한사탕', icon: '🍬', price: 2500, use: { skill: 3, mental: 2 }, desc: '먹으면 레벨이… 오르진 않지만 왠지 숙련도가 오른다.' },
 };
 

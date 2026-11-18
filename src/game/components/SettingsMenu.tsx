@@ -107,10 +107,6 @@ export default function SettingsMenu() {
               <Segmented k="gatherWindow" options={[{ value: 'relaxed', label: '넉넉 (30분)' }, { value: 'normal', label: '보통 (20분)' }, { value: 'strict', label: '엄격 (15분)' }]} />
             </div>
             <div className="set-row">
-              <div><b>미니게임 난이도</b><div className="hud-dim">훈련·작업 점수 보정</div></div>
-              <Segmented k="difficulty" options={[{ value: 'easy', label: '쉬움 (+15%)' }, { value: 'normal', label: '보통' }, { value: 'hard', label: '어려움 (-10%)' }]} />
-            </div>
-            <div className="set-row">
               <div><b>🧪 테스터 모드</b><div className="hud-dim">F9 (또는 ` 키)로 진행 중인 미션을 즉시 종료</div></div>
               <Segmented k="testerMode" options={ON_OFF} />
             </div>

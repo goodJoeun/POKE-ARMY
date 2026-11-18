@@ -9,12 +9,12 @@ export type SpotId =
   // 식당 조리실 · 야외 구역
   | 'kitchen' | 'court' | 'recycle' | 'ammo';
 export type GameId =
-  | 'env' | 'night' | 'combat' | 'guard' | 'specialty' | 'sandbag' | 'overlock';
+  | 'env' | 'night' | 'combat' | 'guard' | 'specialty' | 'sandbag';
 export type Season = 'winter' | 'spring' | 'summer' | 'autumn';
 
 export type Scene =
   | 'title' | 'home' | 'intro' | 'quiz' | 'transform'
-  | 'world' | 'minigame' | 'promotion' | 'dayEnd' | 'ending';
+  | 'world' | 'promotion' | 'dayEnd' | 'ending';
 
 export interface Stats {
   hp: number;
@@ -33,6 +33,8 @@ export interface Effects {
   affinity?: Partial<Record<NpcId, number>>;
   /** 🌟 인간의 기억 (메인 스토리) */
   memory?: number;
+  /** 🍬 별사탕 (퍼즐 힌트) */
+  candy?: number;
   flag?: string;
   quest?: string;
   item?: string;
@@ -144,25 +146,3 @@ export interface ScheduleEvent {
   auto?: boolean;
 }
 
-export interface MinigameRequest {
-  game: GameId;
-  title: string;
-  eventId?: string;
-  returnTo: 'world' | 'dayEnd';
-}
-
-export interface MinigameCtx {
-  branch: BranchId;
-  archetype: Archetype;
-  speciesId: string;
-  rankIdx: number;
-  day: number;
-  season: Season;
-  /** 숙련도 (0~100) — 기술 재사용 대기시간을 줄여준다 */
-  skill: number;
-}
-
-export interface MinigameProps {
-  ctx: MinigameCtx;
-  onFinish: (score: number, summary: string) => void;
-}
