@@ -18,6 +18,36 @@ export interface DrawOpts {
   silhouette?: string;
   /** 공식 일러스트 사용 여부 (기본: 사용 안 함 — 도트로 그린다) */
   art?: boolean;
+  /**
+   * 이 상자 밖으로 그림이 나가지 않게 맞춘다 (초상화 캔버스용, 캔버스 좌표).
+   * 스프라이트의 실제 그림 영역(투명 여백 제외)을 재서 상자 안에 들어오도록 줄이고, 발을 baseY에 맞춘다.
+   */
+  fit?: { left: number; top: number; right: number; bottom: number };
+}
+
+/** 스프라이트의 실제 그림 영역 (투명 여백 제외). 이미지마다 한 번만 잰다 */
+const boxCache = new WeakMap<CanvasImageSource, { x: number; y: number; w: number; h: number }>();
+function contentBox(img: HTMLCanvasElement | HTMLImageElement, sw: number, sh: number) {
+  const hit = boxCache.get(img);
+  if (hit) return hit;
+  let box = { x: 0, y: 0, w: sw, h: sh };
+  try {
+    const c = document.createElement('canvas');
+    c.width = sw; c.height = sh;
+    const cg = c.getContext('2d')!;
+    cg.drawImage(img, 0, 0, sw, sh, 0, 0, sw, sh);
+    const d = cg.getImageData(0, 0, sw, sh).data;
+    let x0 = sw, y0 = sh, x1 = -1, y1 = -1;
+    for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+      if (d[(y * sw + x) * 4 + 3] > 8) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    if (x1 >= 0) box = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  } catch { /* 읽을 수 없는 이미지면 전체를 그림 영역으로 본다 */ }
+  boxCache.set(img, box);
+  return box;
 }
 
 function shade(hex: string, amt: number): string {
@@ -62,10 +92,29 @@ export function drawMonster(g: CanvasRenderingContext2D, look: MonsterLook, cx: 
     // 높이 기준으로 맞추되 너무 넓은 포켓몬(갸라도스 등)은 폭을 제한
     const hMul = kind === 'art' ? 1.0 : walk ? 1.35 : 1.25;
     // 팔로워 시트는 포켓몬끼리 크기 비율이 맞춰져 있으므로 같은 배율로 그린다 (큰 포켓몬은 크게)
-    const scale = walk && hasFollower(look.sprite)
+    // 큰 화면(초상화·미니게임): 어나더 레드 애니메이션 띠가 있으면 프레임을 넘기며 움직이게
+    const anim = !walk && !field && !o.silhouette && kind !== 'art' ? getSpriteAnim(look.sprite, kind) : null;
+    const animOn = !!anim && anim.n > 1;
+    // 그릴 원본 크기 (애니메이션이면 모든 프레임을 감싸는 상자)
+    const srcW = animOn ? anim!.bw : img.width, srcH = animOn ? anim!.bh : img.height;
+    let scale = walk && hasFollower(look.sprite)
       ? (s * 1.35) / 40
-      : Math.min((s * hMul) / img.height, (s * 1.5) / img.width);
-    const w = img.width * scale, h = img.height * scale;
+      : Math.min((s * hMul) / srcH, (s * 1.5) / srcW);
+    // 초상화: 실제 그림 영역이 상자 안에 다 들어오게 줄이고, 그림의 발끝을 baseY에 맞춘다
+    let offX = 0, offY = 0;
+    if (o.fit) {
+      const box = animOn ? { x: 0, y: 0, w: srcW, h: srcH } : contentBox(img, srcW, srcH);
+      const availW = o.fit.right - o.fit.left, availH = o.fit.bottom - o.fit.top;
+      scale = Math.min(scale, availW / box.w, availH / box.h);
+      const w0 = srcW * scale, h0 = srcH * scale;
+      offX = w0 / 2 - (box.x + box.w / 2) * scale; // 그림 한가운데를 cx에
+      offY = h0 - (box.y + box.h) * scale; // 그림 발끝을 baseY에
+      const top = baseY - box.h * scale;
+      if (top < o.fit.top) offY += o.fit.top - top; // 위가 잘리면 아래로 내린다
+      const bottom = baseY + (offY - (h0 - (box.y + box.h) * scale));
+      if (bottom > o.fit.bottom) offY -= bottom - o.fit.bottom;
+    }
+    const w = srcW * scale, h = srcH * scale;
     // 도트는 통통 튀는 걸음 (부드러운 흔들림 대신 2단계)
     const hop = o.walking ? (Math.sin(t * 12) > 0 ? s * 0.06 : 0) : 0;
     g.save();
@@ -73,13 +122,12 @@ export function drawMonster(g: CanvasRenderingContext2D, look: MonsterLook, cx: 
     // 도트 스프라이트는 왼쪽을 바라보므로 오른쪽으로 걸을 때 뒤집는다
     if (dir === 'right' && kind !== 'art' && !walk) g.scale(-1, 1);
     g.imageSmoothingEnabled = kind === 'art'; // 도트는 확대해도 또렷하게
-    // 큰 화면(초상화·미니게임): 어나더 레드 애니메이션 띠가 있으면 프레임을 넘기며 움직이게
-    const anim = !walk && !field && !o.silhouette && kind !== 'art' ? getSpriteAnim(look.sprite, kind) : null;
-    if (anim && anim.n > 1) {
-      const f = Math.floor(Math.max(0, t) * ANIM_FPS) % anim.n;
-      g.drawImage(anim.img, f * anim.fh + anim.x0, anim.y0, anim.bw, anim.bh, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+    const dx = Math.round(-w / 2 + offX), dy = Math.round(-h + offY);
+    if (animOn) {
+      const f = Math.floor(Math.max(0, t) * ANIM_FPS) % anim!.n;
+      g.drawImage(anim!.img, f * anim!.fh + anim!.x0, anim!.y0, anim!.bw, anim!.bh, dx, dy, Math.round(w), Math.round(h));
     } else {
-      g.drawImage(img, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+      g.drawImage(img, dx, dy, Math.round(w), Math.round(h));
     }
     g.restore();
     if (o.sleeping) {

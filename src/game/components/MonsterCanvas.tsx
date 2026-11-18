@@ -36,7 +36,12 @@ export default function MonsterCanvas({ look, size = 96, dir = 'down', cap = nul
       const t = (performance.now() - start) / 1000;
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, size, size);
-      drawMonster(g, look, size / 2, size * 0.94, size * 0.82, { dir, t, cap, walking, sleeping, silhouette });
+      // 그림이 캔버스 밖으로 나가 머리·날개가 잘리지 않게 가장자리 안쪽 상자에 맞춘다
+      const pad = Math.max(2, size * 0.03);
+      drawMonster(g, look, size / 2, size * 0.94, size * 0.82, {
+        dir, t, cap, walking, sleeping, silhouette,
+        fit: { left: pad, top: pad, right: size - pad, bottom: size - pad * 0.5 },
+      });
       if (animate) raf = requestAnimationFrame(draw);
     };
     draw();
