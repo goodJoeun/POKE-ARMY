@@ -1,5 +1,7 @@
 'use client';
-import { useGame, spotLabel, questSlowActive } from '../state/store';
+import { useGame, spotLabel, questSlowActive, type NightDuty } from '../state/store';
+import { memberName } from '../engine/whereabouts';
+import { fixJosa } from '../engine/text';
 import { useSettings } from '../state/settings';
 import { BRANCHES, RANKS, SEASON_LABEL, TOTAL_DAYS, fmtMoney, fmtTime, rankIdxForDay, seasonForDay, serviceMonth } from '../data/branches';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
@@ -29,6 +31,22 @@ function Bar({ label, value, color, icon }: { label: string; value: number; colo
   );
 }
 
+/** 야간 근무 중 상단 안내: 지금 단계에서 해야 할 일 */
+function nightObjective(nd: NightDuty, branch: Parameters<typeof memberName>[0]): string {
+  const watch = nd.kind === 'watch';
+  const who = (k: string | null) => (k ? memberName(branch, k) : '근무자');
+  switch (nd.phase) {
+    case 'sleep': return '💤 취침 중…';
+    case 'woken': return watch ? '🔦 불침번 인수인계 중' : '🌙 위병소 근무 준비 중';
+    case 'toPost': return `🌙 ${who(nd.partner)}과(와) 함께 ${spotLabel(branch, 'post')}(으)로 → 00:00 교대`;
+    case 'shift': return watch ? '🔦 불침번 근무 중 (00:00~01:00)' : '🔦 위병소 경계근무 중 (00:00~02:00)';
+    case 'wakeNext': return `🔦 다음 근무자 ${who(nd.next)}을(를) 깨워 교대 (01:00 전까지)`;
+    case 'return': return watch
+      ? '🛏️ 교대 완료 — 내 침상으로 돌아가 자자'
+      : `🛏️ ${who(nd.partner)}과(와) 함께 생활관으로 복귀해 취침`;
+  }
+}
+
 export default function Hud({ onNotebook, onQuests, onMap, onHome, fast, onToggleFast }: { onNotebook: () => void; onQuests: () => void; onMap: () => void; onHome: () => void; fast: boolean; onToggleFast: () => void }) {
   const s = useGame();
   const b = BRANCHES[s.branch];
@@ -36,7 +54,8 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome, fast, onToggl
   const ev = s.currentEvent();
   const called = ev && !s.eventBegun && s.minute >= ev.start;
   let objective = '';
-  if (ev) {
+  if (s.nightDuty) objective = fixJosa(nightObjective(s.nightDuty, s.branch));
+  else if (ev) {
     if (ev.kind === 'farewell') objective = `🎊 모두에게 작별 인사 후 ${spotLabel(s.branch, 'gate')}으로!`;
     else if (ev.kind === 'patrol' && s.patrol) objective = `🔦 야간 순찰 ${s.patrol.done.length}/6 — 막사 1·2층 복도·세탁실·화장실 점검 후 지휘통제실 보고 (23:00까지)`;
     else if (called && ev.spot && inEventArea(getWorld(s.branch, b.trainArea), ev.spot, runtime.player))
@@ -49,6 +68,7 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome, fast, onToggl
   if (isFreeTimeEvening(s.minute)) period = '개인정비 시간';
   if (s.minute < 6 * 60 + 30) period = '기상';
   if (s.minute >= 21 * 60 + 30) period = '점호/취침';
+  if (s.nightDuty && s.nightDuty.phase !== 'sleep') period = s.nightDuty.kind === 'watch' ? '불침번' : '경계근무';
 
   return (
     <>

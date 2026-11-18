@@ -133,6 +133,25 @@ export interface NightDuty {
   shiftEnd: number;
 }
 
+/**
+ * 야간 근무 단계마다 시계가 넘어갈 수 없는 시각. 교대 대기 중에 시간이 끝없이 흘러
+ * 새벽 3시·4시가 되는 일이 없도록, 다음 장면이 시각을 정할 때까지 여기서 멈춘다.
+ */
+export function nightDutyClockCap(nd: NightDuty): number {
+  switch (nd.phase) {
+    case 'sleep':
+    case 'woken':
+    case 'toPost':
+      return nd.shiftStart;
+    case 'shift':
+      return nd.kind === 'watch' ? nd.shiftEnd - 10 : nd.shiftEnd;
+    case 'wakeNext':
+      return nd.shiftEnd;
+    case 'return':
+      return nd.shiftEnd + 30;
+  }
+}
+
 export interface RollcallState {
   kind: 'rollcall_am' | 'rollcall_pm';
   q: RollcallQuestion;
@@ -396,7 +415,8 @@ export const useGame = create<Store>((set, get) => ({
     if (s.busy || s.scene !== 'world' || s.lateCall) return;
     // 1일차: 늦잠 장면이 끝나기 전에는 시간이 흐르지 않는다
     if (s.day === 1 && !s.flags.wokeUp) return;
-    const minute = s.minute + mins;
+    let minute = s.minute + mins;
+    if (s.nightDuty) minute = Math.min(minute, Math.max(s.minute, nightDutyClockCap(s.nightDuty)));
     set({ minute });
     const ev = get().currentEvent();
     // 시간대 알림
