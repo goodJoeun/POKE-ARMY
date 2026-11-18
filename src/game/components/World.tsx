@@ -1146,8 +1146,28 @@ export default function World() {
         a.targetKey = "cer";
       }
     };
+    // 엑스트라는 게임 루프 첫 프레임에서 생기므로, 월드가 뜨자마자 점호가 시작되면 아직 없을 수 있다 → 여기서 만든다
+    const ensureExtra = (id: string): ExtraRt | undefined => {
+      const def = extraDefs.find((d) => d.id === id);
+      if (!def) return undefined;
+      return (
+        extras.current[id] ??
+        (extras.current[id] = {
+          map: def.map,
+          x: def.x + 0.5,
+          y: def.y + 0.5,
+          dir: "down",
+          moving: false,
+          path: [],
+          targetKey: "",
+          viaDoor: null,
+          wait: Math.random() * 2,
+          routeIdx: 0,
+        })
+      );
+    };
     const ncoDef = extraDefs.find((d) => d.id === "nco");
-    const nco = ncoDef ? extras.current[ncoDef.id] : undefined;
+    const nco = ncoDef ? ensureExtra(ncoDef.id) : undefined;
     const members: string[] = [];
     const seated = new Set<string>();
     let marks: CeremonyInfo["marks"];
@@ -1168,7 +1188,7 @@ export default function World() {
           k === "me"
             ? runtime.player
             : k.startsWith("x:")
-              ? extras.current[k.slice(2)]
+              ? ensureExtra(k.slice(2))
               : ensure(k as NpcId);
         if (!a) continue;
         place(
@@ -1225,7 +1245,7 @@ export default function World() {
       let roomExtras = 0;
       for (const def of extraDefs) {
         if (def.map !== "room1" || def.officer) continue;
-        const a = extras.current[def.id];
+        const a = ensureExtra(def.id);
         const bx = [13, 11, 9, 1, 5, 7].find((x) => !usedX.has(x));
         if (!a || bx === undefined) continue;
         usedX.add(bx);
