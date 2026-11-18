@@ -39,6 +39,7 @@ export const CLUES: ClueDef[] = [
   { id: 'C-07', chapter: 2, title: '멈춘 시계', place: '지휘통제실', text: '자정마다 1분씩 멈추는 시계. "별이 질 때까지 D-7".' },
   { id: 'C-09', chapter: 2, title: '부치지 못한 편지', place: '분리수거장', text: '해마다 다른 필체로 "집에 가고 싶다." 그리고 한 장 — "다음에 오는 사람에게. 도서관 안쪽 방을 봐라. — 강"' },
   { id: 'C-10', chapter: 2, title: '잡음 속의 목소리', place: '정비실', text: '"같은 날 밤 쓰러진 청년이 또 한 명…"' },
+  { id: 'C-16', chapter: 2, title: '백여덟 개의 돌', place: '분리수거장 구석 돌탑', text: '돌아오지 못한 사람들의 소원이 돌이 되어 쌓였다. 자리는 백여덟, 돌은 백일곱. 비어 있는 한 자리는 "다음에 남는 사람"의 것이다.' },
   { id: 'C-11', chapter: 2, title: '불 꺼진 서가', place: '도서관 (밤)', text: '글자들이 모여 말했다. "별이 지기 전에."' },
   { id: 'C-12', chapter: 3, title: '단체 사진', place: '기록 보관실', text: '해마다 같은 자리에 같은 얼굴. 10년 전 사진 속 이병은 2분대의 말 없는 병장이었다.' },
   { id: 'C-13', chapter: 3, title: '병장의 일기', place: '2생활관', text: '"별 조각 일곱 개… 마지막 밤… 나는 겁이 나서 거두지 못했다."' },
@@ -94,6 +95,8 @@ export const STORY_MISSIONS: StoryMission[] = [
   { id: 'N-02', chapter: 2, title: '불 꺼진 서가', hint: '5일차 밤 야간 순찰 때, 2층 복도 게시판 앞에서 손전등 끄기 [L]', hintLate: '도서관 관리병 네이티오에게 "밤의 서가"에 대해 묻기', from: 5, nightFrom: 5, clue: 'C-11', spot: 'board2' },
   { id: 'M-08', chapter: 2, title: '부치지 못한 편지', hint: '분리수거장에서 분리수거하기', from: 6, clue: 'C-09', spot: 'recycle' },
   { id: 'M-09', chapter: 2, title: '잡음 속의 목소리', hint: '막사 1층 정비실 구석의 라디오 켜기', from: 6, clue: 'C-10', spot: 'maint' },
+  // 서브: 분리수거장 구석의 돌탑과 화강돌 (부치지 못한 편지를 읽은 뒤부터 · 놓쳐도 장 완료에 지장 없음)
+  { id: 'S-01', chapter: 2, title: '백여덟 개의 돌', hint: '분리수거장 구석의 이끼 낀 돌탑 살펴보기 (점심·개인정비 시간)', from: 6, clue: 'C-16', needClues: ['C-09'], spot: 'cairn', optional: true },
   // ── 3장 「떡밥을 따라서」 (7~9일차)
   { id: 'M-10', chapter: 3, title: '서고의 열쇠', hint: '기록 보관실 열쇠로 도서관 안쪽 방 열기 (열쇠: 진급 신고 때 중대장 / 행정반 루브도)', from: 7, clue: 'C-12', needClues: ['C-09'], spot: 'library' },
   { id: 'N-03', chapter: 3, title: '똑딱, 똑딱', hint: '7일차 밤 위병소 근무 가는 길, 막사 1층 복도', from: 7, nightFrom: 7, flag: 'n03', optional: true },
@@ -131,7 +134,10 @@ export function missionState(m: StoryMission, s: StoryProgress): MissionState {
 export const missionHint = (m: StoryMission, s: { day: number }) => (m.hintLate && m.nightFrom && s.day > m.nightFrom ? m.hintLate : m.hint);
 /** 지금 할 수 있는 다음 스토리 미션 (트래커용) */
 export function nextStoryMission(s: StoryProgress): StoryMission | null {
-  return STORY_MISSIONS.find((m) => missionState(m, s) === 'open') ?? null;
+  // 서브(낮에 아무 때나 할 수 있는 선택 미션)는 메인 미션이 없을 때만 트래커에 올린다
+  const side = (m: StoryMission) => !!m.optional && !m.nightFrom;
+  const open = STORY_MISSIONS.filter((m) => missionState(m, s) === 'open');
+  return open.find((m) => !side(m)) ?? open[0] ?? null;
 }
 export function chapterDone(n: number, s: { clues: string[]; flags: Record<string, boolean> }): boolean {
   const ms = STORY_MISSIONS.filter((m) => m.chapter === n && !m.optional);

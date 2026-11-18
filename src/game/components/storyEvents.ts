@@ -328,6 +328,90 @@ export function libraryLightsOut(ctx: StoryCtx, byDay: boolean) {
   return true;
 }
 
+/** 화강돌: 돌탑의 쐐기돌에 묶인, 돌아오지 못한 사람들의 목소리 */
+const SPIRITOMB_LOOK: MonsterLook = { sprite: 'spiritomb', body: '#5a3a7a', belly: '#7a5aa0', accent: '#5ac850', shape: 'round', ears: 'none', tail: 'none', eyes: 'sharp', mouth: 'fang', extra: 'spots' } as MonsterLook;
+const spiritombSpeaker = (named: boolean): SpeakerInfo => ({
+  name: named ? '화강돌' : '??? (돌탑)', sub: named ? '쐐기돌에 묶인 목소리들' : '여러 목소리', look: named ? SPIRITOMB_LOOK : null, cap: null,
+});
+
+/** S-01 분리수거장 구석 돌탑: 백여덟 개의 돌 (서브) */
+function s01(ctx: StoryCtx) {
+  G().spend(15);
+  ctx.play({
+    script: { lines: [
+      narr('폐지 더미 뒤, 분리수거장 구석. 무릎 높이부터 가슴 높이까지 돌을 층층이 쌓은 탑이 서 있다.'),
+      narr('이 부대는 어디나 반들반들한데, 이 탑에만 이끼가 껴 있다. 지나가는 사람들은 누구도 이쪽을 보지 않는다.'),
+      me('(편지 봉투들이 버려져 있던 바로 옆이다.)'),
+      narr('맨 위에는 쐐기처럼 깎은 돌 하나. 금 간 틈으로 보랏빛이 아주 조금 새어 나온다.'),
+    ] },
+    // 🧩 P-22: 돌이 놓일 자리와 놓인 돌을 센다
+    onDone: () => ctx.puzzle('P-22', (reward) => {
+      ctx.flash();
+      ctx.play({
+        script: { custom: spiritombSpeaker(false), lines: [
+          narr('답을 떠올린 순간, 주변 소리가 꺼진다. 멀리 연병장의 구령도, 바람 소리도.'),
+          say('npc', '……백일곱.'),
+          say('npc', '……백일곱이야. 하나 모자라.'),
+          narr('한 목소리가 아니다. 늙은 목소리, 앳된 목소리, 울먹이는 목소리가 수십 겹으로 포개져 있다.'),
+        ] },
+        onDone: () => ctx.play({
+          script: {
+            custom: spiritombSpeaker(true),
+            lines: [
+              narr('쐐기돌의 금이 벌어지고, 보랏빛 소용돌이가 흘러나와 웃는 얼굴 모양으로 엉긴다. 화강돌이다.'),
+              say('npc', '우리도 빌었어. 가기 싫다고. 별이 들어줬어. 여긴 따뜻하고, 다들 웃고, 아무도 혼내지 않았어.'),
+              say('npc', '그런데 별이 지던 밤, 아무도 손을 놓지 못했어. 그래서 돌이 됐어. "집에 가고 싶다"는 말만 남은 돌.'),
+              say('npc', '…너, 아직 이름이 있구나. 이름이 있는 사람은 따뜻해.'),
+              say('npc', '빈자리, 봤지? 거기 네 돌이 들어가면 백여덟. 그러면 우리도 조용히 잘 수 있어.'),
+            ],
+            choices: [
+              {
+                text: '(빈자리에서 손을 뗀다) "난 돌아갈 거야. 대신, 여기 새겨진 이름은 내가 기억할게."', grade: 'good',
+                effects: { mental: 2, flag: 'cairnPromise' },
+                reply: [
+                  say('npc', '……기억.'),
+                  narr('소용돌이가 잠깐 멈춘다. 돌 하나에 긁힌 글씨가 또렷해진다. 「박태윤 — 입대일」. 모르는 이름인데, 읽는 순간 목이 멘다.'),
+                  say('npc', '그럼 가. 별이 질 때, 뒤돌아보지 마. 돌아보면… 자리가 하나 더 생기거든.'),
+                ],
+              },
+              {
+                text: '(발밑의 돌을 하나 주워 빈자리에 올려 본다)', grade: 'bad',
+                effects: { memory: -5, mental: -3, flag: 'cairnStone' },
+                reply: [
+                  narr('돌을 올리는 순간 손끝부터 차가워진다. 머릿속에서 내 진짜 이름이 한 글자씩 흐려진다—'),
+                  narr('딸깍. 돌이 저절로 굴러떨어졌다.'),
+                  say('npc', '……아직 아니야. 넌 아직 이름이 있잖아.'),
+                  say('npc', '별이 질 때 와. 그때도 남겠다면, 그 자리는 네 거야.'),
+                ],
+              },
+            ],
+          },
+          onChoice: (c) => { if (c.effects) G().applyEffects(c.effects, '돌탑'); },
+          onDone: () => ctx.play({
+            script: { lines: [
+              narr('정신을 차리자 소리가 돌아와 있다. 돌탑은 그냥, 이끼 낀 돌무더기다.'),
+              me('(돌아오지 못한 사람들. …그 사람들도 나처럼 별에 빌었던 거야.)'),
+            ] },
+            onDone: () => G().findClue('C-16', reward),
+          }),
+        }),
+      });
+    }),
+  });
+}
+
+/** 돌탑을 그냥 살펴볼 때 (스토리 전 · 끝난 뒤) */
+export function cairnLines(): Line[] {
+  const s = G();
+  if (s.clues.includes('C-16')) {
+    return flag('cairnStone')
+      ? [narr('이끼 낀 돌탑. 빈자리 아래에, 내가 올렸다가 굴러떨어진 돌이 그대로 놓여 있다.'), me('(…주워 가지 않는 게 좋겠다.)')]
+      : [narr('이끼 낀 돌탑. 귀를 기울이면, 아주 작게 백일곱 개의 숨소리가 들리는 것 같다.'), me(`(박태윤. …잊지 않았어.)`)];
+  }
+  if (s.minute >= 22 * 60 || s.minute < 6 * 60) return [narr('밤의 돌탑. 가까이 가자 누가 내 이름을 부른 것 같다. 돌아봐도 아무도 없다.')];
+  return [narr('폐지 더미 뒤 구석의 낡은 돌탑. 누가 쌓았는지 아는 사람은 없다.'), narr('가까이 가면 이상하게 조용하다. 이 부대에서 웃음소리가 들리지 않는 곳은 여기뿐이다.')];
+}
+
 /** M-08 분리수거장: 부치지 못한 편지 */
 function m08(ctx: StoryCtx) {
   G().spend(15);
@@ -839,6 +923,14 @@ export function finalStar(ctx: StoryCtx) {
   });
 }
 
+/** 돌탑의 화강돌을 만났다면, 돌아가는 순간 돌탑에서 일어나는 일 */
+function cairnFarewell(): Line[] {
+  if (!G().clues.includes('C-16')) return [];
+  return flag('cairnPromise')
+    ? [narr('분리수거장 쪽에서 돌 굴러떨어지는 소리가 들린다. 작은 보랏빛 하나가 별빛을 따라 올라온다.'), narr('"…박태윤. 기억해 줘서 고마워." 겹겹의 목소리 중 하나가, 처음으로 혼자 말했다.')]
+    : [narr('분리수거장 쪽에서 아주 작게, 백일곱 개의 목소리가 "잘 가" 하고 말했다. 아무도 뒤돌아보지 않았다.')];
+}
+
 /** 엔딩 대본 (전역 결산 화면 전에) */
 export function endingLines(end: StoryEnding): Line[] {
   const s = G();
@@ -848,6 +940,7 @@ export function endingLines(end: StoryEnding): Line[] {
     return [
       narr('별빛이 우리를 감싼다.'),
       ...(sg ? [narr(`${josa(sgName, '이', '가')} 처음으로 웃는다.`), narr('"…고맙다. 이번엔, 나도 간다."')] : []),
+      ...cairnFarewell(),
       narr('(암전)'),
       narr('훈련소 생활관. 새벽. 낯선 천장.'),
       me('(…돌아왔다.)'),
@@ -863,6 +956,7 @@ export function endingLines(end: StoryEnding): Line[] {
   if (end === 'normal') {
     return [
       narr('"…친구는, 아직 대답을 못 찾았나 봐."'),
+      ...cairnFarewell(),
       narr('훈련소 첫날 밤. 옆 침상은 비어 있다.'),
       narr('창밖, 별똥별 하나가 떨어진다.'),
       me('(준서야. 꼭 와라.)'),
@@ -874,6 +968,7 @@ export function endingLines(end: StoryEnding): Line[] {
     narr('다음 날 아침, 1생활관.'),
     narr('분대장: "오늘 신병 전입 온다. 다들 잘해 줘라."'),
     narr('문이 열리고 — 내 얼굴을 한 신병이 들어온다.'),
+    ...(s.clues.includes('C-16') ? [narr('같은 시각, 분리수거장 구석의 돌탑에 이끼 없는 돌 하나가 얹혔다. 백여덟.')] : []),
     me('……'),
     narr('나는 "……"밖에 말할 수 없었다.'),
     narr('🌑 배드 엔딩 「영원한 이병」'),
@@ -896,6 +991,7 @@ export function storySpotOptions(spot: SpotId, ctx: StoryCtx): MenuOption[] {
     case 'cyber': add('M-05', '🔍 인터넷 편지함 확인', () => m05(ctx)); break;
     case 'command': add('M-07', '🔍 근무 일지 살펴보기', () => m07(ctx), false); break;
     case 'recycle': add('M-08', '🔍 폐지 더미 속 봉투들', () => m08(ctx), false); break;
+    case 'cairn': add('S-01', '🪨 쐐기돌의 금 들여다보기', () => s01(ctx)); break;
     case 'maint': add('M-09', '📻 구석의 라디오 켜기', () => m09(ctx)); break;
     case 'library': {
       if (isOpen('M-10')) {

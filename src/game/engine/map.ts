@@ -23,13 +23,15 @@ export enum T {
   WATER, PIER, RUNWAY, TARGET, COUNTER, PC, GYM, SANDBAG, SHIP, BOOTH, STAGE, DIRT, FLOWER, HANGAR,
   ROOF, DOOR, SHELF, TV, PLANT, BOARD, STAIRS, SOFA,
   COOLER, WASHER, TOILET, SINK, STOVE, COURT, HOOP, BIN, AMMO,
+  /** 이끼 낀 돌탑 (세로 두 칸: 위 · 아래) */
+  CAIRN,
 }
 
 const SOLID = new Set<T>([
   T.WALL, T.TREE, T.FENCE, T.BED, T.DESK, T.TABLE, T.LOCKER, T.WATER, T.TARGET,
   T.COUNTER, T.PC, T.GYM, T.SANDBAG, T.SHIP, T.BOOTH, T.STAGE, T.HANGAR,
   T.ROOF, T.SHELF, T.TV, T.PLANT, T.BOARD, T.SOFA,
-  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.HOOP, T.BIN, T.AMMO,
+  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.HOOP, T.BIN, T.AMMO, T.CAIRN,
 ]);
 
 export interface SpotDef {
@@ -381,7 +383,15 @@ function buildRecycle(branch: BranchId) {
   fill(4, 5, 15, 5, T.BIN);
   z.trees([[2, 1], [6, 1], [14, 1], [17, 1], [1, 12], [5, 12], [14, 12], [18, 12]]);
   z.map.labels.push({ text: '분리수거장', x: 10, y: 11.6 });
-  return { map: z.map, spots: [{ id: 'recycle', map: 'recycle', x: 9, y: 6, label: '분리수거장' }] as SpotDef[] };
+  // 쓰레기 더미 뒤 구석의 돌탑 (화강돌): 아무도 누가 쌓았는지 모른다
+  z.p.set(18, 7, T.CAIRN); z.p.set(18, 8, T.CAIRN);
+  return {
+    map: z.map,
+    spots: [
+      { id: 'recycle', map: 'recycle', x: 9, y: 6, label: '분리수거장' },
+      { id: 'cairn', map: 'recycle', x: 18, y: 9, label: '이끼 낀 돌탑' },
+    ] as SpotDef[],
+  };
 }
 
 /** PX/BX 앞 (22x16) */
@@ -708,7 +718,7 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
       if (r > 0.85) R(11, 12, 1, 2, grassDot);
     };
     switch (t) {
-      case T.GRASS: case T.TREE: case T.FLOWER: case T.FENCE: grassTile(); break;
+      case T.GRASS: case T.TREE: case T.FLOWER: case T.FENCE: case T.CAIRN: grassTile(); break;
       case T.ROAD: case T.BIN: case T.BOOTH: case T.HANGAR:
         base(road); if (r > 0.5) speck(shade(road, -22), 2); if (r2 > 0.6) speck(shade(road, 16), 1);
         break;
@@ -1027,6 +1037,25 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
         R(7, top ? 0 : 8, 2, 8, '#6a6a6a'); R(7, top ? 0 : 8, 1, 8, '#9a9aa2');
         box(2, 4, 12, 8, '#ffffff', '#3a3a44'); box(5, 6, 6, 4, '#ffffff', '#d04a2a');
         R(5, top ? 12 : 3, 6, 1, '#f08838'); R(6, top ? 13 : 2, 4, 1, '#e8e8f0');
+        break;
+      }
+      case T.CAIRN: {
+        // 이끼 낀 돌탑: 아래 칸은 넓은 받침돌, 위 칸은 작아지는 돌과 금이 간 쐐기돌
+        const stone = '#8a8a90', dark = '#5e5e66', hi = '#b0b0b8', moss = '#5a7a3e';
+        if (same(0, 1)) {
+          // 위 칸
+          box(4, 10, 8, 6, stone); R(5, 11, 3, 1, hi); R(9, 13, 2, 1, moss);
+          box(5, 5, 6, 5, shade(stone, -6)); R(6, 6, 2, 1, hi);
+          // 쐐기돌 (보랏빛이 비치는 금)
+          box(6, 0, 4, 5, '#6e6a78'); R(8, 1, 1, 3, '#8a5ab8'); R(7, 2, 1, 1, '#b48ae0');
+        } else {
+          // 아래 칸
+          R(1, 14, 14, 2, SHADE);
+          box(1, 7, 14, 8, dark); R(2, 8, 5, 1, stone); R(9, 9, 4, 1, stone);
+          box(2, 0, 12, 7, stone); R(3, 1, 4, 1, hi); R(10, 2, 2, 1, hi);
+          R(1, 12, 3, 2, moss); R(11, 5, 3, 2, moss); R(6, 13, 2, 1, moss);
+          R(5, 3, 1, 1, dark); R(9, 11, 1, 1, '#3e3e46');
+        }
         break;
       }
       case T.BIN: {

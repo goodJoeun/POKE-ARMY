@@ -1055,6 +1055,7 @@ function buildMapSpotLabel(branch: BranchId, spot: SpotId): string {
     laundry1: '막사 1층 세탁실', laundry2: '막사 2층 세탁실', water1: '막사 1층 정수기', water2: '막사 2층 정수기',
     board1: '막사 1층 복도 게시판', board2: '막사 2층 복도 게시판',
     kitchen: '병영식당 조리실', court: '농구장', recycle: '분리수거장', ammo: FACILITY_NAME[branch],
+    cairn: '분리수거장 구석 돌탑',
   };
   return labels[spot];
 }

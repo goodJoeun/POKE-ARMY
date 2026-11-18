@@ -102,6 +102,7 @@ import {
   storyExtraOptions,
   storyNpcOptions,
   storySpotOptions,
+  cairnLines,
   type ResistOpts,
   type StoryBg,
   type StoryCtx,
@@ -2614,6 +2615,7 @@ export default function World() {
       kitchen: "조리실",
       court: "농구장",
       recycle: "분리수거장",
+      cairn: "이끼 낀 돌탑",
       ammo: FACILITY_NAME[st.branch],
       post: "위병소 초소",
     };
@@ -3516,6 +3518,16 @@ export default function World() {
             "페트병은 라벨을 떼고, 캔은 찌그러뜨리고, 음식물은 물기를 빼서. 분리수거도 군기다.",
             "recycle",
           );
+          break;
+        }
+        case "cairn": {
+          title = "🪨 이끼 낀 돌탑";
+          opts.push({
+            label: "돌탑 살펴보기",
+            hint: "",
+            onSelect: () =>
+              setOverlay({ type: "dialogue", script: { lines: cairnLines() } }),
+          });
           break;
         }
         case "ammo": {

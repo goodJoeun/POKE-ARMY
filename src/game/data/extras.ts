@@ -156,7 +156,7 @@ const SERVER: ExtraDef = {
 /** 메인 스토리: 도서관 관리병 네이티오 (3일차부터, 세 군 공통) */
 const LIBRARIAN: ExtraDef = {
   id: 'librarian', sprite: 'xatu', name: '네이티오', title: '도서관 관리병 상병', map: 'library', x: 8, y: 5, from: 3, color: '#58b858',
-  lines: ['……', '…해가 기울면, 서가의 그림자도 기운다.', '…책은 읽는 사람을 고른다.'],
+  lines: ['……', '…해가 기울면, 서가의 그림자도 기운다.', '…책은 읽는 사람을 고른다.', '…버려진 종이 곁에, 버려지지 못한 것들이 쌓여 있다. 백 하고도 여덟.'],
 };
 
 const MORE: Record<BranchId, ExtraDef[]> = {

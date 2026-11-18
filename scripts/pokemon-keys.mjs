@@ -28,4 +28,6 @@ export const DEX = {
   rowlet: 722, noctowl: 164,
   // 메인 스토리: 지라치 · 네이티오(도서관 관리병) · 안농 · 슬리퍼
   jirachi: 385, xatu: 178, unown: 201, hypno: 97,
+  // 서브 스토리: 분리수거장 돌탑의 화강돌
+  spiritomb: 442,
 };
