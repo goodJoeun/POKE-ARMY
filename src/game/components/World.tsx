@@ -341,6 +341,8 @@ const mealCall = { key: "", withMe: "", back: "", talking: false };
  * 그보다 멀면(점심·저녁 자유 시간) 장소에서 E로 "시작하기"를 눌러야 그 시각으로 넘어간다.
  */
 const ARRIVE_AUTO_GAP = 30;
+/** 🚪 노크하고 들어가야 하는 방 (문 이름) */
+const KNOCK_ROOMS: Partial<Record<MapId, string>> = { command: "지휘통제실", admin: "행정반" };
 /**
  * 식사 시간에 이 사람이 있어야 할 곳 ('free' = 평소 자리).
  * - 1분대: 1생활관에 모여 대기 → 분대장이 "밥 먹으러 가자" 하면 다 같이 식당 → 최선임이 다 먹으면 다 같이 생활관으로
@@ -650,11 +652,9 @@ const WAKE_POS: Partial<Record<NpcId, Pos>> = {
   junior: ["room1", 10, 5],
   junior2: ["room1", 12, 5],
 };
-/** 달리기: 기력 소모(초당)·회복 시간, 속도 */
+/** 걷기 · 달리기 속도 (달리기는 지치지 않는다) */
 const WALK_SPEED = 6;
 const DASH_SPEED = 10.5;
-const DASH_DRAIN_SEC = 5.5;
-const DASH_REGEN_SEC = 3;
 
 const FORMATION: [number, number][] = [
   [-2, -2],
@@ -1269,7 +1269,7 @@ export default function World() {
           },
           {
             who: "npc",
-            text: '상자에 설명서도 들어 있네. 어디 보자… "Shift를 누른 채 이동하면 달릴 수 있습니다. 숨이 차면 잠시 걸으며 기력을 회복하세요."',
+            text: '상자에 설명서도 들어 있네. 어디 보자… "Shift를 누른 채 이동하면 달릴 수 있습니다. 쿠션이 좋아 아무리 뛰어도 지치지 않습니다!"',
           },
           {
             who: "npc",
@@ -1289,7 +1289,7 @@ export default function World() {
         );
         s2.log("👟 분대장에게 런닝슈즈를 받았다.");
         s2.addTip(
-          "달리기: Shift를 누른 채 이동하면 달린다. 발밑의 기력 게이지가 바닥나면 잠시 걸으며 숨을 골라야 한다.",
+          "달리기: Shift를 누른 채 이동하면 달린다. 지치지 않으니 얼마든지 계속 뛰어도 된다.",
         );
       },
     });
@@ -2189,6 +2189,49 @@ export default function World() {
     !st.clues.includes("C-04") &&
     ((st.day === 3 && st.minute >= 22 * 60) || st.day >= 4);
 
+  // 🚫 정문 밖으로 그냥 걸어 나가려 하면: 위병이 막아서고, 스스로 탈영할 수는 없다며 돌아선다
+  const desertRef = useRef<() => void>(() => {});
+  desertRef.current = () => {
+    const st = useGame.getState();
+    const p = runtime.player;
+    // 정문 안쪽으로 한 걸음 물러선다 (대화가 끝나도 다시 걸리지 않게)
+    p.y = 27.4;
+    p.dir = "up";
+    p.moving = false;
+    keys.current = {};
+    const guard = extraDefs.find((d) => d.id === "guard");
+    const gs = guard ? speakerOf("x:guard") : null;
+    const last = st.day >= TOTAL_DAYS;
+    const night = st.minute >= 22 * 60 || st.minute < 6 * 60;
+    setOverlay({
+      type: "dialogue",
+      script: {
+        custom: gs?.custom,
+        lines: last
+          ? [
+              { who: gs ? "npc" : "narr", text: gs ? "어이, 전역자! 정문 앞에서 인사는 하고 나가야지. 그냥 걸어 나가면 그게 탈영이다." : "정문 앞에서 발이 멈췄다." },
+              { who: "me", text: "(맞다. 마지막은 제대로 하자. 모두에게 인사하고, 정문 앞에서 당당히 나서자.)" },
+            ]
+          : [
+              {
+                who: gs ? "npc" : "narr",
+                text: gs
+                  ? night
+                    ? "(손전등 불빛이 얼굴에 꽂힌다) 정지! …뭐야, 우리 부대잖아. 이 밤에 어딜 가려고?"
+                    : "어이! 거기 어디 가나? 출타증도 없이 위병소 밖으로는 한 발짝도 못 나간다!"
+                  : "정문 앞에서 발이 멈췄다.",
+              },
+              { who: "me", text: "(…그래. 허락 없이 부대를 벗어나면 그게 탈영이지. 아무리 가기 싫었어도, 스스로 도망칠 수는 없다.)" },
+              { who: "narr", text: "발길을 돌렸다. 나가려면 허락을 받아야 한다." },
+            ],
+      },
+      onDone: () =>
+        useGame
+          .getState()
+          .addTip("허가 없이 부대를 벗어나면 군무이탈(탈영)이다. 외출·외박·휴가는 반드시 허가를 받고 출타증을 챙겨 나간다."),
+    });
+  };
+
   // 🏠 생활관 바로 가기: 내 침상 앞으로 (문 이동과 같은 페이드)
   const warpReq = useRef<Door | null>(null);
   const goHome = useCallback(() => {
@@ -2213,8 +2256,8 @@ export default function World() {
     };
   }, [world]);
 
-  // 🏃 달리기 기력 (0~1). 바닥나면 35%까지 회복될 때까지 달릴 수 없다
-  const stamina = useRef({ v: 1, lock: false, idle: 0, dashing: false });
+  // 🏃 지금 달리는 중인지 (발밑 먼지 연출용). 달리기는 지치지 않는다
+  const stamina = useRef({ dashing: false });
 
   // 🚪 다른 생활관(2생활관) 입실: 상병 미만은 "(계급) (이름)입니다. 들어가도 되겠습니까?"
   const askEnterRef = useRef<(d: Door) => void>(() => {});
@@ -2284,6 +2327,122 @@ export default function World() {
       },
       onDone: () => {
         if (enter) warpReq.current = enter;
+      },
+    });
+  };
+
+  // 🚪 지휘통제실 · 행정반: 노크하고 들어간다. 그냥 들어가면 안에 있는 간부나 선임 행정병에게 잔소리를 듣는다
+  const knockRef = useRef<(d: Door) => void>(() => {});
+  knockRef.current = (d: Door) => {
+    const p = runtime.player;
+    // 대답을 기다리는 동안 문이 다시 열리지 않게 한 발 물러선다
+    const back = { up: [0, 0.7], down: [0, -0.7], left: [0.7, 0], right: [-0.7, 0] }[d.enterDir];
+    p.x += back[0];
+    p.y += back[1];
+    p.moving = false;
+    keys.current = {};
+    const st = useGame.getState();
+    const room = KNOCK_ROOMS[d.to] ?? "사무실";
+    // 안에 있는 사람: 간부(중대장 · 소대장 · 행보관) → 당직부사관 → 행정병
+    const inside = (() => {
+      for (const id of ["cpt", "lt", "sgm"] as NpcId[]) {
+        const n = npcs.current[id];
+        if (n && n.map === d.to && npcPresent(id, st.day)) return id as string;
+      }
+      for (const def of extraDefs) {
+        const e = extras.current[def.id];
+        if (e && e.map === d.to) return `x:${def.id}`;
+      }
+      return null;
+    })();
+    const def = inside?.startsWith("x:") ? extraDefs.find((e) => `x:${e.id}` === inside) : undefined;
+    const officer = !!inside && (!inside.startsWith("x:") || !!def?.officer);
+    const sp = inside ? speakerOf(inside) : null;
+    const senior = rankIdxForDay(st.day) <= 2; // 행정병(상병)보다 아래거나 같은 계급
+    let mode: "knock" | "barge" | null = null;
+    setOverlay({
+      type: "dialogue",
+      script: {
+        npc: sp?.npc,
+        custom: sp?.custom,
+        lines: [
+          { who: "narr", text: `${room} 문 앞.` },
+          { who: "narr", text: "어떻게 들어갈까?" },
+        ],
+        choices: [
+          {
+            text: '(똑똑) "{myrank} {me}입니다! 들어가도 되겠습니까?"',
+            grade: "good",
+            effects: { discipline: 1 },
+            reply: [
+              !inside
+                ? { who: "narr", text: "…대답이 없다. 안에는 아무도 없는 것 같다. 조용히 문을 열었다." }
+                : { who: "npc", text: officer ? "그래, 들어와." : senior ? "어, 들어와." : "네, 들어오십쇼~" },
+            ],
+            tip: "지휘통제실·행정반 같은 사무 공간엔 노크하고 \"계급 성명입니다. 들어가도 되겠습니까?\"라고 물은 뒤 들어간다.",
+          },
+          {
+            text: "(그냥 문을 열고 들어간다)",
+            grade: "bad",
+            reply: [{ who: "narr", text: "문고리를 잡고 벌컥 열었다." }],
+          },
+          {
+            text: "(돌아간다)",
+            grade: "ok",
+            reply: [{ who: "narr", text: "나중에 다시 오자." }],
+          },
+        ],
+      },
+      onChoice: (c) => {
+        const s2 = useGame.getState();
+        mode = c.text.startsWith("(똑똑)") ? "knock" : c.text.includes("벌컥") || c.text.includes("그냥") ? "barge" : null;
+        if (mode === "knock") {
+          if (c.effects) s2.applyEffects(c.effects, `${room} 입실`, true);
+          if (c.tip) s2.addTip(c.tip);
+        }
+      },
+      onDone: () => {
+        if (mode === "knock" || (mode === "barge" && !inside)) {
+          warpReq.current = d;
+          return;
+        }
+        if (mode !== "barge" || !inside) return;
+        // 문을 열고 들어선 순간, 안에 있던 사람에게 잔소리를 듣는다
+        storyCtxRef.current.goTo(d.to, d.arrive.x, d.arrive.y, d.arrive.dir, () => {
+          const s3 = useGame.getState();
+          const sp2 = speakerOf(inside);
+          const line =
+            inside === "lt"
+              ? "{me}! 지휘통제실에 노크도 없이 들어오나? 여긴 근무 중인 곳이다. 노크하고, 관등성명 대고 들어와라."
+              : inside === "cpt"
+                ? "…노크는 어디 두고 왔지? 행정반도 사무실이다. 다음엔 없다."
+                : inside === "sgm"
+                  ? "어이구~ 문은 두드리라고 있는 거다. 행보관 심장 떨어질 뻔했다. 다음부턴 똑똑 하고 들어와."
+                  : officer
+                    ? "야, 노크! 상황 근무 중에 문 벌컥 열면 다들 놀란다. 다시는 그러지 마라."
+                    : senior
+                      ? "야, 노크 안 하냐? 문 벌컥 열면 서류 다 날아간다고. 다음부턴 똑똑 하고 들어와."
+                      : "…병장님, 노크는 하셔야죠. 서류 날아갑니다.";
+          setOverlay({
+            type: "dialogue",
+            script: {
+              npc: sp2.npc,
+              custom: sp2.custom,
+              lines: [
+                { who: "narr", text: "문을 벌컥 열자, 안에 있던 시선이 일제히 꽂힌다." },
+                { who: "npc", text: line },
+                { who: "me", text: "…죄송합니다! 다음부터 노크하고 들어오겠습니다!" },
+              ],
+            },
+            onDone: () => {
+              s3.applyEffects(
+                { discipline: -2, ...(inside.startsWith("x:") ? {} : { affinity: { [inside]: -2 } }) },
+                "노크 없이 입실",
+              );
+              s3.addTip("지휘통제실·행정반 같은 사무 공간엔 노크하고 \"계급 성명입니다. 들어가도 되겠습니까?\"라고 물은 뒤 들어간다.");
+            },
+          });
+        });
       },
     });
   };
@@ -2737,13 +2896,16 @@ export default function World() {
     (id: SpotId) => {
       const st = useGame.getState();
       const m = st.minute;
-      const free = isFreeTimeEvening(m) || isMealTime(m);
+      // 🍚 식사 시간엔 분대와 먼저 밥을 먹어야 한다: 그 전에는 장소에서 하는 일(퀘스트 · 활동 · 퍼즐)을 미룬다
+      const mealFirst = !!st.mealCheck && !st.mealCheck.done;
+      const free = !mealFirst && (isFreeTimeEvening(m) || isMealTime(m));
       const opts: MenuOption[] = [];
       const q = st.questStepAt({ spot: id });
       if (q) {
         opts.push({
           label: `📋 퀘스트 진행`,
-          hint: q.minutes ? `${q.minutes}분` : "",
+          hint: mealFirst ? "🍚 먼저 분대와 식사" : q.minutes ? `${q.minutes}분` : "",
+          disabled: mealFirst,
           onSelect: () => {
             const s2 = useGame.getState();
             s2.spend(q.minutes ?? 10);
@@ -2767,9 +2929,9 @@ export default function World() {
       ) => {
         opts.push({
           label,
-          hint,
+          hint: mealFirst ? "🍚 먼저 분대와 식사" : hint,
           disabled:
-            disabled || (dailyKey ? st.daily.includes(dailyKey) : false),
+            mealFirst || disabled || (dailyKey ? st.daily.includes(dailyKey) : false),
           onSelect: () => {
             const s2 = useGame.getState();
             s2.spend(mins);
@@ -3496,7 +3658,7 @@ export default function World() {
       if (quick && st.clues.length > 0 && !st.puzzles[quick.puzzle]?.solved)
         opts.push({
           label: `🧩 ${quick.label}`,
-          hint: free ? "짬짬이 퍼즐" : "점심·개인정비 시간에",
+          hint: free ? "짬짬이 퍼즐" : mealFirst ? "🍚 먼저 분대와 식사" : "점심·개인정비 시간에",
           disabled: !free,
           onSelect: () =>
             setOverlay({
@@ -4162,6 +4324,14 @@ export default function World() {
         fogActive(st)
       )
         fogEventRef.current();
+      // 🚫 그 밖에는 정문 밖으로 걸어 나갈 수 없다: 위병에게 붙잡히고, 스스로 탈영할 수는 없다
+      else if (
+        p.map === "depot" &&
+        p.y > 28.6 &&
+        !blocked &&
+        !fading
+      )
+        desertRef.current();
 
       // 생활관 바로 가기 요청 → 문 이동처럼 페이드
       if (warpReq.current && !fading) {
@@ -4208,30 +4378,11 @@ export default function World() {
         if (k["arrowup"] || k["w"]) vy -= 1;
         if (k["arrowdown"] || k["s"]) vy += 1;
       }
-      // 🏃 Shift를 누른 채 이동하면 달리기 (기력 게이지 소모, 체력 25 미만이면 회복이 느리다)
+      // 🏃 Shift를 누른 채 이동하면 달리기 (지치지 않고 계속 달릴 수 있다)
       // 👟 전입 첫날 런닝슈즈를 받기 전에는 달릴 수 없다
       const sta = stamina.current;
       const hasShoes = !!st.flags.runShoes || st.day > 1;
-      const dashing =
-        hasShoes &&
-        !!keys.current["shift"] &&
-        !!(vx || vy) &&
-        !sta.lock &&
-        sta.v > 0;
-      if (dashing) {
-        sta.v = Math.max(0, sta.v - dt / DASH_DRAIN_SEC);
-        sta.idle = 0;
-        if (sta.v <= 0) sta.lock = true;
-      } else {
-        sta.idle += dt;
-        if (sta.idle > 0.5)
-          sta.v = Math.min(
-            1,
-            sta.v +
-              dt / (st.stats.hp < 25 ? DASH_REGEN_SEC * 2 : DASH_REGEN_SEC),
-          );
-        if (sta.lock && sta.v >= 0.35) sta.lock = false;
-      }
+      const dashing = hasShoes && !!keys.current["shift"] && !!(vx || vy);
       sta.dashing = dashing;
       const speed = dashing ? DASH_SPEED : WALK_SPEED;
       if (vx || vy) {
@@ -4274,6 +4425,10 @@ export default function World() {
           if (hit) {
             if (d.to === "room2" && rankIdxForDay(st.day) < 2) {
               askEnterRef.current(d);
+              break;
+            }
+            if (KNOCK_ROOMS[d.to]) {
+              knockRef.current(d);
               break;
             }
             fading = { door: d, phase: "out" };
@@ -5487,23 +5642,6 @@ export default function World() {
               g.beginPath();
               g.arc(p.x * TILE + back + 5, p.y * TILE + 10, 2, 0, Math.PI * 2);
               g.fill();
-            }
-            if (sta2.v < 1) {
-              const bw = 30,
-                bx = p.x * TILE - bw / 2,
-                by = p.y * TILE + 16;
-              g.fillStyle = "rgba(30,30,40,0.75)";
-              g.fillRect(bx - 1, by - 1, bw + 2, 6);
-              g.fillStyle = sta2.lock
-                ? Math.floor(t * 6) % 2
-                  ? "#e84838"
-                  : "#802018"
-                : sta2.v > 0.5
-                  ? "#58c058"
-                  : sta2.v > 0.25
-                    ? "#f0c040"
-                    : "#e86030";
-              g.fillRect(bx, by, bw * sta2.v, 4);
             }
             const my = p.y * TILE + fx.dy - fx.hop + Math.sin(t * 4) * 2;
             g.fillStyle = "#ffe14a";

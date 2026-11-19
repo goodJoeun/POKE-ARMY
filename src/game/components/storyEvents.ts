@@ -1078,7 +1078,9 @@ export function storySpotOptions(spot: SpotId, ctx: StoryCtx): MenuOption[] {
   const free = freeNow();
   const add = (id: string, label: string, run: () => void, needFree = true) => {
     if (!isOpen(id)) return;
-    opts.push({ label, hint: needFree && !free ? (mealPending() ? '먼저 분대와 식사' : '점심·개인정비 시간에') : '📖 스토리', disabled: needFree && !free, onSelect: run });
+    // 식사 시간엔 분대와 먼저 밥을 먹어야 한다 (자유 시간이 아니어도 되는 미션도 마찬가지)
+    const locked = mealPending() || (needFree && !free);
+    opts.push({ label, hint: mealPending() ? '🍚 먼저 분대와 식사' : locked ? '점심·개인정비 시간에' : '📖 스토리', disabled: locked, onSelect: run });
   };
   switch (spot) {
     case 'cyber': add('M-05', '🔍 인터넷 편지함 확인', () => m05(ctx)); break;

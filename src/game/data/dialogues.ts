@@ -749,11 +749,11 @@ export const DIALOGUES: Dialogue[] = [
     when: (c) => c.day >= 2,
     lines: [
       { who: 'npc', text: '{n:me}, 오늘 생활관 분리수거 당번이 너다.' },
-      { who: 'npc', text: '분리수거장은 병영식당 앞에서 아래쪽 길로 쭉 가면 있다. 페트병 라벨 떼는 거 잊지 말고.' },
+      { who: 'npc', text: '분리수거장은 병영식당 앞에서 아래쪽 길로 쭉 가면 있다. 밥은 다 같이 먹고, 개인정비 시간에 다녀와라. 페트병 라벨 떼는 거 잊지 말고.' },
     ],
     choices: [
       {
-        text: '"알겠습니다! 바로 다녀오겠습니다!"', grade: 'good',
+        text: '"알겠습니다! 식사 후에 다녀오겠습니다!"', grade: 'good',
         effects: { affinity: { sgt: 2 }, quest: 'q_sgt_recycle' },
         reply: [{ who: 'npc', text: '그래. 다녀와서 보고해라.' }],
         tip: '분대장은 생활관 청소·당번처럼 분대장 임무 범위 안에서 분대원에게 지시할 수 있다.',
