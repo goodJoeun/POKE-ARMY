@@ -7,7 +7,6 @@ import { NPC_SKINS, npcDisplayName } from '../data/npcs';
 import { QUESTS } from '../data/quests';
 import { getWorld, type MapId } from '../engine/map';
 import { runtime } from '../engine/runtime';
-import { memberName } from '../engine/whereabouts';
 import { STORY_MISSIONS, missionState } from '../data/story';
 
 /** 지도(M): 야외 구역과 막사 층별 방을 도식으로 보여 주고, 내 위치·퀘스트 목적지·일정 장소·NPC 위치를 표시 */
@@ -44,10 +43,6 @@ export default function MapView({ onClose }: { onClose: () => void }) {
       if (!m.spot || missionState(m, s) !== 'open') continue;
       addQ(m.id === 'M-04' ? 'library' : world.spots[m.spot].map, `📖 ${m.title}`);
     }
-  }
-  const mc = s.mealCheck;
-  if (mc?.status === 'asking') {
-    for (const id of mc.targets) if (!mc.asked.includes(id)) addQ(runtime.npcLoc[id]?.map, `식사 집합 (${memberName(s.branch, id)})`);
   }
   // 다음 일정 장소
   const ev = s.currentEvent();

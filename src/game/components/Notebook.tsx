@@ -5,7 +5,6 @@ import { BRANCHES, RANKS, TOTAL_DAYS, rankIdxForDay } from '../data/branches';
 import { ARCHETYPE_INFO, findSpecies } from '../data/monsters';
 import { NPC_SKINS, NPC_ROLES, npcDisplayName, npcRoleTitle } from '../data/npcs';
 import { QUESTS } from '../data/quests';
-import { memberName } from '../engine/whereabouts';
 import { ITEMS } from '../data/items';
 import { buildSchedule } from '../data/schedule';
 import { fmtTime } from '../data/branches';
@@ -52,7 +51,6 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
                 <p>성격: <b>{ARCHETYPE_INFO[s.archetype].name}</b> · {ARCHETYPE_INFO[s.archetype].perk}</p>
                 <p>소속: {b.name} {b.unit}</p>
                 <p>전역까지: D-{TOTAL_DAYS - s.day} (게임 내 {TOTAL_DAYS}일 = 실제 {b.months}개월)</p>
-                <p>지각 횟수: {s.lateCount}회</p>
               </div>
             </div>
           )}
@@ -80,16 +78,7 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
           )}
           {tab === 'quests' && (
             <div>
-              {s.quests.length === 0 && !s.mealCheck && <p className="hud-dim">진행 중인 퀘스트가 없다. 선후임·간부와 대화해 보자.</p>}
-              {s.mealCheck && (s.mealCheck.by ?? 'me') === 'me' && (
-                <div className="quest">
-                  <b>🍚 식사 집합</b> <span className="hud-dim">({s.mealCheck.asked.length}/{s.mealCheck.targets.length})</span>
-                  <div>밥 먹으러 가기 전에 선임들께 "식사하러 가시겠습니까?" 여쭤보고 다 같이 가자.</div>
-                  <div className="hud-dim">
-                    {s.mealCheck.targets.map((id) => `${s.mealCheck!.asked.includes(id) ? '✅' : '⬜'} ${memberName(s.branch, id)}`).join('  ')}
-                  </div>
-                </div>
-              )}
+              {s.quests.length === 0 && <p className="hud-dim">진행 중인 퀘스트가 없다. 선후임·간부와 대화해 보자.</p>}
               {s.quests.map((q) => {
                 const d = QUESTS[q.id];
                 return (

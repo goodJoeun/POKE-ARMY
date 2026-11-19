@@ -140,8 +140,8 @@ export interface ScheduleEvent {
   id: string;
   kind: EventKind;
   label: string;
+  /** 일정 시각: 장소에 도착하면 이 시각으로 넘어가 시작한다 */
   start: number;
-  window: number;
   end: number;
   spot: SpotId | null;
   game?: GameId;

@@ -21,8 +21,6 @@ interface Props {
   onClose: () => void;
 }
 
-const GRADE_LABEL = { good: '👍 훌륭한 대응', ok: '🙂 무난한 대응', bad: '👎 아쉬운 대응' } as const;
-
 export default function DialogueBox({ script, onChoice, onClose }: Props) {
   const { branch, name, day, speciesId } = useGame();
   const ctx = { branch, name, day };
@@ -88,14 +86,8 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
     <div className="dialogue-wrap" onClick={advance}>
       {phase === 'reply' && picked?.tip && showTips && (
         <div className="tip-card" onClick={(e) => e.stopPropagation()}>
-          <div className={`grade grade-${picked.grade}`}>{GRADE_LABEL[picked.grade]}</div>
           <div className="tip-title">📘 군대 상식</div>
           <div>{fmt(picked.tip, ctx)}</div>
-        </div>
-      )}
-      {phase === 'reply' && picked && (!picked.tip || !showTips) && (
-        <div className="tip-card small" onClick={(e) => e.stopPropagation()}>
-          <div className={`grade grade-${picked.grade}`}>{GRADE_LABEL[picked.grade]}</div>
         </div>
       )}
       <div className="dialogue">

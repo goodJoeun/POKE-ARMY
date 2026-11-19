@@ -23,7 +23,7 @@
 body { font-size: 13px; -webkit-font-smoothing: none; }
 
 /* 공통 창 프레임 */
-.hud-box, .hud-left, .prompt, .toast, .dialogue, .menu, .notebook, .rollcall, .mg-intro, .mg-result,
+.hud-box, .prompt, .toast, .dialogue, .menu, .notebook, .rollcall, .mg-intro, .mg-result,
 .diary, .transform-info, .branch-card, .settings, .tip-card, .mg-question, .promo-cpt, .location-badge,
 .checklist {
   background: var(--win-bg);
@@ -110,17 +110,13 @@ kbd {
 .choice-prompt { color: var(--win-ink); }
 .tip-card { border-width: 3px; }
 .tip-title { color: #3860b0; }
-.grade { font-family: 'Galmuri11', sans-serif; font-weight: 700; }
 .rc-head .speaker, .promo-cpt .speaker { position: static; display: inline-block; border-radius: 4px; margin: 2px 0; }
 
 /* HUD */
 .hud-box { padding: 6px 12px; }
 .hud-day, .clock { font-family: 'Galmuri14', sans-serif; color: var(--win-ink); }
-.hud-left { padding: 8px 12px; gap: 5px; }
-.stat-label { font-size: 11px; }
 .stat-track { height: 6px; border-radius: 2px; background: #485048; border: 2px solid var(--win-frame); box-sizing: content-box; }
 .stat-fill { border-radius: 0; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25), inset 0 2px 0 rgba(255, 255, 255, 0.35); }
-.stat-val { font-size: 11px; }
 .hud-objective {
   background: var(--win-frame); color: #fff; border-radius: 6px; border: 2px solid #fff; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
   font-size: 13px; text-shadow: 1px 1px 0 #000;
@@ -295,14 +291,10 @@ canvas { image-rendering: pixelated; }
 .hud-day { font-size: 24px; }
 .clock { font-size: 31px; }
 .hud-clock { min-width: 120px; }
-/* 왼쪽 스탯 창 */
-.hud-left { top: 90px; width: 245px; padding: 11px 15px; gap: 7px; font-size: 14px; }
-.stat-label { width: 68px; font-size: 13px; }
 .stat-track { height: 8px; }
-.stat-val { width: 30px; font-size: 13px; }
 .fatigue-warn { font-size: 13px; }
 /* 다음 일정 · 집합 알림 */
-.hud-objective { top: 90px; font-size: 15px; padding: 9px 18px; max-width: calc(100% - 540px); }
+.hud-objective { top: 90px; font-size: 15px; padding: 9px 18px; max-width: calc(100% - 760px); }
 @media (max-width: 1100px) { .hud-objective { top: auto; bottom: 64px; max-width: calc(100% - 40px); } }
 /* 상호작용 안내 · 위치 표시 · 방 이름 배너 */
 .prompt { font-size: 16px; padding: 10px 18px; bottom: 80px; }
@@ -324,7 +316,6 @@ canvas { image-rendering: pixelated; }
 .choice, .menu-opt { font-size: 16px; padding: 9px 12px 9px 30px; }
 .choice-prompt { font-size: 16px; }
 .tip-card { font-size: 15px; width: min(940px, 100%); }
-.grade { font-size: 16px; }
 /* 메뉴 팝업 */
 .menu { width: min(470px, 100%); padding: 16px; }
 .menu-title { font-size: 21px; }
@@ -344,27 +335,27 @@ canvas { image-rendering: pixelated; }
 
 /* ───── 퀘스트 트래커 · 퀘스트 창 ───── */
 .quest-tracker {
-  position: absolute; left: 10px; top: 300px; width: 245px; z-index: 6; cursor: pointer;
+  position: absolute; left: 10px; top: 90px; width: 360px; max-height: calc(100% - 170px); overflow-y: auto; z-index: 6; cursor: pointer;
   background: rgba(248, 248, 248, 0.94); color: var(--win-ink); border: 3px solid var(--win-frame); border-radius: 8px;
-  box-shadow: inset 0 0 0 2px var(--win-ring-2), 0 3px 0 rgba(0, 0, 0, 0.3); padding: 8px 12px; font-size: 13px;
+  box-shadow: inset 0 0 0 2px var(--win-ring-2), 0 3px 0 rgba(0, 0, 0, 0.3); padding: 12px 16px; font-size: 16px;
 }
-.qt-head { font-family: 'Galmuri11', sans-serif; font-weight: 700; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-.qt-slow { margin-left: auto; font-size: 11px; color: #3860b0; }
-.qt-item { padding: 4px 0; border-top: 1px dashed var(--line); }
+.qt-head { font-family: 'Galmuri11', sans-serif; font-weight: 700; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 17px; }
+.qt-slow { margin-left: auto; font-size: 13px; color: #3860b0; }
+.qt-item { padding: 7px 0; border-top: 1px dashed var(--line); }
 .qt-item:first-of-type { border-top: none; }
 .qt-title { font-weight: 700; }
-.qt-next { color: var(--ink-dim); font-size: 12px; line-height: 1.4; }
+.qt-next { color: var(--ink-dim); font-size: 14px; line-height: 1.5; }
 .qt-item.done .qt-next { color: #2e8a46; }
-.qt-more { font-size: 11px; color: var(--ink-dim); }
+.qt-more { font-size: 13px; color: var(--ink-dim); }
 @media (max-width: 760px) { .quest-tracker { display: none; } }
 .questlog {
-  width: min(680px, 100%); max-height: min(640px, 92vh); display: flex; flex-direction: column;
+  width: min(920px, 100%); max-height: min(860px, 94vh); display: flex; flex-direction: column;
   background: var(--win-bg); color: var(--win-ink); border: 4px solid var(--win-frame); border-radius: 8px;
   box-shadow: inset 0 0 0 2px var(--win-bg), inset 0 0 0 4px var(--win-ring), 0 4px 0 rgba(0, 0, 0, 0.35);
 }
 .ql-head { display: flex; align-items: center; padding: 12px 16px 4px; }
 .ql-head .nb-close { margin-left: auto; border: none; background: none; font-size: 18px; }
-.ql-body { overflow-y: auto; padding: 4px 16px 10px; font-size: 15px; line-height: 1.55; }
+.ql-body { overflow-y: auto; padding: 6px 22px 14px; font-size: 17px; line-height: 1.6; }
 .ql-hint { margin: 0 0 8px; }
 .ql-steps { list-style: none; margin: 6px 0; padding: 0 0 0 4px; }
 .ql-steps li { color: var(--ink-dim); }
@@ -472,14 +463,14 @@ canvas { image-rendering: pixelated; }
 
 /* 퀘스트 창 탭 · 받을 수 있는 퀘스트 · 연계 */
 .ql-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 16px 6px; border-bottom: 2px solid var(--line); }
-.ql-tabs button { border: 2px solid var(--win-frame); background: #eef2f6; border-radius: 6px 6px 0 0; padding: 5px 10px; font-size: 13px; font-family: 'Galmuri11', sans-serif; }
+.ql-tabs button { border: 2px solid var(--win-frame); background: #eef2f6; border-radius: 6px 6px 0 0; padding: 7px 14px; font-size: 15px; font-family: 'Galmuri11', sans-serif; }
 .ql-tabs button.on { background: #3860b0; color: #fff; }
 .ql-group { margin: 8px 0 4px; font-family: 'Galmuri11', sans-serif; color: #3860b0; }
 .quest.offer-open { border-left: 5px solid #e8a030; }
 .quest.offer-locked { opacity: 0.75; }
 .ql-lock { font-size: 13px; color: #a05a20; }
 .ql-chain { font-size: 11px; background: #fff0c8; border: 1px solid #c8a838; border-radius: 4px; padding: 1px 6px; margin-left: 4px; }
-.qt-offers { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--line); font-size: 12px; color: #a05a20; font-weight: 700; }
+.qt-offers { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); font-size: 14px; color: #a05a20; font-weight: 700; }
 
 /* ───── 꿈: 별의 언덕 ───── */
 .dream-scene { position: fixed; inset: 0; z-index: 20; background: #070a1e; cursor: pointer; }

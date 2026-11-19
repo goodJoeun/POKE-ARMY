@@ -32,7 +32,7 @@ export default function Game() {
   const dreaming = useGame((s) => s.scene === 'dayEnd' && dreamPending(s));
 
   // 🧪 테스터 모드: 진행 중인 미션 즉시 종료
-  // - 부대 화면: 점호 의식 / 지각 꾸중 / 현재 일정을 끝내도록 월드에 알림
+  // - 부대 화면: 점호 의식 / 현재 일정을 끝내도록 월드에 알림
   useEffect(() => {
     if (!tester) return;
     const onKey = (e: KeyboardEvent) => {

@@ -57,7 +57,7 @@ export function pickBgm(s: GameState): [BgmId, boolean] {
 /**
  * 화면에는 아무것도 그리지 않는다. 게임 상태를 지켜보다가
  * - 상황에 맞는 BGM으로 바꾸고 (0.3초마다 확인: 플레이어가 있는 맵은 React 상태가 아니라서)
- * - 단서·별 조각·퀘스트·지각·진급·취침에 징글을 울린다
+ * - 단서·별 조각·퀘스트·진급·취침에 징글을 울린다
  */
 export default function BgmDirector() {
   const bgmVolume = useSettings((s) => s.bgmVolume);
@@ -116,7 +116,6 @@ export default function BgmDirector() {
       if (s.stars.length > p.stars.length) jingle('jingle_star_fragment', 9);
       else if (s.clues.length > p.clues.length) jingle('jingle_clue_found', 8);
       else if (s.doneQuests.length > p.doneQuests.length) jingle('jingle_quest_complete', 5);
-      if (s.lateCall && !p.lateCall) jingle('jingle_late_scolded', 7);
     });
 
     if (process.env.NODE_ENV === 'development') {

@@ -194,16 +194,11 @@ button.big:not(.primary) { background: #fff8e6; color: var(--ink); box-shadow: 0
 .rank-badge { display: inline-flex; flex-direction: column; justify-content: center; gap: 2px; background: #2e3a22; border-radius: 4px; padding: 3px; }
 .rank-bar { display: block; height: 3px; background: #e8dcb0; border-radius: 1px; }
 .promo-badge .rank-badge { gap: 6px; padding: 8px; } .promo-badge .rank-bar { height: 7px; }
-.hud-left {
-  position: absolute; top: 74px; left: 10px; width: 210px; background: rgba(255, 248, 230, 0.93); border: 2px solid var(--line);
-  border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; font-size: 12px;
-}
-.stat { display: flex; align-items: center; gap: 6px; }
-.stat-label { width: 58px; flex: none; }
-.stat-track { flex: 1; height: 9px; background: #0002; border-radius: 5px; overflow: hidden; }
-.stat-fill { display: block; height: 100%; border-radius: 5px; transition: width 0.4s; }
-.stat-val { width: 24px; text-align: right; font-weight: 700; }
-.money { font-weight: 700; margin-top: 2px; }
+/* 🌟 인간의 기억 (스토리가 시작되면 상단에 표시) */
+.hud-memory { min-width: 120px; }
+.stat-track { display: block; margin-top: 4px; height: 9px; background: #0002; border-radius: 5px; overflow: hidden; }
+.stat-fill { display: block; height: 100%; border-radius: 5px; background: #f0c040; transition: width 0.4s; }
+.hud-memory.low .stat-fill { background: #c86ad8; }
 .hud-objective {
   position: absolute; top: 74px; left: 50%; transform: translateX(-50%); background: rgba(40, 50, 30, 0.9); color: #fff8e6;
   border-radius: 99px; padding: 7px 16px; font-size: 14px; pointer-events: none; white-space: nowrap; max-width: calc(100% - 460px); overflow: hidden; text-overflow: ellipsis;
@@ -282,7 +277,6 @@ button.big:not(.primary) { background: #fff8e6; color: var(--ink); box-shadow: 0
   .touchpad .action { pointer-events: auto; width: 64px; height: 64px; border-radius: 50%; border: none; background: rgba(224,96,58,0.9); color: #fff; font-size: 22px; font-family: 'Galmuri14', 'Galmuri11', sans-serif; touch-action: none; }
 }
 @media (max-width: 760px) {
-  .hud-left { top: auto; bottom: 10px; width: 170px; }
   .hud-objective { top: 120px; max-width: calc(100% - 20px); font-size: 12px; }
   .hud-rank { margin-left: 0; }
 }
@@ -317,10 +311,7 @@ button.big:not(.primary) { background: #fff8e6; color: var(--ink); box-shadow: 0
   width: min(860px, 100%); background: #eef4ff; border: 2px solid #8aa8e0; border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 14px; line-height: 1.55;
   animation: fadeIn 0.3s both;
 }
-.tip-card.small { padding: 6px 12px; width: auto; }
 .tip-title { font-weight: 700; color: #3a5a9a; margin-top: 2px; }
-.grade { font-family: 'Galmuri14', 'Galmuri11', sans-serif; font-size: 15px; }
-.grade-good { color: var(--good); } .grade-ok { color: #b08a20; } .grade-bad { color: var(--bad); }
 
 /* ───────── 메뉴 / 모달 ───────── */
 .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); display: grid; place-items: center; z-index: 40; padding: 16px; }

@@ -587,7 +587,7 @@ export function roofOptions(ctx: StoryCtx): MenuOption[] {
   if (isOpen('D-03')) opts.push({ label: '🌌 돌아가는 방법 (추리 정리 3)', hint: ev ? '' : '19:00~21:20', disabled: !ev, onSelect: () => withBuddy(() => d03(ctx)) });
   if (!opts.length || opts.every((o) => o.disabled)) {
     opts.push({
-      label: '옥상에서 하늘 보기', hint: ev ? '10분 · 멘탈+3 (1일 1회)' : '19:00~21:20',
+      label: '옥상에서 하늘 보기', hint: ev ? '10분 (1일 1회)' : '19:00~21:20',
       disabled: !ev || s.daily.includes('roof'),
       onSelect: () => {
         const s2 = G();

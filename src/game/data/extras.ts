@@ -32,7 +32,7 @@ export interface ExtraDef {
   until?: number;
   /** 이 날짜부터 있다 (전입·스토리 등장) */
   from?: number;
-  /** 1분대 선임: 식사 집합 때 여쭤봐야 하는 사람 */
+  /** 1분대 선임 */
   squad1Senior?: boolean;
 }
 
@@ -47,12 +47,12 @@ export function extrasForDay(branch: BranchId, day: number): ExtraDef[] {
 }
 
 const MEDIC_DAILY = {
-  label: '컨디션 체크 받기', hint: '1일 1회 · 체력+8 멘탈+2',
+  label: '컨디션 체크 받기', hint: '1일 1회',
   effects: { hp: 8, mental: 2 },
   text: '"의무대에 어서 오세요! 체력을 회복시켜 드릴까요?" …♪ 띠리리링~ "건강해졌습니다! 또 오세요!"',
 };
 const DOG_DAILY = {
-  label: '쓰다듬기', hint: '1일 1회 · 멘탈+4',
+  label: '쓰다듬기', hint: '1일 1회',
   effects: { mental: 4 },
   text: '군견이 꼬리를 세차게 흔든다. 마음이 사르르 녹는다.',
 };

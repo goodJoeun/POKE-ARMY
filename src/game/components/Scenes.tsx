@@ -407,8 +407,6 @@ function StoryEndingView({ end, unanswered, onDone }: { end: StoryEnding; unansw
 // ───────── 하루 결산 ─────────
 export function DayEnd() {
   const s = useGame();
-  const ds = s.dayStart.stats;
-  const diff = (k: keyof typeof ds) => s.stats[k] - ds[k];
   const affDiff = NPC_IDS.map((id) => [id, s.affinity[id] - s.dayStart.affinity[id]] as [NpcId, number]).filter(([, d]) => d !== 0);
   const sign = fmtDelta;
   const nightDuty = hasNightDuty(s.day) || hasGuardNight(s.day);
@@ -429,10 +427,6 @@ export function DayEnd() {
           {s.dayLog.map((l, i) => <li key={i}>{l}</li>)}
         </ul>
         <div className="diary-stats">
-          <span>❤️ 체력 {Math.round(s.stats.hp)} ({sign(diff('hp'))})</span>
-          <span>🧠 멘탈 {Math.round(s.stats.mental)} ({sign(diff('mental'))})</span>
-          <span>🎖️ 군기 {Math.round(s.stats.discipline)} ({sign(diff('discipline'))})</span>
-          <span>🛠️ 숙련 {Math.round(s.stats.skill)} ({sign(diff('skill'))})</span>
           <span>💰 {fmtMoney(s.stats.money)}</span>
         </div>
         {affDiff.length > 0 && (
@@ -440,7 +434,7 @@ export function DayEnd() {
             {affDiff.map(([id, d]) => <span key={id} className={d > 0 ? 'up' : 'down'}>{NPC_SKINS[s.branch][id].name} {sign(d)}</span>)}
           </div>
         )}
-        <p className="diary-sleep">💤 {nightDuty ? '불침번 근무를 마치고 녹초가 되어 잠들었다. (수면 회복: 체력 +12)' : '취침 나팔과 함께 스르륵 잠들었다. (수면 회복: 체력 +20, 멘탈 +3)'}</p>
+        <p className="diary-sleep">💤 {nightDuty ? '불침번 근무를 마치고 녹초가 되어 잠들었다.' : '취침 나팔과 함께 스르륵 잠들었다.'}</p>
         <button className="primary big" onClick={proceed}>
           {s.day >= TOTAL_DAYS - 1 ? '내일은 드디어… 전역일! ▶' : '다음 날 ▶ (Enter)'}
         </button>
@@ -479,8 +473,8 @@ export function Ending() {
         <div className="ending-title">{title}</div>
         <p>{desc}</p>
         <div className="ending-stats">
-          <span>군기 {Math.round(st.discipline)}</span><span>숙련도 {Math.round(st.skill)}</span><span>평균 호감 {avgAff}</span>
-          <span>푼 퍼즐 {solvedPuzzles}개</span><span>지각 {s.lateCount}회</span><span>군대 상식 {s.tips.length}개</span>
+          <span>평균 호감 {avgAff}</span>
+          <span>푼 퍼즐 {solvedPuzzles}개</span><span>군대 상식 {s.tips.length}개</span>
         </div>
         <div className="ending-crew">
           {present.map((id) => {

@@ -1,12 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { BranchId, Effects } from '../types';
-import { useGame, spotLabel, questSlowActive, questOffers, mealGatherMin, PATROL_SPOTS, type QuestOffer } from '../state/store';
+import { useGame, spotLabel, questOffers, PATROL_SPOTS, type QuestOffer } from '../state/store';
 import { QUESTS, QUEST_CHAINS, chainOf } from '../data/quests';
 import { NPC_SKINS, npcDisplayName } from '../data/npcs';
 import { fmtTime } from '../data/branches';
 import { fmt } from '../engine/text';
-import { memberFullName, memberLook, memberName, npcWhere } from '../engine/whereabouts';
+import { runtime } from '../engine/runtime';
+import { memberFullName, memberLook, npcWhere } from '../engine/whereabouts';
 import MonsterCanvas from './MonsterCanvas';
 import { CHAPTERS, CLUES, STORY_MISSIONS, missionHint, missionState, nextStoryMission } from '../data/story';
 
@@ -21,14 +22,10 @@ function Face({ branch, who, day }: { branch: BranchId; who: string; day: number
   );
 }
 
-/** 보상 요약: "호감 가디 +6 · 군기 +3" */
+/** 보상 요약: "가디 호감 +6" (체력·멘탈·군기·숙련은 보이지 않는 값이라 적지 않는다) */
 function rewardText(e: Effects, branch: BranchId): string {
   const parts: string[] = [];
   const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`);
-  if (e.hp) parts.push(`체력 ${sign(e.hp)}`);
-  if (e.mental) parts.push(`멘탈 ${sign(e.mental)}`);
-  if (e.discipline) parts.push(`군기 ${sign(e.discipline)}`);
-  if (e.skill) parts.push(`숙련 ${sign(e.skill)}`);
   for (const [id, v] of Object.entries(e.affinity ?? {})) {
     if (v) parts.push(`${NPC_SKINS[branch][id as keyof typeof NPC_SKINS[BranchId]].name} 호감 ${sign(v)}`);
   }
@@ -55,26 +52,22 @@ function stepTarget(step: { spot?: string; npc?: string }, branch: BranchId, day
 /** 화면 왼쪽: 진행 중인 퀘스트 요약 (클릭하면 퀘스트 창) */
 export function QuestTracker({ onOpen }: { onOpen: () => void }) {
   const s = useGame();
-  const slow = questSlowActive(s);
   const mc = s.mealCheck;
   const items: { title: string; next: string; done?: boolean }[] = [];
   const story = s.clues.length > 0 ? nextStoryMission(s) : null;
   if (story) items.push({ title: `📖 ${story.chapter}장 · ${story.title}`, next: missionHint(story, s) });
   const ate = mc && s.daily.includes(`meal_${mc.meal}`);
+  // 식사는 미션이 아니다: 1생활관에 가면 분대장이 불러서 다 같이 식당으로 간다 — 길만 안내한다
   if (mc && !ate) {
-    const left = mc.targets.filter((id) => !mc.asked.includes(id));
-    const march = mc.marchAt ?? null;
-    items.push(mc.status !== 'asking'
-      ? (march === null || s.minute < march
-        ? { title: '🍚 식사 집합', next: `📍 막사 앞 집합 · ${march !== null ? fmtTime(march) : '곧'} 다 같이 출발` }
-        : { title: '🍚 식사', next: '🚶 1생활관이 식당으로 이동 중 — 배식대에서 식판 받고 내 자리(분대 줄)에 앉자', done: true })
-      : { title: `🍚 식사 집합 (${mc.asked.length}/${mc.targets.length})`, next: `${left.map((id) => `👤 ${memberName(s.branch, id)} 📍${npcWhere(s.branch, id) ?? '?'}`).join(' / ')} · ${fmtTime(mc.start + mealGatherMin())}까지` });
+    items.push(runtime.player.map !== 'mess' && s.minute < mc.leaveBy
+      ? { title: '🍚 식사', next: `📍 1생활관 — 분대원들과 다 같이 식당으로 (${fmtTime(mc.leaveBy)}까지 기다려 준다)` }
+      : { title: '🍚 식사', next: '📍 병영식당 — 배식대에서 식판 받고 내 자리(분대 줄)에 앉자' });
   }
   if (s.patrol) {
     const left = PATROL_SPOTS.filter((sp) => !s.patrol!.done.includes(sp));
     items.push({
       title: `🔦 야간 순찰 (${s.patrol.done.length}/${PATROL_SPOTS.length})`,
-      next: left.length ? `📍 ${spotLabel(s.branch, left[0])} 외 ${left.length - 1}곳 · 23:00까지` : '📍 막사 1층 지휘통제실 당직사관에게 보고',
+      next: left.length ? `📍 ${spotLabel(s.branch, left[0])} 외 ${left.length - 1}곳` : '📍 막사 1층 지휘통제실 당직사관에게 보고',
       done: !left.length,
     });
   }
@@ -88,14 +81,14 @@ export function QuestTracker({ onOpen }: { onOpen: () => void }) {
   if (!items.length && !offers) return null;
   return (
     <div className="quest-tracker" onClick={onOpen} title="퀘스트 창 열기 (Q)">
-      <div className="qt-head">📋 퀘스트 <kbd>Q</kbd>{slow && <span className="qt-slow">🐢 시간 ½</span>}</div>
-      {items.slice(0, 4).map((it, i) => (
+      <div className="qt-head">📋 퀘스트 <kbd>Q</kbd></div>
+      {items.slice(0, 6).map((it, i) => (
         <div key={i} className={`qt-item ${it.done ? 'done' : ''}`}>
           <div className="qt-title">{it.title}</div>
           <div className="qt-next">▶ {it.next}</div>
         </div>
       ))}
-      {items.length > 4 && <div className="qt-more">외 {items.length - 4}개…</div>}
+      {items.length > 6 && <div className="qt-more">외 {items.length - 6}개…</div>}
       {offers > 0 && <div className="qt-offers">📬 받을 수 있는 퀘스트 {offers}개 — 💬 표시된 사람에게 말 걸기</div>}
     </div>
   );
@@ -105,7 +98,6 @@ export function QuestTracker({ onOpen }: { onOpen: () => void }) {
 export function QuestLog({ onClose }: { onClose: () => void }) {
   const s = useGame();
   const ctx = { branch: s.branch, name: s.name, day: s.day };
-  const slow = questSlowActive(s);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === 'q' || e.key === 'Q') { e.preventDefault(); e.stopPropagation(); onClose(); }
@@ -113,10 +105,9 @@ export function QuestLog({ onClose }: { onClose: () => void }) {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
-  const mc = s.mealCheck;
   const offers = questOffers(s);
   const openOffers = offers.filter((o) => o.open);
-  const hasActive = !!mc || !!s.patrol || s.quests.length > 0;
+  const hasActive = !!s.patrol || s.quests.length > 0;
   const [tab, setTab] = useState<'story' | 'active' | 'offers' | 'chains'>(s.clues.length > 0 && nextStoryMission(s) ? 'story' : hasActive || !openOffers.length ? 'active' : 'offers');
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -127,7 +118,7 @@ export function QuestLog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="ql-tabs">
           {s.clues.length > 0 && <button className={tab === 'story' ? 'on' : ''} onClick={() => setTab('story')}>📖 스토리</button>}
-          <button className={tab === 'active' ? 'on' : ''} onClick={() => setTab('active')}>진행 중 ({s.quests.length + (mc ? 1 : 0) + (s.patrol ? 1 : 0)})</button>
+          <button className={tab === 'active' ? 'on' : ''} onClick={() => setTab('active')}>진행 중 ({s.quests.length + (s.patrol ? 1 : 0)})</button>
           <button className={tab === 'offers' ? 'on' : ''} onClick={() => setTab('offers')}>📬 받을 수 있는 퀘스트 ({openOffers.length})</button>
           <button className={tab === 'chains' ? 'on' : ''} onClick={() => setTab('chains')}>🔗 연계 퀘스트</button>
         </div>
@@ -136,29 +127,11 @@ export function QuestLog({ onClose }: { onClose: () => void }) {
         {tab === 'chains' && <ChainsTab offers={offers} />}
         {tab === 'active' && <div className="ql-body">
           <p className="hud-dim ql-hint">
-            {slow ? '🐢 자유 시간에 퀘스트가 진행 중이라 시간이 절반 속도로 흐른다. ' : ''}
             ❗ 표시가 다음 목적지다. 다른 구역이면 길 끝 표지판을 따라가자.
           </p>
-          {mc && (
-            <div className="quest">
-              <b>🍚 식사 집합</b> <span className="hud-dim">({mc.asked.length}/{mc.targets.length}{mc.status === 'asking' ? ` · ${fmtTime(mc.start + mealGatherMin())}까지` : ''})</span>
-              <div>밥 먹으러 가기 전에 선임들께 "식사하러 가시겠습니까?" 여쭤보고, 다 모이면 같이 식당으로 간다.</div>
-              <div className="ql-faces">{mc.targets.map((id) => <Face key={id} branch={s.branch} who={id} day={s.day} />)}</div>
-              {(mc.by ?? 'me') === 'me' && <ul className="ql-steps">
-                {mc.targets.map((id) => (
-                  <li key={id} className={mc.asked.includes(id) ? 'done' : 'cur'}>
-                    {mc.asked.includes(id) ? '✓' : '▶'} {memberFullName(s.branch, id, s.day)}께 여쭤보기{mc.asked.includes(id) ? ' — 막사 앞에서 대기 중' : ` · 📍 ${npcWhere(s.branch, id) ?? '위치 확인 중'}`}
-                  </li>
-                ))}
-              </ul>}
-              <div className="hud-dim">
-                {mc.by === 'junior' ? `맞후임이 대신 여쭤봤다. 막사 앞에 모여 ${mc.marchAt != null ? fmtTime(mc.marchAt) : ''} 출발.` : mc.by === 'auto' ? '알아서 막사 앞에 모여 다 같이 간다.' : mc.status === 'together' ? '✅ 완료! 다 같이 식당으로.' : mc.status === 'missed' ? '❌ 시간 초과 — 생활관 인원끼리 모여 갔다. (눈치가 보인다)' : '보상: 군기 +2 · 멘탈 +1 · 선임 호감 +2씩'}
-              </div>
-            </div>
-          )}
           {s.patrol && (
             <div className="quest">
-              <b>🔦 야간 순찰 (막사 복도)</b> <span className="hud-dim">({s.patrol.done.length}/{PATROL_SPOTS.length} · 23:00까지)</span>
+              <b>🔦 야간 순찰 (막사 복도)</b> <span className="hud-dim">({s.patrol.done.length}/{PATROL_SPOTS.length})</span>
               <div>손전등을 들고 막사 1·2층 복도·세탁실·화장실을 점검한 뒤, 1층 지휘통제실 당직사관에게 보고하자. 장소 가까이 가면 자동으로 점검된다.</div>
               <div className="ql-faces"><span className="ql-face-label">보고</span><Face branch={s.branch} who="lt" day={s.day} /></div>
               <ul className="ql-steps">
@@ -167,10 +140,10 @@ export function QuestLog({ onClose }: { onClose: () => void }) {
                 ))}
                 <li className={s.patrol.done.length >= PATROL_SPOTS.length ? 'cur' : ''}>○ 📍 막사 1층 지휘통제실 — 순찰 결과 보고</li>
               </ul>
-              <div className="hud-dim">보상: 군기 +4 · 소대장 호감 +3 (23:00까지 못 마치면 군기 감소)</div>
+              <div className="hud-dim">보상: 소대장 호감 +3</div>
             </div>
           )}
-          {s.quests.length === 0 && !mc && !s.patrol && <p className="hud-dim">진행 중인 퀘스트가 없다. 선후임·간부와 대화하면 부탁을 받을 수 있다.</p>}
+          {s.quests.length === 0 && !s.patrol &&<p className="hud-dim">진행 중인 퀘스트가 없다. 선후임·간부와 대화하면 부탁을 받을 수 있다.</p>}
           {s.quests.map((q) => {
             const d = QUESTS[q.id];
             if (!d) return null;

@@ -99,14 +99,6 @@ export default function SettingsMenu() {
           <section>
             <h4>게임 진행</h4>
             <div className="set-row">
-              <div><b>시간 흐름</b><div className="hud-dim">실제 1초에 흐르는 게임 시간</div></div>
-              <Segmented k="timeSpeed" options={[{ value: 'slow', label: '느리게 (0.7분)' }, { value: 'normal', label: '보통 (1분)' }, { value: 'fast', label: '빠르게 (1.7분)' }]} />
-            </div>
-            <div className="set-row">
-              <div><b>집합 허용 시간</b><div className="hud-dim">집합 호출 후 지각 처리까지의 여유 · 위병소·훈련장은 +10분, 시간이 빠를수록 자동으로 늘어남</div></div>
-              <Segmented k="gatherWindow" options={[{ value: 'relaxed', label: '넉넉 (30분)' }, { value: 'normal', label: '보통 (20분)' }, { value: 'strict', label: '엄격 (15분)' }]} />
-            </div>
-            <div className="set-row">
               <div><b>🧪 테스터 모드</b><div className="hud-dim">F9 (또는 ` 키)로 진행 중인 미션을 즉시 종료</div></div>
               <Segmented k="testerMode" options={ON_OFF} />
             </div>
