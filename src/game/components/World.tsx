@@ -413,6 +413,8 @@ const NIGHT_POS: Partial<Record<NpcId, Pos>> = {
 };
 /** 소등(저녁 점호 후): 유동병력 없음. 병사는 침상에서 취침, 근무자만 제자리 */
 const LIGHTS_OUT = 22 * 60;
+/** 당직 간부가 밤새 앉아 있는 지휘통제실 책상 자리 */
+const DUTY_DESK: Pos = ["command", 5, 2];
 /** 1분대 침상 (1생활관 위쪽 줄 x, 내 침상은 3). 저녁 점호 때 이 침상에 앉고, 소등하면 그대로 눕는다 */
 const BED_X: Partial<Record<NpcId, number>> = {
   sgt: 1,
@@ -576,13 +578,15 @@ const bedY = (row: "top" | "bottom") => (row === "top" ? 2.62 : 7.62);
 const aisleY = (row: "top" | "bottom") => (row === "top" ? 4 : 6);
 /** 그날 밤 당직 간부 (저녁 점호 당직사령과 같다) */
 const nightDutyOfficer = (day: number): NpcId => (day % 2 === 1 ? "lt" : "sgm");
+/** 그날 밤 실제로 당직을 서는 간부 (당직 간부가 없는 날엔 중대장) */
+function dutyOfficerNow(day: number): NpcId {
+  return presentNpcs(day).includes(nightDutyOfficer(day)) ? nightDutyOfficer(day) : "cpt";
+}
 /** 지금 보이는 주요 NPC: 소등 후엔 당직 간부만 남고 다른 간부는 퇴근 */
 function visibleNpcs(day: number, minute: number): NpcId[] {
   const ps = presentNpcs(day);
   if (minute < LIGHTS_OUT) return ps;
-  const duty = ps.includes(nightDutyOfficer(day))
-    ? nightDutyOfficer(day)
-    : "cpt";
+  const duty = dutyOfficerNow(day);
   return ps.filter((id) => !NPC_ROLES[id].officer || id === duty);
 }
 /** 주요 NPC가 침상에 누워 있는지 */
@@ -1576,6 +1580,20 @@ export default function World() {
       minute: nd.kind === "guard" ? nd.shiftStart - 20 : nd.shiftStart - 2,
     });
     lieInBed();
+    // 당직 간부는 진작 지휘통제실 책상에 앉아 있다 (점호 뒤 생활관에 남아 있다가 보이지 않게)
+    {
+      const off = npcs.current[dutyOfficerNow(st.day)];
+      if (off && off.map !== DUTY_DESK[0]) {
+        off.map = DUTY_DESK[0];
+        off.x = DUTY_DESK[1] + 0.5;
+        off.y = DUTY_DESK[2] + 0.5;
+        off.dir = "down";
+        off.path = [];
+        off.viaDoor = null;
+        off.targetKey = `${DUTY_DESK[0]}:${DUTY_DESK[1]},${DUTY_DESK[2]}`;
+        off.moving = false;
+      }
+    }
     placeAt(nd.prev, "room1", 4.5, 4.2, "left"); // 내 침상 머리맡 통로에 쪼그려 앉아 깨운다
     st.setNightDuty({ phase: "woken" });
     const sp = speakerOf(nd.prev);
@@ -2331,6 +2349,37 @@ export default function World() {
     });
   };
 
+  // 🌙 근무를 마치고 딴 데로 새려 하면: 피곤해서 발길을 돌린다 (내 침상으로 가는 길만 열려 있다)
+  const tiredRef = useRef<(d: Door) => void>(() => {});
+  tiredRef.current = (d: Door) => {
+    const p = runtime.player;
+    const back = { up: [0, 0.7], down: [0, -0.7], left: [0.7, 0], right: [-0.7, 0] }[d.enterDir];
+    p.x += back[0];
+    p.y += back[1];
+    p.moving = false;
+    keys.current = {};
+    const nd = useGame.getState().nightDuty;
+    const lines = [
+      "(하아암… 피곤하다. 딴 데 갈 기운도 없다. 얼른 내 침상으로 가서 자자.)",
+      "(눈꺼풀이 천근만근이다. 지금은 아무 데도 가고 싶지 않아. 내 침상으로 가자.)",
+      "(근무 끝났으면 자는 게 군인의 도리지… 얼른 침상으로.)",
+    ];
+    setOverlay({
+      type: "dialogue",
+      script: {
+        lines: [
+          {
+            who: "me",
+            text:
+              nd?.phase === "wakeNext"
+                ? "(어딜 가… 졸려 죽겠다. 다음 근무자 깨워서 교대하고, 얼른 내 침상으로 가서 자자.)"
+                : lines[Math.floor(Math.random() * lines.length)],
+          },
+        ],
+      },
+    });
+  };
+
   // 🚪 지휘통제실 · 행정반: 노크하고 들어간다. 그냥 들어가면 안에 있는 간부나 선임 행정병에게 잔소리를 듣는다
   const knockRef = useRef<(d: Door) => void>(() => {});
   knockRef.current = (d: Door) => {
@@ -2466,6 +2515,8 @@ export default function World() {
       }
       const ng = nightGoal(id, st);
       if (ng) return ng;
+      // 🌙 소등 뒤 당직 간부는 지휘통제실 책상을 지킨다 (생활관 점호를 마치면 그리로 간다)
+      if ((m >= LIGHTS_OUT || m < 6 * 60) && id === dutyOfficerNow(st.day)) return DUTY_DESK;
       if (ev && !st.eventBegun && !ev.auto && ev.start - m <= ARRIVE_AUTO_GAP && ev.spot) {
         const sp = world.spots[ev.spot];
         if (!officer) {
@@ -4423,6 +4474,16 @@ export default function World() {
               Math.abs(p.y - (ty + 0.5)) < 1.0,
           );
           if (hit) {
+            // 🌙 근무를 마쳤으면(교대 · 복귀) 내 침상 쪽으로 가는 문 말고는 나가지 않는다
+            const ndD = st.nightDuty;
+            if (
+              ndD &&
+              (ndD.phase === "return" || (ndD.kind === "watch" && ndD.phase === "wakeNext")) &&
+              doorToward(world, p.map, world.spots.bed.map)?.to !== d.to
+            ) {
+              tiredRef.current(d);
+              break;
+            }
             if (d.to === "room2" && rankIdxForDay(st.day) < 2) {
               askEnterRef.current(d);
               break;
