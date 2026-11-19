@@ -852,7 +852,7 @@ function d03(ctx: StoryCtx, q = 1) {
         ],
         choices: [
           { text: '정문 밖 안개를 뚫고 나가면 된다', grade: 'bad', reply: [narr('(정문 밖으로 나가도 초소 앞이었다. 그 길은 아니다.)')] },
-          { text: '별 조각 일곱 개, 그리고 소원을 스스로 거두는 것', grade: 'good', reply: [say('buddy', '병장님은 조각은 다 모았는데, 거두지 못했지. …마지막은 우리 마음이구나.')] },
+          { text: '별 조각 일곱 개, 그리고 소원을 스스로 거두는 것', grade: 'good', reply: [say('buddy', back ? '병장님은 조각은 다 모았는데, 거두지 못했지. …마지막은 우리 마음이구나.' : '그 병장님은 조각을 다 모으고도 거두지 못했다고요? …그럼 마지막은 마음이군요.')] },
           { text: '전역일까지 무사히 버티면 된다', grade: 'bad', reply: [narr('(병장님은 10년을 버텼다. 버티는 것만으론 안 된다.)')] },
         ],
       },
@@ -869,7 +869,7 @@ function d03(ctx: StoryCtx, q = 1) {
       choices: [
         { text: '말 없는 병장', grade: 'bad', reply: [narr('(병장님은 오히려 단서를 남겼다. 숨길 이유가 없다.)')] },
         { text: '밤마다 나타난 가짜 당직부관', grade: 'good', reply: [
-          say('buddy', '그 똑딱거리는 녀석… 그럼 내일 밤 위병소에 또 오겠네.'),
+          say('buddy', back ? '그 똑딱거리는 녀석… 그럼 내일 밤 위병소에 또 오겠네.' : '똑딱거리는… 왠지 그 소리, 저도 들어 본 것 같습니다. 내일 밤 위병소에 또 오겠네요.'),
           me('"응. 이번엔 안 넘어가."'),
         ] },
         { text: '도서관 관리병 네이티오', grade: 'bad', reply: [narr('(네이티오는 늘 수수께끼로 길을 알려 줬다. 방해한 적은 없다.)')] },
@@ -1121,10 +1121,13 @@ export function storyNpcOptions(id: NpcId, ctx: StoryCtx): MenuOption[] {
   const opts: MenuOption[] = [];
   const free = freeNow();
   if (id === 'buddy') {
-    if (isOpen('M-06')) opts.push({ label: '🧺 "같이 빨래하러 가자"', hint: free ? '📖 스토리' : '점심·개인정비 시간에', disabled: !free, onSelect: () => m06(ctx) });
+    // 📖 동기가 나를 잊은 동안엔, 서로 아는 사이여야 하는 지난 미션을 함께할 수 없다 (기억을 되찾은 뒤에)
+    const forgot = flag('m13') && !flag('buddyBack');
+    const forgotHint = '동기가 나를 기억하지 못한다';
+    if (isOpen('M-06')) opts.push({ label: '🧺 "같이 빨래하러 가자"', hint: forgot ? forgotHint : free ? '📖 스토리' : '점심·개인정비 시간에', disabled: forgot || !free, onSelect: () => m06(ctx) });
     if (isOpen('D-01')) {
       const ev = eveningNow();
-      opts.push({ label: '🗣️ "남아서 같이 정리하자" (추리 정리 1)', hint: ev ? '체단실에서' : '19:00~21:20', disabled: !ev, onSelect: () => ctx.goTo('gymroom', 6.5, 6.5, 'right', () => { ctx.place('buddy', 'gymroom', 7.5, 6.5, 'left'); d01(ctx); }) });
+      opts.push({ label: '🗣️ "남아서 같이 정리하자" (추리 정리 1)', hint: forgot ? forgotHint : ev ? '체단실에서' : '19:00~21:20', disabled: forgot || !ev, onSelect: () => ctx.goTo('gymroom', 6.5, 6.5, 'right', () => { ctx.place('buddy', 'gymroom', 7.5, 6.5, 'left'); d01(ctx); }) });
     }
   }
   // 7일차 밤 당직 간부: "어젯밤 당직부관?"

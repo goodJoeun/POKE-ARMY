@@ -33,4 +33,6 @@ export const DEX = {
   // 서브 스토리: 탄약고 군견 하데리어(Herdier) · 분리수거장 깨봉이(Trubbish)
   herdier: 507,
   trubbish: 568,
+  // 조리실 먹고자(Munchlax)
+  munchlax: 446,
 };

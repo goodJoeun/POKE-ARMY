@@ -364,7 +364,8 @@ export const DIALOGUES: Dialogue[] = [
   },
   {
     id: 'buddy_rank_up', npc: 'buddy', once: true,
-    when: (c) => c.day >= 7,
+    // "벌써 상병" — 상병인 7~9일차만 (10일차부턴 병장)
+    when: (c) => c.day >= 7 && c.day <= 9,
     lines: [
       { who: 'npc', text: '우리 벌써 상병이야. 우리 처음 왔을 때 기억나? 둘 다 덜덜 떨었잖아.' },
     ],
@@ -385,7 +386,8 @@ export const DIALOGUES: Dialogue[] = [
   // ───────── 후임 (junior) ─────────
   {
     id: 'junior_arrive', npc: 'junior', once: true, priority: 12,
-    when: (c) => c.day >= 4,
+    // "오늘 전입 왔습니다" — 전입 온 날(4일차)만
+    when: (c) => c.day === 4,
     lines: [
       { who: 'npc', text: '{S}! 이병 {n:junior}! 오늘 전입 왔습니다!' },
       { who: 'npc', text: '선, 선임님이 제 맞선임이라고 들었습니다!' },
@@ -412,7 +414,8 @@ export const DIALOGUES: Dialogue[] = [
   },
   {
     id: 'junior_tour', npc: 'junior', once: true,
-    when: (c) => c.day >= 4 && c.affinity.junior >= 0,
+    // 갓 전입 온 후임(이병)이 길을 묻는다: 4~6일차만. 일병이 된 뒤엔 이미 다 안다
+    when: (c) => c.day >= 4 && c.day <= 6 && c.affinity.junior >= 0,
     lines: [
       { who: 'npc', text: '선임님, 혹시… PX랑 싸지방이 어디 있는지 알려주실 수 있습니까?' },
     ],
@@ -431,7 +434,8 @@ export const DIALOGUES: Dialogue[] = [
   },
   {
     id: 'junior_struggle', npc: 'junior', once: true,
-    when: (c) => c.day >= 5,
+    // 아직 서툰 이병·일병 시절 (5~7일차)
+    when: (c) => c.day >= 5 && c.day <= 7,
     lines: [
       { who: 'npc', text: '선임님… 제가 자꾸 실수해서 다들 저를 싫어하는 것 같습니다.' },
     ],
@@ -473,7 +477,8 @@ export const DIALOGUES: Dialogue[] = [
   // ───────── 막내 (junior2) ─────────
   {
     id: 'junior2_arrive', npc: 'junior2', once: true, priority: 12,
-    when: (c) => c.day >= 7,
+    // "전입을 명받았습니다" — 전입 온 날(7일차)만
+    when: (c) => c.day === 7,
     lines: [
       { who: 'npc', text: '{S}!!! 이병 {n:junior2}!!! 전입을 명받았습니다!!!' },
       { who: 'npc', text: '질문 있습니다! 상병님 계급장은 왜 줄이 세 개입니까?!' },
@@ -494,7 +499,8 @@ export const DIALOGUES: Dialogue[] = [
   },
   {
     id: 'junior2_study', npc: 'junior2', once: true,
-    when: (c) => c.day >= 8,
+    // 계급 체계가 헷갈리는 갓 전입 온 이병 시절 (8~9일차)
+    when: (c) => c.day >= 8 && c.day <= 9,
     lines: [
       { who: 'npc', text: '선임님! 계급 체계가 너무 헷갈립니다! 같이 외워주실 수 있습니까?' },
     ],
@@ -593,7 +599,8 @@ export const DIALOGUES: Dialogue[] = [
   },
   {
     id: 'lt_squadleader', npc: 'lt', once: true, priority: 25,
-    when: (c) => c.day >= 7,
+    // "오늘부로 분대장" — 분대장이 된 날(7일차)만
+    when: (c) => c.day === 7,
     lines: [
       { who: 'npc', text: '{me} 상병. 오늘부로 네가 우리 생활관 분대장이다.' },
       { who: 'npc', text: '분대장은 후임들에게 지시할 수 있는 유일한 병사다. 그만큼 책임도 무겁다.' },
@@ -1046,8 +1053,11 @@ export function pickTalk(key: string, pool: string[]): string {
   return line;
 }
 /** 주요 인물 잡담 후보: 공통 + 추가분 + 군별 오마주 */
-export function smallTalkPool(branch: BranchId, id: NpcId): string[] {
-  return [...(SMALL_TALK[id] ?? []), ...(SMALL_TALK_MORE[id] ?? []), ...(SMALL_TALK_BRANCH[branch]?.[id] ?? [])];
+export function smallTalkPool(branch: BranchId, id: NpcId, day?: number): string[] {
+  const all = [...(SMALL_TALK[id] ?? []), ...(SMALL_TALK_MORE[id] ?? []), ...(SMALL_TALK_BRANCH[branch]?.[id] ?? [])];
+  // 분대장(병장)이 전역한 뒤엔 "분대장님" 얘기를 하지 않는다 (맞선임은 그때부터 자기가 분대장이다)
+  if (day !== undefined && day >= 4 && (id === 'senior' || id === 'buddy')) return all.filter((l) => !l.includes('분대장님'));
+  return all;
 }
 
 export function isLastDay(day: number) {

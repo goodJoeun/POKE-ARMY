@@ -16,6 +16,7 @@ import {
   questOffers,
   dialogueById,
   PATROL_SPOTS,
+  buddyForgot,
 } from "../state/store";
 import {
   BRANCHES,
@@ -24,6 +25,7 @@ import {
   TOTAL_DAYS,
   fmtTime,
   rankIdxForDay,
+  RANKS,
   seasonForDay,
 } from "../data/branches";
 import { findSpecies } from "../data/monsters";
@@ -270,6 +272,34 @@ function mealSeated(day: number, minute: number) {
   }
   return mealRt.seated;
 }
+/** 식사 때 분대를 이끄는 사람: 분대장(가디) → 맞선임(디그다). 둘 다 전역했으면 내가 분대장이다 (null) */
+function squadLeadKey(day: number): string | null {
+  const l = currentSquadLeader(day);
+  return l === "me" ? null : l;
+}
+/** 이 사람이 그날 나보다 계급이 낮은 후임인지 (주요 인물은 입대 순서, 엑스트라는 직책의 계급) */
+function juniorToMe(key: string, day: number): boolean {
+  const mine = rankIdxForDay(day);
+  if (!key.startsWith("x:")) {
+    const r = NPC_ROLES[key as NpcId];
+    return !!r && !r.officer && rankIdxForDay(day, r.offset) < mine;
+  }
+  const def = extrasForDay(useGame.getState().branch, day).find((d) => d.id === key.slice(2));
+  const word = def?.title.split(" ").pop() ?? "";
+  const idx = (RANKS as readonly string[]).indexOf(word);
+  return idx >= 0 && idx < mine;
+}
+/** 📖 나를 잊은 동기가 하는 말 (낯선 사람을 대하듯, 그래도 어딘가 낯익다) */
+const BUDDY_FORGOT_TALK = [
+  "…저, 혹시 저 아십니까? 이상하게 낯이 익어서요.",
+  "죄송합니다. 요즘 자꾸 사람 이름이 헷갈립니다. 분명 아는 얼굴 같은데…",
+  "(멍하니) …어디서 같이 뭘 했던 것 같은데. 빨래였나, 컴퓨터였나…",
+  "…같이 다니면 뭔가 떠오를 것 같기도 합니다.",
+];
+/** 내가 분대장일 때 "넵!" 하고 받는 사람 (후임 → 막내 → 동기) */
+function squadResponder(day: number): NpcId | null {
+  return (["junior", "junior2", "buddy"] as NpcId[]).find((id) => npcPresent(id, day)) ?? null;
+}
 /**
  * 최선임이 다 먹는 시각 (아직 앉지 않았으면 undefined).
  * 분대와 함께 온 끼니엔 내가 밥을 받아 앉기 전까지 선임들도 계속 먹는다:
@@ -277,7 +307,8 @@ function mealSeated(day: number, minute: number) {
  */
 function squadLeadDone(st: ReturnType<typeof useGame.getState>): number | undefined {
   const seated = mealSeated(st.day, st.minute);
-  const lead = squadKeys(st.branch, st.day)[0];
+  // 내가 분대장이면 분대원들은 내가 "생활관 가자" 할 때까지 자리에서 기다린다
+  const lead = squadLeadKey(st.day);
   const ls = lead ? seated[lead] : undefined;
   if (ls === undefined) return undefined;
   const withMe = mealCall.withMe === `${st.day}-${mealOf(st.minute)}`;
@@ -520,7 +551,7 @@ const followsMe = (key: string, st: ReturnType<typeof useGame.getState>) => {
   const nd = st.nightDuty;
   if (nd)
     return (
-      nd.partner === key && (nd.phase === "toPost" || nd.phase === "return")
+      nd.partner === key && (nd.phase === "toPost" || nd.phase === "report" || nd.phase === "return")
     );
   return questCompanion(key, st);
 };
@@ -603,7 +634,7 @@ const extraHiddenAtNight = (id: string, minute: number) => {
   if (
     id === "guard" &&
     nd?.kind === "guard" &&
-    (nd.phase === "shift" || nd.phase === "return")
+    (nd.phase === "shift" || nd.phase === "report" || nd.phase === "return")
   )
     return true;
   return !EXTRA_BED[id] && !NIGHT_STAY.has(id);
@@ -656,6 +687,25 @@ const WAKE_POS: Partial<Record<NpcId, Pos>> = {
   junior: ["room1", 10, 5],
   junior2: ["room1", 12, 5],
 };
+/**
+ * 🍚 식사하러 갈 때 먼 길을 걷지 않고 식당 입구로 바로 건너뛴다.
+ * 단, 내가 보고 있는 맵에서는 순간이동하지 않는다 (눈앞에서 갑자기 사라지지 않게 문으로 걸어 나간 뒤에 건너뛴다)
+ */
+function hopToMess(
+  ent: { map: MapId; x: number; y: number; dir: Dir; path: [number, number][]; viaDoor: Door | null },
+  goalMap: MapId,
+  minute: number,
+): boolean {
+  if (goalMap !== "mess" || ent.map === "mess" || !isMealTime(minute)) return false;
+  if (ent.map === runtime.player.map) return false;
+  ent.map = "mess";
+  ent.x = MESS_DOOR_IN[0];
+  ent.y = MESS_DOOR_IN[1];
+  ent.dir = "up";
+  ent.path = [];
+  ent.viaDoor = null;
+  return true;
+}
 /** 걷기 · 달리기 속도 (달리기는 지치지 않는다) */
 const WALK_SPEED = 6;
 const DASH_SPEED = 10.5;
@@ -1622,6 +1672,8 @@ export default function World() {
     };
     if (nd.kind === "watch") {
       const nextName = memberName(st.branch, nd.next);
+      // 깨우러 온 사람이 내 후임이면 존댓말로 깨우고, 나는 편하게 받는다
+      const prevJunior = juniorToMe(nd.prev, st.day);
       wakeThen(
         [
           {
@@ -1630,17 +1682,23 @@ export default function World() {
           },
           {
             who: sp.who,
-            text: "(속삭이며) {me}… {me}. 일어나. 불침번 근무 시간이다.",
+            text: prevJunior
+              ? "(속삭이며) {myrank}님… {me} {myrank}님. 일어나십시오. 불침번 근무 시간입니다."
+              : "(속삭이며) {me}… {me}. 일어나. 불침번 근무 시간이다.",
           },
           {
             who: "me",
-            text: "(비몽사몽, 모포를 걷고 침상에서 내려온다) …네. 일어났습니다.",
+            text: prevJunior
+              ? "(비몽사몽, 모포를 걷고 침상에서 내려온다) …어, 그래. 일어났어."
+              : "(비몽사몽, 모포를 걷고 침상에서 내려온다) …네. 일어났습니다.",
           },
           {
             who: sp.who,
-            text: `근무 인수인계. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기. 다음 근무자는 ${nextName}, 00:50에 깨워서 교대해.`,
+            text: prevJunior
+              ? `근무 인수인계입니다. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기 있습니다. 다음 근무자는 ${nd.next.startsWith("x:") ? nextName : `${npcDisplayName(st.branch, nd.next as NpcId, st.day)}님`}, 00:50에 깨우시면 됩니다.`
+              : `근무 인수인계. 특이사항 없음, 화장실 간 인원 없음. 손전등이랑 근무일지 여기. 다음 근무자는 ${nextName}, 00:50에 깨워서 교대해.`,
           },
-          { who: "me", text: "(작게) 네, 수고하셨습니다." },
+          { who: "me", text: prevJunior ? "(작게) 응, 수고했어. 들어가 자." : "(작게) 네, 수고하셨습니다." },
           {
             who: "narr",
             text: `${josa(prevName, "이", "가")} 조용히 자기 침상으로 돌아간다. 나는 근무 신고를 하러 지휘통제실로 간다.`,
@@ -1678,6 +1736,27 @@ export default function World() {
                 },
                 onDone: () => {
                   useGame.getState().finishShift();
+                  // 그사이 50분이 지났다: 나를 깨우고 돌아가던 이전 근무자는 진작 자기 침상에서 자고 있다
+                  {
+                    const prevKey = useGame.getState().nightDuty?.prev;
+                    const pe = prevKey ? entityOf(prevKey) : null;
+                    if (prevKey && pe) {
+                      const bed: [MapId, number, "top" | "bottom"] | undefined = prevKey.startsWith("x:")
+                        ? EXTRA_BED[prevKey.slice(2)]
+                        : BED_X[prevKey as NpcId] !== undefined
+                          ? ["room1", BED_X[prevKey as NpcId]!, "top"]
+                          : undefined;
+                      if (bed) {
+                        pe.map = bed[0];
+                        pe.x = bed[1] + 0.5;
+                        pe.y = bedY(bed[2]);
+                        pe.dir = "down";
+                        pe.path = [];
+                        pe.viaDoor = null;
+                        pe.moving = false;
+                      }
+                    }
+                  }
                   // 🎬 근무가 끝나 간다 → 먼저 1생활관 다음 근무자의 침상 앞으로 화면이 바뀌고, 그다음 안내
                   const s4 = useGame.getState();
                   const nk = s4.nightDuty?.next;
@@ -1775,9 +1854,9 @@ export default function World() {
         `🔦 00:50 — 근무 끝나기 10분 전. 다음 근무자 ${josa(memberName(st.branch, nd.next), "을", "를")} 깨워 교대하자.`,
         "alert",
       );
-    if (nightPhase === "return" && nd.kind === "guard")
+    if (nightPhase === "report" && nd.kind === "guard")
       st.toast(
-        "🌙 02:00 — 다음 근무자와 교대했다. 사수·부사수와 함께 조용히 생활관으로 복귀하자.",
+        "🌙 02:00 — 다음 근무자와 교대했다. 사수·부사수와 함께 지휘통제실에 근무 철수 보고하러 가자.",
         "info",
       );
     if (nightPhase === "toPost")
@@ -1900,6 +1979,7 @@ export default function World() {
       const sp = speakerOf(nd.next);
       const nextName = memberName(st.branch, nd.next);
       const same = nd.next === "buddy";
+      const forgotMe = same && buddyForgot(st);
       setOverlay({
         type: "dialogue",
         script: {
@@ -1914,7 +1994,9 @@ export default function World() {
             },
             {
               who: sp.who,
-              text: "…으음… 벌써 그렇게 됐어? …알았어, 일어날게.",
+              text: forgotMe
+                ? "…으음… 누, 누구… 아, 불침번 근무요? (나를 낯선 사람 보듯 본다) …네, 일어나겠습니다."
+                : "…으음… 벌써 그렇게 됐어? …알았어, 일어날게.",
             },
             {
               who: "me",
@@ -1926,7 +2008,9 @@ export default function World() {
             ...(st.flags[`star_${st.day}`]
               ? [{ who: "narr" as const, text: "(창가의 별빛 이야기는 꺼내지 않았다. 말해도 아무도 믿지 않을 테니까.)" }]
               : []),
-            { who: sp.who, text: "(하품) 수고했어. 들어가 자." },
+            forgotMe
+              ? { who: sp.who, text: "(어색하게) …수고하셨습니다. 들어가 주무십시오." }
+              : { who: sp.who, text: "(하품) 수고했어. 들어가 자." },
           ],
         },
         onDone: () => {
@@ -1939,8 +2023,37 @@ export default function World() {
             e.viaDoor = null;
             e.targetKey = "";
           }
-          s2.setNightDuty({ nextAwake: true, phase: "return" });
-          s2.toast("🛏️ 교대 완료. 내 침상으로 돌아가 자자.", "info");
+          s2.setNightDuty({ nextAwake: true, phase: "report" });
+          s2.toast("📋 교대 완료. 지휘통제실 당직 간부에게 근무 철수 보고하고 자자.", "info");
+        },
+      });
+      return;
+    }
+    if (key === "duty_report") {
+      const off = dutyOfficerNow(st.day);
+      const sp = speakerOf(off);
+      const watch = nd.kind === "watch";
+      const nextName = nd.next ? memberName(st.branch, nd.next) : "다음 근무자";
+      setOverlay({
+        type: "dialogue",
+        script: {
+          npc: sp.npc,
+          custom: sp.custom,
+          lines: watch
+            ? [
+                { who: "me", text: `(작게) "근무 철수 보고드립니다! 불침번 근무 중 특이사항 없음, 다음 근무자 ${nextName}에게 인계 완료했습니다."` },
+                { who: "npc", text: "(근무 일지에 서명하며) 수고했다. 조용히 들어가 자라. 아침 점호 늦지 말고." },
+              ]
+            : [
+                { who: "me", text: '"근무 철수 보고드립니다! 위병소 경계근무 중 특이사항 없음, 다음 근무자에게 인계 완료했습니다!"' },
+                { who: "npc", text: "그래, 추운데 고생했다. 둘 다 들어가 자라." },
+              ],
+        },
+        onDone: () => {
+          const s2 = useGame.getState();
+          s2.setNightDuty({ phase: "return" });
+          s2.addTip("근무를 마치면 다음 근무자에게 인계하고, 당직 간부에게 \"근무 철수 보고\"를 한 뒤 들어가 쉰다.");
+          s2.toast("🛏️ 철수 보고 완료. 내 침상으로 돌아가 자자.", "info");
         },
       });
       return;
@@ -2052,29 +2165,36 @@ export default function World() {
   };
 
   // 🍚 식사: 1생활관에 모인 분대에게 분대장이 "밥 먹으러 가자" → 화면 전환 → 다 같이 병영식당 입구
-  const mealCallRef = useRef<(lead: string) => void>(() => {});
+  const mealCallRef = useRef<(lead: string | null) => void>(() => {});
   mealCallRef.current = (lead) => {
     const st = useGame.getState();
     const p = runtime.player;
     p.moving = false;
     keys.current = {};
     mealCall.talking = true;
-    const sp = speakerOf(lead);
     const meal = mealOf(st.minute);
+    // 분대장이 외치고 내가 받는다 / 내가 분대장이면 내가 외치고 후임이 받는다
+    const resp = lead ? null : squadResponder(st.day);
+    const sp = speakerOf(lead ?? resp ?? "buddy");
+    const call = meal === "lunch"
+      ? "자, 1생활관! 점심 먹으러 가자. 다들 따라와."
+      : "오늘 일과 끝! 다들 저녁 먹으러 가자.";
     setOverlay({
       type: "dialogue",
       script: {
         npc: sp.npc,
         custom: sp.custom,
-        lines: [
-          {
-            who: "npc",
-            text: meal === "lunch"
-              ? "자, 1생활관! 점심 먹으러 가자. 다들 따라와."
-              : "오늘 일과 끝! 다들 저녁 먹으러 가자.",
-          },
-          { who: "me", text: "넵, 알겠습니다!" },
-        ],
+        lines: lead
+          ? [
+              { who: "npc", text: call },
+              { who: "me", text: "넵, 알겠습니다!" },
+            ]
+          : [
+              { who: "me", text: call },
+              ...(resp
+                ? [{ who: "npc" as const, text: resp === "buddy" ? "오케이~ 가자!" : "넵! 알겠습니다!" }]
+                : []),
+            ],
       },
       onDone: () => {
         const s2 = useGame.getState();
@@ -2106,22 +2226,30 @@ export default function World() {
   };
 
   // 🍚 다 먹은 뒤: 최선임이 "생활관 간다" → 화면 전환 → 분대와 다 같이 1생활관
-  const mealBackRef = useRef<(lead: string) => void>(() => {});
+  const mealBackRef = useRef<(lead: string | null) => void>(() => {});
   mealBackRef.current = (lead) => {
     const p = runtime.player;
     p.moving = false;
     keys.current = {};
     mealCall.talking = true;
-    const sp = speakerOf(lead);
+    const resp = lead ? null : squadResponder(useGame.getState().day);
+    const sp = speakerOf(lead ?? resp ?? "buddy");
     setOverlay({
       type: "dialogue",
       script: {
         npc: sp.npc,
         custom: sp.custom,
-        lines: [
-          { who: "npc", text: "다들 다 먹었지? 식판 반납하고, 생활관으로 간다." },
-          { who: "me", text: "넵!" },
-        ],
+        lines: lead
+          ? [
+              { who: "npc", text: "다들 다 먹었지? 식판 반납하고, 생활관으로 간다." },
+              { who: "me", text: "넵!" },
+            ]
+          : [
+              { who: "me", text: "다들 다 먹었지? 식판 반납하고, 생활관 가자." },
+              ...(resp
+                ? [{ who: "npc" as const, text: resp === "buddy" ? "오케이~" : "넵!" }]
+                : []),
+            ],
       },
       onDone: () => {
         const s2 = useGame.getState();
@@ -2373,7 +2501,9 @@ export default function World() {
             text:
               nd?.phase === "wakeNext"
                 ? "(어딜 가… 졸려 죽겠다. 다음 근무자 깨워서 교대하고, 얼른 내 침상으로 가서 자자.)"
-                : lines[Math.floor(Math.random() * lines.length)],
+                : nd?.phase === "report"
+                  ? "(피곤하다… 그래도 지휘통제실에 근무 철수 보고부터 하고 자자.)"
+                  : lines[Math.floor(Math.random() * lines.length)],
           },
         ],
       },
@@ -2407,7 +2537,8 @@ export default function World() {
     const def = inside?.startsWith("x:") ? extraDefs.find((e) => `x:${e.id}` === inside) : undefined;
     const officer = !!inside && (!inside.startsWith("x:") || !!def?.officer);
     const sp = inside ? speakerOf(inside) : null;
-    const senior = rankIdxForDay(st.day) <= 2; // 행정병(상병)보다 아래거나 같은 계급
+    // 안에 있는 사람이 나보다 선임이거나 동급이면 편하게 말하고, 후임이면 존댓말을 쓴다
+    const senior = !!inside && !juniorToMe(inside, st.day);
     let mode: "knock" | "barge" | null = null;
     setOverlay({
       type: "dialogue",
@@ -2471,7 +2602,7 @@ export default function World() {
                     ? "야, 노크! 상황 근무 중에 문 벌컥 열면 다들 놀란다. 다시는 그러지 마라."
                     : senior
                       ? "야, 노크 안 하냐? 문 벌컥 열면 서류 다 날아간다고. 다음부턴 똑똑 하고 들어와."
-                      : "…병장님, 노크는 하셔야죠. 서류 날아갑니다.";
+                      : "…{myrank}님, 노크는 하셔야죠. 서류 날아갑니다.";
           setOverlay({
             type: "dialogue",
             script: {
@@ -2566,8 +2697,8 @@ export default function World() {
       const starOn =
         !st.flags[`star_${st.day}`] &&
         (nd.kind === "watch"
-          ? nd.phase === "wakeNext" || nd.phase === "return"
-          : nd.phase === "toPost" || nd.phase === "return");
+          ? nd.phase === "wakeNext" || nd.phase === "report" || nd.phase === "return"
+          : nd.phase === "toPost" || nd.phase === "report" || nd.phase === "return");
       if (starOn && p.map === star[0] && dist(star[1], star[2]) < 1.9)
         return { key: "duty_star", kind: "duty", label: "✨ 희미한 별빛" };
       if (nd.phase === "toPost") {
@@ -2586,6 +2717,14 @@ export default function World() {
             key: "duty_wake",
             kind: "duty",
             label: `${memberName(st.branch, nd.next)} 깨우기 (근무 교대)`,
+          };
+      }
+      if (nd.phase === "report") {
+        if (p.map === DUTY_DESK[0] && dist(DUTY_DESK[1] + 0.5, DUTY_DESK[2] + 1.5) < 2.4)
+          return {
+            key: "duty_report",
+            kind: "duty",
+            label: "근무 철수 보고 (당직 간부)",
           };
       }
       if (nd.phase === "return") {
@@ -2757,7 +2896,9 @@ export default function World() {
       )
         return;
       const name = npcDisplayName(st.branch, id, st.day);
-      const q = st.questStepAt({ npc: id });
+      // 📖 동기가 나를 잊은 동안엔 동기와 하던 퀘스트를 이어 갈 수 없다 (낯선 사람처럼 대한다)
+      const forgot = id === "buddy" && buddyForgot(st);
+      const q = forgot ? null : st.questStepAt({ npc: id });
       if (q) {
         setOverlay({
           type: "dialogue",
@@ -2807,6 +2948,19 @@ export default function World() {
           return;
         }
         const d: Dialogue | null = s2.pickDialogue(id);
+        if (!d && id === "buddy" && buddyForgot(s2)) {
+          setOverlay({
+            type: "dialogue",
+            script: {
+              npc: id,
+              lines: [
+                { who: "npc", text: pickTalk("buddy_forgot", BUDDY_FORGOT_TALK) },
+                { who: "narr", text: "[함께한 곳을 되짚어 보면 기억이 돌아올지도 모른다: 행정반 분실물함 → 싸지방 → 농구장 → 막사 옥상]" },
+              ],
+            },
+          });
+          return;
+        }
         if (!d) {
           setOverlay({
             type: "dialogue",
@@ -2815,7 +2969,7 @@ export default function World() {
               lines: [
                 {
                   who: "npc",
-                  text: pickTalk(id, smallTalkPool(s2.branch, id)),
+                  text: pickTalk(id, smallTalkPool(s2.branch, id, s2.day)),
                 },
               ],
             },
@@ -2884,7 +3038,7 @@ export default function World() {
                     who: "npc",
                     text: pickTalk(
                       id,
-                      smallTalkPool(useGame.getState().branch, id),
+                      smallTalkPool(useGame.getState().branch, id, useGame.getState().day),
                     ),
                   },
                 ],
@@ -3098,7 +3252,7 @@ export default function World() {
               ? "12:00~13:00 / 17:30~18:30"
               : alone
                 ? "먼저 1생활관에 들러 분대와 같이 오자"
-                : "받아서 1분대 줄 내 자리(맞선임 옆)에 앉아 먹는다",
+                : "받아서 1분대 줄 내 자리에 앉아 먹는다",
             disabled: !ok || ate || !!myMeal.tray || alone,
             onSelect: () => {
               useGame.getState().spend(1);
@@ -3116,7 +3270,7 @@ export default function World() {
                     },
                     {
                       who: "narr",
-                      text: "식판을 들고 1분대 줄, 내 자리(맞선임 옆)로 가서 앉자.",
+                      text: "식판을 들고 1분대 줄, 내 자리로 가서 앉자.",
                     },
                   ],
                 },
@@ -4016,8 +4170,7 @@ export default function World() {
     keys.current = {};
     // 분대 선두(분대장)가 같은 줄에서 아직 먹는 중이면 "선임 속도에 맞추기"를 고를 수 있다
     // (내가 앉는 이 순간부터 선임들의 남은 식사 시간이 흐른다)
-    const squad = squadKeys(st.branch, st.day);
-    const leadKey = squad[0];
+    const leadKey = squadLeadKey(st.day);
     mealSeated(st.day, st.minute);
     mealRt.me = st.minute;
     const leadDone = squadLeadDone(st);
@@ -4478,8 +4631,8 @@ export default function World() {
             const ndD = st.nightDuty;
             if (
               ndD &&
-              (ndD.phase === "return" || (ndD.kind === "watch" && ndD.phase === "wakeNext")) &&
-              doorToward(world, p.map, world.spots.bed.map)?.to !== d.to
+              (ndD.phase === "return" || ndD.phase === "report" || (ndD.kind === "watch" && ndD.phase === "wakeNext")) &&
+              doorToward(world, p.map, ndD.phase === "report" ? DUTY_DESK[0] : world.spots.bed.map)?.to !== d.to
             ) {
               tiredRef.current(d);
               break;
@@ -4682,19 +4835,8 @@ export default function World() {
             continue;
           }
           if (n.targetKey !== key) {
-            // 식사하러 갈 땐 식당 입구에 바로 도착해서 자리로 걸어간다
-            if (
-              target[0] === "mess" &&
-              n.map !== "mess" &&
-              isMealTime(st.minute)
-            ) {
-              n.map = "mess";
-              n.x = MESS_DOOR_IN[0];
-              n.y = MESS_DOOR_IN[1];
-              n.dir = "up";
-              n.path = [];
-              n.viaDoor = null;
-            }
+            // 식사하러 갈 땐 식당 입구에 바로 도착해서 자리로 걸어간다 (내가 보고 있으면 문으로 걸어 나간다)
+            hopToMess(n, target[0], st.minute);
             route(n, target);
           }
         }
@@ -4778,14 +4920,16 @@ export default function World() {
                 : "up";
           n.moving = true;
         } else if (n.viaDoor && !blocked) {
-          // 문에 도착 → 다음 맵으로 넘어가서 다시 경로 설정
+          // 문에 도착 → 다음 맵으로 넘어가서 다시 경로 설정 (식당으로 가는 길이면 내 시야를 벗어난 뒤 건너뛴다)
           const d = n.viaDoor;
           n.map = d.to;
           n.x = d.arrive.x;
           n.y = d.arrive.y;
           n.dir = d.arrive.dir;
           n.viaDoor = null;
-          route(n, npcTarget(id));
+          const tgN = npcTarget(id);
+          hopToMess(n, tgN[0], st.minute);
+          route(n, tgN);
         } else {
           n.moving = false;
           // 소등 후: 자기 침상 앞 통로에 도착하면 그대로 눕는다
@@ -4972,14 +5116,7 @@ export default function World() {
         if (goal) {
           const gk = `${goal[0]}:${goal[1]},${goal[2]}`;
           if (e.targetKey !== gk) {
-            if (goal[0] === "mess" && e.map !== "mess") {
-              e.map = "mess";
-              e.x = MESS_DOOR_IN[0];
-              e.y = MESS_DOOR_IN[1];
-              e.dir = "up";
-              e.path = [];
-              e.viaDoor = null;
-            }
+            hopToMess(e, goal[0], st.minute);
             route(e, goal);
           }
           if (e.path.length) {
@@ -5014,6 +5151,7 @@ export default function World() {
             e.y = dd.arrive.y;
             e.dir = dd.arrive.dir;
             e.viaDoor = null;
+            hopToMess(e, goal[0], st.minute);
             route(e, goal);
           } else {
             e.moving = false;
@@ -5115,7 +5253,7 @@ export default function World() {
           mcM.meal === mealOf(st.minute)
         ) {
           const squad = squadKeys(st.branch, st.day);
-          const lead = squad[0];
+          const lead = squadLeadKey(st.day);
           const le = lead ? entityOf(lead) : undefined;
           const inRoom = (k: string) => {
             const g = MEAL_GATHER[k],
@@ -5132,7 +5270,10 @@ export default function World() {
             (squad.every(inRoom) || st.minute >= mcM.start + 4)
           )
             mealCallRef.current(lead);
-          else if (!lead) {
+          else if (!lead && squad.length && meReady && (squad.every(inRoom) || st.minute >= mcM.start + 4))
+            // 내가 분대장: 생활관에 들어서면 내가 분대원들을 데리고 간다
+            mealCallRef.current(null);
+          else if (!lead && !squad.length) {
             // 분대원이 아무도 없는 날: 혼자 가서 먹는다
             mealCall.key = mkey;
             mealCall.withMe = mkey;
@@ -5149,15 +5290,19 @@ export default function World() {
           !fading &&
           !warpReq.current
         ) {
-          const lead = squadKeys(st.branch, st.day)[0];
+          const lead = squadLeadKey(st.day);
           const leadAt = squadLeadDone(st);
           const meDone =
             st.daily.includes(`meal_${mealOf(st.minute)}`) &&
             !myMeal.eating &&
             !myMeal.tray;
           if (!lead && meDone) {
-            mealCall.back = mkey;
-            st.finishSquadMeal();
+            // 내가 분대장: 다 먹었으면 내가 "생활관 가자" (분대원이 없으면 그냥 끝)
+            if (squadKeys(st.branch, st.day).length) mealBackRef.current(null);
+            else {
+              mealCall.back = mkey;
+              st.finishSquadMeal();
+            }
           } else if (lead && meDone) {
             // 최선임이 아직 자리에 앉지 못했으면 지금 다 먹은 것으로 본다
             const leadDone = leadAt !== undefined && Number.isFinite(leadAt) ? leadAt : st.minute;
@@ -5315,6 +5460,8 @@ export default function World() {
           const n = entityOf(ndm.next);
           if (n) tg = { m: n.map, x: n.x, y: n.y - 0.8 };
         }
+        if (ndm.phase === "report")
+          tg = { m: DUTY_DESK[0], x: DUTY_DESK[1] + 0.5, y: DUTY_DESK[2] + 2 };
         if (ndm.phase === "return") {
           const bd = world.spots.bed;
           tg = { m: bd.map, x: bd.x + 0.5, y: bd.y + 0.5 };
@@ -5786,8 +5933,8 @@ export default function World() {
         ndS &&
         !st.flags[`star_${st.day}`] &&
         (ndS.kind === "watch"
-          ? ndS.phase === "wakeNext" || ndS.phase === "return"
-          : ndS.phase === "toPost" || ndS.phase === "return")
+          ? ndS.phase === "wakeNext" || ndS.phase === "report" || ndS.phase === "return"
+          : ndS.phase === "toPost" || ndS.phase === "report" || ndS.phase === "return")
       ) {
         const [sm, sx0, sy0] = STAR_POS[ndS.kind];
         if (p.map === sm) {

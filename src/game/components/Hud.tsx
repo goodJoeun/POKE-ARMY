@@ -26,8 +26,11 @@ function nightObjective(nd: NightDuty, branch: Parameters<typeof memberName>[0])
     case 'toPost': return `🌙 ${who(nd.partner)}과(와) 함께 ${spotLabel(branch, 'post')}(으)로 → 00:00 교대`;
     case 'shift': return watch ? '🔦 불침번 근무 중 (00:00~01:00)' : '🔦 위병소 경계근무 중 (00:00~02:00)';
     case 'wakeNext': return `🔦 다음 근무자 ${who(nd.next)}을(를) 깨워 교대 (01:00 전까지)`;
+    case 'report': return watch
+      ? '📋 교대 완료 — 지휘통제실 당직 간부에게 근무 철수 보고'
+      : `📋 ${who(nd.partner)}과(와) 함께 지휘통제실에 근무 철수 보고`;
     case 'return': return watch
-      ? '🛏️ 교대 완료 — 내 침상으로 돌아가 자자'
+      ? '🛏️ 철수 보고 완료 — 내 침상으로 돌아가 자자'
       : `🛏️ ${who(nd.partner)}과(와) 함께 생활관으로 복귀해 취침`;
   }
 }

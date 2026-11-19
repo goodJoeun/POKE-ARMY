@@ -108,7 +108,8 @@ export interface MealCheck {
  */
 export interface NightDuty {
   kind: 'watch' | 'guard';
-  phase: 'sleep' | 'woken' | 'toPost' | 'shift' | 'wakeNext' | 'return';
+  /** report: 교대를 마치고 지휘통제실 당직 간부에게 근무 철수 보고하러 가는 중 → return: 보고를 마치고 침상으로 */
+  phase: 'sleep' | 'woken' | 'toPost' | 'shift' | 'wakeNext' | 'report' | 'return';
   /** 나를 깨우는 사람 (불침번: 이전 근무자 / 위병소: 같이 가는 사수·부사수). 주요 NPC id 또는 'x:<엑스트라>' */
   prev: string;
   /** 위병소: 같이 근무하는 사수·부사수 */
@@ -133,6 +134,7 @@ export function nightDutyClockCap(nd: NightDuty): number {
     case 'shift':
       return nd.kind === 'watch' ? nd.shiftEnd - 10 : nd.shiftEnd;
     case 'wakeNext':
+    case 'report':
       return nd.shiftEnd;
     case 'return':
       return nd.shiftEnd + 30;
@@ -536,7 +538,8 @@ export const useGame = create<Store>((set, get) => ({
           const partner = rank <= 1 ? pick('senior', 'x:sq1', 'x:r2b', 'sgt') : pick('junior', 'junior2', 'buddy');
           nd = { kind: 'guard', phase: 'sleep', prev: partner, partner, next: '', nextAwake: false, shiftStart: 24 * 60, shiftEnd: 26 * 60 };
         } else {
-          const prev = pick('x:r2c', 'x:r2b', 'x:room2a', 'buddy');
+          // 앞 근무자: 이병·일병 땐 2분대 선임이, 상병부터는 후임(막내)이 깨우러 온다
+          const prev = rank >= 2 ? pick('junior2', 'junior', 'x:r2d', 'buddy') : pick('x:r2c', 'x:r2b', 'x:room2a', 'buddy');
           const next = pick('buddy', 'junior', 'x:sq1', 'senior');
           nd = { kind: 'watch', phase: 'sleep', prev, partner: null, next, nextAwake: false, shiftStart: 24 * 60, shiftEnd: 25 * 60 };
         }
@@ -711,8 +714,8 @@ export const useGame = create<Store>((set, get) => ({
     const watch = nd.kind === 'watch';
     get().applyEffects({ ...WORKLOAD[watch ? 'night' : 'guard'], discipline: 1 }, watch ? '불침번 근무' : '위병소 근무', true);
     get().log(watch ? '🌙 한 시간 동안 생활관의 밤을 지켰다.' : '🌙 두 시간 동안 위병소 초소를 지켰다.');
-    // 불침번은 끝나기 10분 전 → 다음 근무자 깨우러 / 위병소는 다음 근무자와 교대 → 복귀
-    set({ nightDuty: { ...nd, phase: watch ? 'wakeNext' : 'return' }, minute: watch ? nd.shiftEnd - 10 : nd.shiftEnd });
+    // 불침번은 끝나기 10분 전 → 다음 근무자 깨우러 / 위병소는 다음 근무자와 교대 → 지휘통제실에 철수 보고
+    set({ nightDuty: { ...nd, phase: watch ? 'wakeNext' : 'report' }, minute: watch ? nd.shiftEnd - 10 : nd.shiftEnd });
   },
 
   dialogueCtx: () => {
@@ -732,6 +735,8 @@ export const useGame = create<Store>((set, get) => ({
 
   pickDialogue: (npc) => {
     const s = get();
+    // 📖 동기가 나를 잊은 동안(잊혀 가는 이름): 예전처럼 부탁하거나 아는 척하지 않는다
+    if (npc === 'buddy' && buddyForgot(s)) return null;
     const c = get().dialogueCtx();
     const cands = DIALOGUES.filter(
       (d) => d.npc === npc && !(d.once && s.seen.includes(d.id)) && (!d.when || d.when(c)),
@@ -1032,7 +1037,9 @@ export interface QuestOffer {
 export function questOffers(s: Store): QuestOffer[] {
   const c = s.dialogueCtx();
   const out = new Map<string, QuestOffer>();
+  const forgot = buddyForgot(s);
   for (const d of DIALOGUES) {
+    if (forgot && d.npc === 'buddy') continue;
     const qids = [...new Set((d.choices ?? []).map((ch) => ch.effects?.quest).filter(Boolean) as string[])];
     for (const qid of qids) {
       if (!QUESTS[qid] || s.quests.some((x) => x.id === qid) || s.doneQuests.includes(qid)) continue;
@@ -1045,6 +1052,10 @@ export function questOffers(s: Store): QuestOffer[] {
     }
   }
   return [...out.values()];
+}
+/** 📖 잊혀 가는 이름: 동기가 내 이름을 잊었고(10일차~) 아직 기억을 되찾지 못했다 */
+export function buddyForgot(s: { flags: Record<string, boolean> }): boolean {
+  return !!s.flags.m13 && !s.flags.buddyBack;
 }
 /** 대화 id로 대화 찾기 */
 export function dialogueById(id: string) {

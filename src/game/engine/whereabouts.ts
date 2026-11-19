@@ -1,7 +1,7 @@
 import type { BranchId, MonsterLook, NpcId } from '../types';
 import { BRANCHES } from '../data/branches';
 import { NPC_SKINS, npcDisplayName } from '../data/npcs';
-import { EXTRAS, extraLook } from '../data/extras';
+import { EXTRAS, extraLook, extraTitleOnDay } from '../data/extras';
 import { getWorld, type MapId } from './map';
 import { runtime } from './runtime';
 import { npcCap } from './speakers';
@@ -31,7 +31,7 @@ export function memberFullName(branch: BranchId, key: string, day: number): stri
   if (isExtraKey(key)) {
     const d = EXTRAS[branch].find((e) => e.id === key.slice(2));
     if (!d) return key;
-    const words = d.title.split(' ');
+    const words = extraTitleOnDay(d, day).split(' ');
     return `${d.name} ${words[words.length - 1]}`;
   }
   return npcDisplayName(branch, key as NpcId, day);

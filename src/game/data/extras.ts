@@ -1,5 +1,6 @@
 import type { BranchId, Effects, MonsterLook } from '../types';
 import type { MapId } from '../engine/map';
+import { DAYS_PER_RANK, RANKS } from './branches';
 
 /**
  * 부대 엑스트라: 호감도·퀘스트 없이 부대를 채우는 등장인물.
@@ -41,9 +42,34 @@ export function extraLook(def: ExtraDef): MonsterLook {
   return { sprite: def.sprite, body: def.color, belly: '#f2ead8', accent: def.color, shape: 'round', ears: 'none', tail: 'none', eyes: 'dot', mouth: 'smile' };
 }
 
-/** 그날 부대에 있는 엑스트라 */
+/**
+ * 엑스트라도 시간이 지나면 진급한다: 직책 끝의 계급(이병·일병·상병·병장)은 1일차 계급이고,
+ * 주인공처럼 DAYS_PER_RANK일마다 한 계급씩 오른다 (병장에서 멈춘다 — 2분대의 말 없는 병장은 늘 병장).
+ * 진급하는 날은 사람마다 조금씩 다르다 (이름으로 정한 0~2일 차이).
+ */
+export function extraTitleOnDay(def: ExtraDef, day: number): string {
+  const words = def.title.split(' ');
+  const r0 = (RANKS as readonly string[]).indexOf(words[words.length - 1]);
+  if (r0 < 0) return def.title;
+  let h = 0;
+  for (const ch of def.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const phase = h % DAYS_PER_RANK;
+  const r = Math.min(RANKS.length - 1, Math.floor((day - 1 + r0 * DAYS_PER_RANK + phase) / DAYS_PER_RANK));
+  words[words.length - 1] = RANKS[r];
+  return words.join(' ');
+}
+
+const dayCache = new Map<string, ExtraDef[]>();
+/** 그날 부대에 있는 엑스트라 (직책의 계급은 그날 계급으로) */
 export function extrasForDay(branch: BranchId, day: number): ExtraDef[] {
-  return EXTRAS[branch].filter((d) => (!d.until || day < d.until) && (!d.from || day >= d.from));
+  const key = `${branch}:${day}`;
+  const hit = dayCache.get(key);
+  if (hit) return hit;
+  const list = EXTRAS[branch]
+    .filter((d) => (!d.until || day < d.until) && (!d.from || day >= d.from))
+    .map((d) => ({ ...d, title: extraTitleOnDay(d, day) }));
+  dayCache.set(key, list);
+  return list;
 }
 
 const MEDIC_DAILY = {
@@ -211,4 +237,15 @@ const RECYCLER: ExtraDef = {
   ],
 };
 
-for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN, AMMO_DOG, RECYCLER);
+/** 조리실 먹고자 (세 군 공통): 취사 지원 이병. 간 보기가 특기다 */
+const KITCHEN_HELPER: ExtraDef = {
+  id: 'munchlax', sprite: 'munchlax', name: '먹고자', title: '취사 지원 이병', map: 'kitchen', x: 8, y: 5, wander: 1, color: '#3a6a7a',
+  lines: [
+    '간 보는 중입니다! …한 숟갈만 더 보겠습니다.',
+    '취사병 선임님처럼 되는 게 꿈입니다. 많이 먹고, 많이 자고!',
+    '밥차 미는 건 제가 합니다! …밀다가 반찬 하나 집어 먹는 건 비밀입니다.',
+    '배고프시면 말씀하십시오. 누룽지 몰래 챙겨 드리겠습니다.',
+  ],
+};
+
+for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN, AMMO_DOG, RECYCLER, KITCHEN_HELPER);

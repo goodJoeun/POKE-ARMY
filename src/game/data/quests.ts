@@ -46,7 +46,7 @@ export const QUESTS: Record<string, QuestDef> = {
   },
   q_junior_tour: {
     id: 'q_junior_tour',
-    hint: '후임 전입 후 (4일차 이후)',
+    hint: '후임이 갓 전입 온 4~6일차 (이병일 때)',
     title: '후임에게 부대 안내',
     giver: 'junior',
     together: true,
