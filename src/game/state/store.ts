@@ -91,16 +91,14 @@ const PATROL_TEXT: Partial<Record<SpotId, string[]>> = {
   wc2: ['2층 화장실 이상 무.', '2층 화장실: 물이 계속 흐른다. 꼭지를 잠그고 수리 요청 메모.'],
 };
 
-/** 분대가 1생활관에서 나를 기다려 주는 시간(분): 식사 시작 후 이때까지 안 오면 분대는 먼저 식당으로 간다 */
-export const MEAL_WAIT_MIN = 20;
 const fmtClock = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(Math.floor(min % 60)).padStart(2, '0')}`;
 
 export interface MealCheck {
   meal: 'lunch' | 'dinner';
   /** 식사 시작 시각 */
   start: number;
-  /** 분대가 나를 기다려 주는 마지막 시각 (이후엔 분대만 먼저 출발) */
-  leaveBy: number;
+  /** 분대와 함께 먹고 생활관으로 돌아왔다. 그 전에는 배식 시간이 끝나지 않고, 다음 일정·스토리도 진행되지 않는다 */
+  done: boolean;
 }
 
 /**
@@ -171,6 +169,8 @@ interface Store extends Persist {
   beginEvent: (late?: boolean) => void;
   /** 다음 일정 장소에 도착했다: 그 일정 시각으로 넘어가 바로 시작한다 */
   arrive: () => void;
+  /** 분대와 함께 먹고 생활관으로 돌아왔다 (식사 끝) */
+  finishSquadMeal: () => void;
   /** 1일차 늦잠 장면 종료 → 연병장으로 끌려가 아침 점호 */
   oversleep: () => void;
   completeEvent: () => void;
@@ -346,6 +346,15 @@ export const useGame = create<Store>((set, get) => ({
     const promoted = day > 1 && rank > prevRank;
     if (promoted) logs.push(`🎖️ ${RANKS[rank]}으로 진급했다!`);
     if (day === 7) logs.push('🪖 생활관 분대장 임무를 맡게 됐다.');
+    // 의뢰인이나 남은 단계의 상대가 전역(전출)해 부대에 없으면 그 퀘스트는 사라진다
+    const quests = s.quests.filter((q) => {
+      const d = QUESTS[q.id];
+      if (!d) return false;
+      const gone = [d.giver, ...d.steps.slice(q.step).map((x) => x.npc)].find((n) => n && !npcPresent(n, day));
+      if (!gone) return true;
+      logs.push(fixJosa(`📋 ${NPC_SKINS[s.branch][gone].name}이(가) 전역해서 「${d.title}」 퀘스트가 사라졌다.`));
+      return false;
+    });
     teleportToBed(s.branch);
     set({
       minute: 6 * 60,
@@ -357,6 +366,7 @@ export const useGame = create<Store>((set, get) => ({
       daily: [],
       mealCheck: null,
       patrol: null,
+      quests,
       memory,
       dayLog: logs,
       stats: st,
@@ -402,6 +412,9 @@ export const useGame = create<Store>((set, get) => ({
     // 시간은 저절로 흐르지 않는다: 다음 일정 장소에 도착하기(arrive) 전에는 그 일정 시각에서 멈춘다
     const ev0 = s.currentEvent();
     if (ev0 && !s.eventBegun && !ev0.auto) minute = Math.min(minute, Math.max(s.minute, ev0.start));
+    // 식사는 분대 단위: 분대와 함께 먹고 돌아오기 전에는 배식 시간이 끝나지 않는다
+    const mc0 = s.mealCheck;
+    if (mc0 && !mc0.done) minute = Math.min(minute, Math.max(s.minute, (mc0.meal === 'lunch' ? 13 * 60 : 18 * 60 + 30) - 1));
     set({ minute });
     const ev = get().currentEvent();
     // 시간대 알림
@@ -430,8 +443,8 @@ export const useGame = create<Store>((set, get) => ({
       const assignMeal = (key: string, at: number, meal: MealCheck['meal']) => {
         if (minute < at || get().announced.includes(key)) return;
         set({ announced: [...get().announced, key] });
-        set({ mealCheck: { meal, start: at, leaveBy: at + MEAL_WAIT_MIN } });
-        get().toast(`🍚 식사 시간. 1생활관으로 가면 분대원들과 다 같이 식당으로 간다 (${fmtClock(at + MEAL_WAIT_MIN)}까지 기다려 준다)`, 'info');
+        set({ mealCheck: { meal, start: at, done: false } });
+        get().toast('🍚 식사 시간. 먼저 1생활관에 가자 — 분대원들과 다 같이 식당으로 간다.', 'info');
       };
       const endMeal = (key: string, at: number, meal: MealCheck['meal']) => {
         if (minute < at || get().announced.includes(key)) return;
@@ -452,11 +465,21 @@ export const useGame = create<Store>((set, get) => ({
     // 나머지 일정은 장소에 도착하면 시작한다 (arrive)
   },
 
+  finishSquadMeal: () => {
+    const mc = get().mealCheck;
+    if (mc && !mc.done) set({ mealCheck: { ...mc, done: true } });
+  },
+
   arrive: () => {
     const s = get();
     const ev = s.currentEvent();
     if (!ev || s.eventBegun || ev.auto) return;
     if (ev.kind === 'farewell') { get().beginEvent(); return; }
+    // 식사 시간엔 먼저 생활관에 들러 분대와 함께 먹어야 다음 일정으로 넘어간다
+    if (s.mealCheck && !s.mealCheck.done) {
+      get().toast('🍚 식사 시간이다. 먼저 1생활관에 들러 분대와 함께 밥을 먹자.', 'alert');
+      return;
+    }
     // 그 일정 시각으로 넘어간다 (그 사이 지나간 식사·알림 처리 포함)
     if (s.minute < ev.start) {
       set({ minute: ev.start });
@@ -948,9 +971,9 @@ export const useGame = create<Store>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return false;
       const data = JSON.parse(raw) as Persist;
-      // 예전 저장(식사 집합 미션 · 막사 앞 집합 시절)의 식사 상태는 끼니와 시작 시각만 이어받는다
+      // 식사 상태는 끼니·시작 시각만 이어받는다. 저장할 때 이미 먹었으면 식사는 끝난 것으로
       const mc = data.mealCheck;
-      const mealCheck = mc ? { meal: mc.meal, start: mc.start, leaveBy: mc.start + MEAL_WAIT_MIN } : null;
+      const mealCheck = mc ? { meal: mc.meal, start: mc.start, done: !!data.daily?.includes(`meal_${mc.meal}`) } : null;
       set({ ...initialPersist(), ...data, mealCheck, scene: 'world', nightDuty: null, rollcall: null, work: null, toasts: [], busy: false });
       teleportToBed(data.branch);
       return true;
@@ -987,7 +1010,7 @@ function buildMapSpotLabel(branch: BranchId, spot: SpotId): string {
     laundry1: '막사 1층 세탁실', laundry2: '막사 2층 세탁실', water1: '막사 1층 정수기', water2: '막사 2층 정수기',
     board1: '막사 1층 복도 게시판', board2: '막사 2층 복도 게시판',
     kitchen: '병영식당 조리실', court: '농구장', recycle: '분리수거장', ammo: FACILITY_NAME[branch],
-    cairn: '분리수거장 구석 돌탑',
+    cairn: '분리수거장 구석 돌탑', ammoledger: '탄약고 수불 대장',
   };
   return labels[spot];
 }

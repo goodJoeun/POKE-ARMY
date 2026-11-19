@@ -11,12 +11,14 @@ export const TILE = 32;
  * - 막사 1층 hq1: 행정반·지휘통제실·정비실·화장실 / 1생활관·세탁실·현관, 계단
  * - 막사 2층 hq2: 휴게실·체단실·도서관·화장실 / 2생활관·싸지방·세탁실, 계단
  * - 병영식당 mess ↔ 조리실 kitchen, PX px
+ * - 탄약고 ammoroom: depot의 탄약고 벙커 철문으로 들어간다 (세 군 공통)
  */
 export type MapId =
   | 'outdoor' | 'messyard' | 'recycle' | 'pxyard' | 'depot'
   | 'hq1' | 'hq2' | 'room1' | 'room2' | 'admin' | 'command' | 'lounge'
   | 'maint' | 'wc1' | 'wc2' | 'laundry1' | 'laundry2' | 'gymroom' | 'library' | 'cyber'
-  | 'mess' | 'kitchen' | 'px';
+  | 'mess' | 'kitchen' | 'px'
+  | 'ammoroom';
 
 export enum T {
   GRASS, ROAD, SAND, FLOOR, WALL, TREE, FENCE, BED, DESK, TABLE, LOCKER,
@@ -25,13 +27,15 @@ export enum T {
   COOLER, WASHER, TOILET, SINK, STOVE, COURT, HOOP, BIN, AMMO,
   /** 이끼 낀 돌탑 (세로 두 칸: 위 · 아래) */
   CAIRN,
+  /** 탄약 상자 더미 (탄약고 안) */
+  CRATE,
 }
 
 const SOLID = new Set<T>([
   T.WALL, T.TREE, T.FENCE, T.BED, T.DESK, T.TABLE, T.LOCKER, T.WATER, T.TARGET,
   T.COUNTER, T.PC, T.GYM, T.SANDBAG, T.SHIP, T.BOOTH, T.STAGE, T.HANGAR,
   T.ROOF, T.SHELF, T.TV, T.PLANT, T.BOARD, T.SOFA,
-  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.HOOP, T.BIN, T.AMMO, T.CAIRN,
+  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.HOOP, T.BIN, T.AMMO, T.CAIRN, T.CRATE,
 ]);
 
 export interface SpotDef {
@@ -96,6 +100,7 @@ export const MAP_NAMES: Record<MapId, string> = {
   maint: '정비실', wc1: '1층 화장실', wc2: '2층 화장실', laundry1: '1층 세탁실', laundry2: '2층 세탁실',
   gymroom: '체단실', library: '도서관', cyber: '싸지방',
   mess: '병영식당', kitchen: '조리실', px: 'PX',
+  ammoroom: '탄약고',
 };
 
 function grid(w: number, h: number, t: T): T[][] {
@@ -331,6 +336,24 @@ function buildFacilities(branch: BranchId) {
   };
 }
 
+/**
+ * 탄약고 내부 14x10 (세 군 공통): 벽을 따라 탄약 상자 더미, 왼쪽 위 책상에 탄약 수불 대장.
+ * 출입문은 아래 벽 가운데. 군견 하데리어가 문 쪽을 보고 엎드려 있다 (data/extras.ts)
+ */
+function buildAmmoRoom(branch: BranchId) {
+  const { map, p } = room('ammoroom', 14, 10, branch);
+  p.fill(1, 1, 3, 1, T.DESK);
+  p.fill(5, 1, 12, 1, T.CRATE);
+  p.fill(5, 3, 7, 4, T.CRATE);
+  p.fill(10, 3, 12, 4, T.CRATE);
+  p.fill(1, 6, 3, 7, T.CRATE);
+  return {
+    map,
+    door: [[7, 9]] as [number, number][],
+    spots: [{ id: 'ammoledger', map: 'ammoroom', x: 2, y: 2, label: '탄약 수불 대장' }] as SpotDef[],
+  };
+}
+
 // ───────────── 야외 구역 ─────────────
 /** 중심 구역: 막사 · 연병장 · 농구장 (40x32) */
 function buildHub(branch: BranchId) {
@@ -422,6 +445,8 @@ function buildDepot(branch: BranchId, trainLabel: string) {
   fill(11, 25, 12, 26, T.BOOTH);
   let ammo: [number, number] = [7, 11];
   let train: [number, number] = [30, 24];
+  /** 탄약고 벙커 철문 (벙커 아래 줄 가운데 타일). 육군은 울타리 안 벙커, 공군·해군은 왼쪽 아래 작은 벙커 */
+  let ammoDoor: [number, number][] = [[5, 18]];
   if (branch === 'army') {
     // 탄약고: 철조망 울타리 안 흙더미 벙커
     fill(3, 4, 11, 12, T.DIRT);
@@ -430,6 +455,7 @@ function buildDepot(branch: BranchId, trainLabel: string) {
     fill(6, 14, 13, 14, T.ROAD);
     fill(4, 5, 10, 8, T.AMMO);
     ammo = [7, 10];
+    ammoDoor = [[7, 8]];
     // 사격장
     fill(18, 2, 42, 27, T.DIRT);
     for (let x = 20; x <= 41; x += 3) set(x, 4, T.TARGET);
@@ -456,6 +482,11 @@ function buildDepot(branch: BranchId, trainLabel: string) {
     fill(3, 5, 6, 5, T.SANDBAG);
     z.map.labels.push({ text: facility, x: 25.5, y: 1.6 });
   }
+  if (branch !== 'army') {
+    // 격납고·부두와 따로 떨어진 작은 탄약고 벙커
+    fill(3, 15, 8, 18, T.AMMO);
+    z.map.labels.push({ text: '탄약고', x: 6, y: 14.6 });
+  }
   z.trees([[2, 16], [4, 19], [2, 22], [6, 23], [3, 27], [8, 27], [9, 17]]);
   z.map.labels.push({ text: '위병소', x: 12, y: 24.4 });
   const spots: SpotDef[] = [
@@ -464,7 +495,7 @@ function buildDepot(branch: BranchId, trainLabel: string) {
     { id: 'post', map: 'depot', x: 13, y: 26, label: '위병소 초소' },
     { id: 'gate', map: 'depot', x: 15, y: 28, label: '위병소 정문' },
   ];
-  return { map: z.map, spots };
+  return { map: z.map, spots, ammoDoor };
 }
 
 const worldCache = new Map<string, WorldDef>();
@@ -481,14 +512,16 @@ export function getWorld(branch: BranchId, trainLabel: string): WorldDef {
   const depot = buildDepot(branch, trainLabel);
   const hq = buildBarracks(branch);
   const fac = buildFacilities(branch);
+  const ammoRoom = buildAmmoRoom(branch);
 
   const maps = {} as Record<MapId, GameMap>;
-  for (const m of [hub.map, messYard.map, recycle.map, pxYard.map, depot.map, ...hq.maps, ...fac.maps]) maps[m.id] = m;
+  for (const m of [hub.map, messYard.map, recycle.map, pxYard.map, depot.map, ...hq.maps, ...fac.maps, ammoRoom.map]) maps[m.id] = m;
 
   // 건물 정문 ↔ 실내
   link(hub.map, hub.hqDoor, 'up', hq.entrance.map, hq.entrance.tiles, 'down', [undefined, '밖으로']);
   link(messYard.map, messYard.door, 'up', fac.mess, fac.entrances.mess, 'down');
   link(pxYard.map, pxYard.door, 'up', fac.px, fac.entrances.px, 'down');
+  link(depot.map, depot.ammoDoor, 'up', ammoRoom.map, ammoRoom.door, 'down', ['탄약고', '밖으로']);
 
   // 야외 구역 사이 길 (끝까지 걸어가면 이동)
   const store = STORE_NAME[branch];
@@ -498,7 +531,7 @@ export function getWorld(branch: BranchId, trainLabel: string): WorldDef {
   edgeLink(messYard.map, [[18, 19], [19, 19]], 'down', recycle.map, [[9, 0], [10, 0]], 'up', ['↓ 분리수거장', '↑ 병영식당']);
 
   const spots = {} as Record<SpotId, SpotDef>;
-  for (const s of [...hub.spots, ...recycle.spots, ...depot.spots, ...hq.spots, ...fac.spots]) spots[s.id] = s;
+  for (const s of [...hub.spots, ...recycle.spots, ...depot.spots, ...hq.spots, ...fac.spots, ...ammoRoom.spots]) spots[s.id] = s;
   const world = { maps, spots };
   worldCache.set(key, world);
   return world;
@@ -628,12 +661,14 @@ const FLOOR_COLORS: Record<MapId, [string, string]> = {
   mess: ['#e6e2d6', '#d6d1c2'],
   kitchen: ['#d8dcd8', '#c8cec8'],
   px: ['#e8dcc8', '#dacbb0'],
+  ammoroom: ['#a4a69c', '#9a9c92'],
 };
 const FLOOR_KIND: Record<MapId, FloorKind> = {
   outdoor: 'concrete', messyard: 'concrete', recycle: 'concrete', pxyard: 'concrete', depot: 'concrete',
   hq1: 'lino', hq2: 'lino', room1: 'wood', room2: 'wood', admin: 'lino', command: 'lino', lounge: 'wood',
   maint: 'concrete', wc1: 'tile', wc2: 'tile', laundry1: 'tile', laundry2: 'tile', gymroom: 'wood',
   library: 'wood', cyber: 'lino', mess: 'tile', kitchen: 'tile', px: 'tile',
+  ammoroom: 'concrete',
 };
 
 const BIN_COLORS = ['#3a8a3a', '#e0b030', '#3a6ac8', '#8a8a8a', '#c87a3a', '#6a4a2a'];
@@ -651,7 +686,7 @@ function runOf(map: GameMap, x: number, y: number, kinds: T[]): [number, number]
 /** 바닥이 깔리는 타일 (가구 밑에도 바닥이 있다) */
 const ON_FLOOR = new Set<T>([
   T.FLOOR, T.BED, T.DESK, T.TABLE, T.LOCKER, T.COUNTER, T.PC, T.SHELF, T.TV, T.PLANT, T.BOARD, T.SOFA,
-  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE,
+  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.CRATE,
 ]);
 
 export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement {
@@ -1066,17 +1101,37 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
         box(5, 7, 6, 4, '#f4f2ea', shade(col, -60));
         break;
       }
+      case T.DOOR: {
+        // 야외 탄약고 벙커의 철문 (실제로 드나드는 문). 건물 문은 건물 외관이 덮어 그린다
+        if (map.indoor || (at(x - 1, y) !== T.AMMO && at(x + 1, y) !== T.AMMO)) break;
+        R(0, 0, 16, 16, '#6a7a52');
+        R(0, 11, 16, 4, '#8a8e7a'); R(0, 11, 16, 1, '#a8ac98'); R(0, 15, 16, 1, OUT);
+        box(2, 2, 12, 13, '#4a5058'); R(3, 3, 10, 1, '#6c737c'); R(7, 3, 1, 11, '#2e3238');
+        R(8, 4, 1, 10, '#101014'); // 늘 조금 열려 있는 틈
+        box(3, 0, 10, 3, '#e8c040', '#5c4a10'); R(10, 8, 2, 2, '#c4cad4');
+        break;
+      }
+      case T.CRATE: {
+        // 탄약 상자 두 단 (국방색 + 노란 글씨 · 손잡이)
+        const top = '#7a8650', front = '#5c6a3c', ink = '#e8d070';
+        block(1, -3, 14, 18, 4, top, front);
+        R(2, 7, 12, 1, shade(front, -26));
+        R(3, 3, 4, 1, ink); R(9, 3, 3, 1, ink); R(3, 10, 5, 1, ink); R(10, 10, 2, 1, ink);
+        R(1, 4, 1, 2, '#3a4028'); R(14, 4, 1, 2, '#3a4028'); R(1, 10, 1, 2, '#3a4028'); R(14, 10, 1, 2, '#3a4028');
+        break;
+      }
       case T.AMMO: {
         // 흙을 덮은 벙커 + 가운데 아래쪽에 철문
         R(0, 0, 16, 16, '#6a7a52');
         if (r > 0.4) { R(Math.floor(r * 10) + 1, 3, 4, 1, '#84966a'); R(Math.floor(r * 8) + 3, 9, 3, 1, '#566644'); }
         if (!same(0, -1)) { R(0, 0, 16, 1, OUT); R(0, 1, 16, 1, '#84966a'); }
-        if (!same(-1, 0)) R(0, 0, 1, 16, OUT); if (!same(1, 0)) R(15, 0, 1, 16, OUT);
-        if (!same(0, 1)) {
+        const bunk = (v: T | undefined) => v === T.AMMO || (v === T.DOOR && !map.indoor);
+        if (!bunk(at(x - 1, y))) R(0, 0, 1, 16, OUT); if (!bunk(at(x + 1, y))) R(15, 0, 1, 16, OUT);
+        if (!bunk(at(x, y + 1))) {
           R(0, 11, 16, 4, '#8a8e7a'); R(0, 11, 16, 1, '#a8ac98'); R(0, 15, 16, 1, OUT);
           let l = x, rr = x;
-          while (map.tiles[y][l - 1] === T.AMMO) l--;
-          while (map.tiles[y][rr + 1] === T.AMMO) rr++;
+          while (bunk(map.tiles[y][l - 1])) l--;
+          while (bunk(map.tiles[y][rr + 1])) rr++;
           if (x === Math.floor((l + rr) / 2)) { box(2, 2, 12, 13, '#4a5058'); R(3, 3, 10, 1, '#6c737c'); R(7, 3, 1, 11, '#2e3238'); box(3, 0, 10, 3, '#e8c040', '#5c4a10'); R(9, 8, 2, 2, '#c4cad4'); }
         }
         break;

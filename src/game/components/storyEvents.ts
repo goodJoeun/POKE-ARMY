@@ -55,7 +55,9 @@ const storyOn = () => G().clues.length > 0;
 const mission = (id: string) => STORY_MISSIONS.find((m) => m.id === id)!;
 const isOpen = (id: string) => storyOn() && missionState(mission(id), G()) === 'open';
 const flag = (k: string) => !!G().flags[k];
-const freeNow = () => { const m = G().minute; return isFreeTimeEvening(m) || isMealTime(m); };
+/** 분대와 아직 밥을 먹지 않았다 (식사 시간엔 생활관부터 들러야 스토리가 진행된다) */
+const mealPending = () => { const mc = G().mealCheck; return !!mc && !mc.done; };
+const freeNow = () => { const m = G().minute; return !mealPending() && (isFreeTimeEvening(m) || isMealTime(m)); };
 /** 추리 정리·옥상: 저녁 개인정비 시간 (점호 준비 전) */
 const eveningNow = () => { const m = G().minute; return m >= 19 * 60 && m < 21 * 60 + 20; };
 const buddyName = () => memberName(G().branch, 'buddy');
@@ -410,6 +412,86 @@ export function cairnLines(): Line[] {
   }
   if (s.minute >= 22 * 60 || s.minute < 6 * 60) return [narr('밤의 돌탑. 가까이 가자 누가 내 이름을 부른 것 같다. 돌아봐도 아무도 없다.')];
   return [narr('폐지 더미 뒤 구석의 낡은 돌탑. 누가 쌓았는지 아는 사람은 없다.'), narr('가까이 가면 이상하게 조용하다. 이 부대에서 웃음소리가 들리지 않는 곳은 여기뿐이다.')];
+}
+
+/** 탄약고 군견 하데리어 (말은 하지 않는다 · 모자 없음) */
+const dogSpeaker = (): SpeakerInfo => {
+  const def = extrasForDay(G().branch, G().day).find((d) => d.id === 'ammodog');
+  return { name: '하데리어', sub: '탄약고 군견', look: def ? extraLook(def) : null, cap: null };
+};
+
+/** S-02 탄약고: 2인 1조 (서브) — 수불 대장의 빈 서명 칸과, 문만 보는 군견 */
+function s02(ctx: StoryCtx) {
+  G().spend(15);
+  ctx.play({
+    script: { lines: [
+      narr('탄약고 안은 바깥보다 몇 도는 서늘하다. 벽을 따라 국방색 상자가 두 단씩 쌓여 있다.'),
+      me('(관계자 외 출입 금지, 2인 1조… 라더니 철문이 그냥 열려 있었다. 들어오는 동안 아무도 붙잡지 않았다.)'),
+      narr('문 옆에 군견 하데리어가 엎드려 있다. 나를 한 번 보고는, 다시 문만 본다.'),
+      narr('책상 위에 탄약 수불 대장이 펼쳐져 있다. 줄마다 확인자 서명 칸이 두 개씩.'),
+    ] },
+    // 🧩 P-23: 장부대로라면 있어야 할 상자와, 선반에 실제로 있는 상자
+    onDone: () => ctx.puzzle('P-23', (reward) => {
+      ctx.play({
+        script: { lines: [
+          narr('장부엔 스물여섯, 선반엔 스물다섯. 기록에 없는 상자 하나가 비었다.'),
+          narr('금요일 줄을 다시 본다. 확인자 첫 칸에는 「한도윤」. 두 번째 칸은 하얗게 비어 있다. 지운 자국도 없이, 처음부터 아무것도 쓰이지 않은 것처럼.'),
+          narr('그때 하데리어가 일어났다. 가운데 선반의 빈자리에 코를 박고 킁킁대더니, 선반과 벽 사이 틈을 앞발로 긁는다.'),
+          me('(…거기 뭐가 있어?)'),
+          narr('틈에 손을 넣자 차가운 쇠붙이가 잡힌다. 줄에 꿴 인식표 두 장, 「한도윤」. 그리고 접힌 쪽지.'),
+          narr('「금요일, 2인 1조. 나는 들어왔는데, 같이 나가지 못했다. 별이 지는 밤이었다.」'),
+          narr('「이 녀석 밥 좀 챙겨 줘. 문 앞에서 기다리지 말라고 해도 안 듣는다. — 한」'),
+        ] },
+        onDone: () => ctx.play({
+          script: {
+            custom: dogSpeaker(),
+            lines: [narr('하데리어가 인식표를 한 번 핥고 나를 올려다본다. 짖지도 않는다.')],
+            choices: [
+              {
+                text: '(인식표를 하데리어 목줄에 걸어 준다) "기다리는 사람 이름, 이제 네가 갖고 있어."', grade: 'good',
+                effects: { mental: 2, flag: 'ammoTagDog' },
+                reply: [
+                  narr('인식표가 목줄에서 짤랑 소리를 낸다. 하데리어는 처음으로 문에서 눈을 떼고, 내 발치에 턱을 괸다.'),
+                  say('npc', '……컹.'),
+                ],
+              },
+              {
+                text: '(인식표를 주머니에 넣는다) "내가 찾아볼게. 이 사람이 어디로 갔는지."', grade: 'ok',
+                effects: { flag: 'ammoTagKept' },
+                reply: [
+                  narr('주머니 속 인식표가 이상하게 따뜻하다. 하데리어는 잠깐 내 주머니를 보다가, 다시 문 쪽으로 돌아앉는다.'),
+                  me('(돌아가면, 이 이름부터 찾아보자. 한도윤.)'),
+                ],
+              },
+            ],
+          },
+          onChoice: (c) => { if (c.effects) G().applyEffects(c.effects, '탄약고'); },
+          onDone: () => ctx.play({
+            script: { lines: [
+              me('(2인 1조. 들어간 사람은 둘인데, 나온 기록은 하나.)'),
+              me('(별이 지는 밤마다, 이 부대엔 꼭 누군가 남는다.)'),
+            ] },
+            onDone: () => G().findClue('C-17', reward),
+          }),
+        }),
+      });
+    }),
+  });
+}
+
+/** 탄약고 수불 대장을 그냥 살펴볼 때 (스토리 전 · 끝난 뒤) */
+export function ammoLedgerLines(): Line[] {
+  if (G().clues.includes('C-17')) {
+    const after = narr('탄약 수불 대장. 금요일 줄의 두 번째 서명 칸은 여전히 비어 있다.');
+    return flag('ammoTagDog')
+      ? [after, narr('문 옆에서 하데리어의 목줄 인식표가 짤랑, 하고 울린다.')]
+      : [after, me('(주머니 속 인식표. 한도윤. …잊지 말자.)')];
+  }
+  return [
+    narr('탄약 수불 대장. 날짜, 입고, 불출, 재고, 그리고 확인자 서명 두 칸.'),
+    narr('넘겨도 넘겨도 끝이 안 난다. 맨 앞 장의 글씨는 읽을 수 없을 만큼 바래 있다.'),
+    me('(…이 부대, 대체 몇 년째 이 장부를 쓰고 있는 거지?)'),
+  ];
 }
 
 /** M-08 분리수거장: 부치지 못한 편지 */
@@ -931,6 +1013,14 @@ function cairnFarewell(): Line[] {
     : [narr('분리수거장 쪽에서 아주 작게, 백일곱 개의 목소리가 "잘 가" 하고 말했다. 아무도 뒤돌아보지 않았다.')];
 }
 
+/** 탄약고 군견의 인식표를 찾았다면, 돌아가는 순간 */
+function ammoFarewell(): Line[] {
+  if (!G().clues.includes('C-17')) return [];
+  return flag('ammoTagDog')
+    ? [narr('탄약고 쪽에서 컹, 하고 한 번 짖는 소리. 하데리어가 처음으로 문이 아니라 하늘을 보고 있다. 목줄의 인식표가 별빛에 반짝인다.')]
+    : [narr('주머니 속 인식표가 따뜻해진다. 「한도윤」. 이 이름은 가지고 간다.')];
+}
+
 /** 엔딩 대본 (전역 결산 화면 전에) */
 export function endingLines(end: StoryEnding): Line[] {
   const s = G();
@@ -941,6 +1031,7 @@ export function endingLines(end: StoryEnding): Line[] {
       narr('별빛이 우리를 감싼다.'),
       ...(sg ? [narr(`${josa(sgName, '이', '가')} 처음으로 웃는다.`), narr('"…고맙다. 이번엔, 나도 간다."')] : []),
       ...cairnFarewell(),
+      ...ammoFarewell(),
       narr('(암전)'),
       narr('훈련소 생활관. 새벽. 낯선 천장.'),
       me('(…돌아왔다.)'),
@@ -957,6 +1048,7 @@ export function endingLines(end: StoryEnding): Line[] {
     return [
       narr('"…친구는, 아직 대답을 못 찾았나 봐."'),
       ...cairnFarewell(),
+      ...ammoFarewell(),
       narr('훈련소 첫날 밤. 옆 침상은 비어 있다.'),
       narr('창밖, 별똥별 하나가 떨어진다.'),
       me('(준서야. 꼭 와라.)'),
@@ -969,6 +1061,7 @@ export function endingLines(end: StoryEnding): Line[] {
     narr('분대장: "오늘 신병 전입 온다. 다들 잘해 줘라."'),
     narr('문이 열리고 — 내 얼굴을 한 신병이 들어온다.'),
     ...(s.clues.includes('C-16') ? [narr('같은 시각, 분리수거장 구석의 돌탑에 이끼 없는 돌 하나가 얹혔다. 백여덟.')] : []),
+    ...(s.clues.includes('C-17') ? [narr('탄약 수불 대장 금요일 줄, 비어 있던 두 번째 서명 칸에 내 이름이 적혔다.')] : []),
     me('……'),
     narr('나는 "……"밖에 말할 수 없었다.'),
     narr('🌑 배드 엔딩 「영원한 이병」'),
@@ -985,13 +1078,14 @@ export function storySpotOptions(spot: SpotId, ctx: StoryCtx): MenuOption[] {
   const free = freeNow();
   const add = (id: string, label: string, run: () => void, needFree = true) => {
     if (!isOpen(id)) return;
-    opts.push({ label, hint: needFree && !free ? '점심·개인정비 시간에' : '📖 스토리', disabled: needFree && !free, onSelect: run });
+    opts.push({ label, hint: needFree && !free ? (mealPending() ? '먼저 분대와 식사' : '점심·개인정비 시간에') : '📖 스토리', disabled: needFree && !free, onSelect: run });
   };
   switch (spot) {
     case 'cyber': add('M-05', '🔍 인터넷 편지함 확인', () => m05(ctx)); break;
     case 'command': add('M-07', '🔍 근무 일지 살펴보기', () => m07(ctx), false); break;
     case 'recycle': add('M-08', '🔍 폐지 더미 속 봉투들', () => m08(ctx), false); break;
     case 'cairn': add('S-01', '🪨 쐐기돌의 금 들여다보기', () => s01(ctx)); break;
+    case 'ammoledger': add('S-02', '📒 금요일 줄 맞춰 보기', () => s02(ctx)); break;
     case 'maint': add('M-09', '📻 구석의 라디오 켜기', () => m09(ctx)); break;
     case 'library': {
       if (isOpen('M-10')) {

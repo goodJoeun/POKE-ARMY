@@ -9,7 +9,9 @@ export type SpotId =
   // 식당 조리실 · 야외 구역
   | 'kitchen' | 'court' | 'recycle' | 'ammo'
   // 분리수거장 구석의 이끼 낀 돌탑 (화강돌)
-  | 'cairn';
+  | 'cairn'
+  // 탄약고 안 책상의 탄약 수불 대장
+  | 'ammoledger';
 export type GameId =
   | 'env' | 'night' | 'combat' | 'guard' | 'specialty' | 'sandbag';
 export type Season = 'winter' | 'spring' | 'summer' | 'autumn';

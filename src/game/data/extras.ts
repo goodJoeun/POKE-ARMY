@@ -194,4 +194,10 @@ const MORE: Record<BranchId, ExtraDef[]> = {
       lines: ['이병 파오리! 대파는 제 몸의 일부입니다!', '식당에서 대파 남기면 안 됩니다!', '아직 모르는 게 많습니다!'] },
   ],
 };
-for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN);
+/** 서브 S-02: 탄약고 군견 하데리어 (세 군 공통). 탄약고 문 쪽을 보고 엎드려 있다 */
+const AMMO_DOG: ExtraDef = {
+  id: 'ammodog', sprite: 'herdier', name: '하데리어', title: '탄약고 군견', map: 'ammoroom', x: 9, y: 7, wander: 0, color: '#8a7a5a', noCap: true,
+  lines: ['컹.', '(문 쪽을 보고 엎드려 있다. 꼬리가 한 번 흔들리다 멈춘다.)', '(코를 킁킁거리더니, 다시 문만 본다.)'],
+};
+
+for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN, AMMO_DOG);

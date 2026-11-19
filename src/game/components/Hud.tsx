@@ -51,6 +51,9 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome }: { onNoteboo
     else if (pending && ev.spot)
       objective = `📍 ${ev.label} → ${spotLabel(s.branch, ev.spot)} (도착하면 ${fmtTime(ev.start)} 시작)`;
   }
+  // 🍚 식사는 분대 단위: 분대와 먹고 돌아오기 전에는 다음 일정이 진행되지 않는다
+  if (s.mealCheck && !s.mealCheck.done && !s.nightDuty)
+    objective = '🍚 식사 시간 — 먼저 1생활관에 들러 분대와 함께 식당으로';
   let period = '이동 시간';
   if (isMealTime(s.minute)) period = '식사 시간';
   if (isFreeTimeEvening(s.minute)) period = '개인정비 시간';

@@ -43,6 +43,7 @@ export const CLUES: ClueDef[] = [
   { id: 'C-11', chapter: 2, title: '불 꺼진 서가', place: '도서관 (밤)', text: '글자들이 모여 말했다. "별이 지기 전에."' },
   { id: 'C-12', chapter: 3, title: '단체 사진', place: '기록 보관실', text: '해마다 같은 자리에 같은 얼굴. 10년 전 사진 속 이병은 2분대의 말 없는 병장이었다.' },
   { id: 'C-13', chapter: 3, title: '병장의 일기', place: '2생활관', text: '"별 조각 일곱 개… 마지막 밤… 나는 겁이 나서 거두지 못했다."' },
+  { id: 'C-17', chapter: 3, title: '2인 1조', place: '탄약고', text: '수불 대장에 기록 없이 빈 상자 하나. 그날 금요일 줄의 두 번째 서명 칸도 비어 있다. 인식표의 이름은 한도윤. 군견은 오늘도 문만 본다.' },
   { id: 'C-14', chapter: 3, title: '진자 자국', place: '탄약고·격납고·부두', text: '잠긴 상자 주변의 둥근 자국. 누군가 별 조각을 숨기고 있었다. 자국은 분리수거장 쓰레기통까지 이어졌다.' },
   { id: 'C-15', chapter: 3, title: '소원을 거둬라', place: '도서관 (밤)', text: '글자들이 끝까지 모였다. "소원을 거둬라."' },
 ];
@@ -102,6 +103,8 @@ export const STORY_MISSIONS: StoryMission[] = [
   { id: 'N-03', chapter: 3, title: '똑딱, 똑딱', hint: '7일차 밤 위병소 근무 가는 길, 막사 1층 복도', from: 7, nightFrom: 7, flag: 'n03', optional: true },
   { id: 'M-11', chapter: 3, title: '말 없는 병장', hint: '2생활관의 말 없는 병장에게 단체 사진 보여 드리기', from: 8, clue: 'C-13', needClues: ['C-12'] },
   { id: 'D-02', chapter: 3, title: '추리 정리 2 「돌아가지 못한 사람들」', hint: '19:00~21:20, 막사 2층 계단 옆 옥상 철문 → 동기와 별 보기', from: 8, flag: 'd02', needClues: ['C-07', 'C-09', 'C-13'] },
+  // 서브: 탄약고 안의 수불 대장과 군견 하데리어 (놓쳐도 장 완료에 지장 없음)
+  { id: 'S-02', chapter: 3, title: '2인 1조', hint: '탄약고(위병소 구역) 안 책상의 수불 대장 살펴보기 (점심·개인정비 시간)', from: 7, clue: 'C-17', spot: 'ammoledger', optional: true },
   { id: 'M-12', chapter: 3, title: '진자 자국', hint: `${'탄약고·격납고·부두'}의 잠긴 상자 살펴보기 → 자국 따라가기`, from: 9, clue: 'C-14', spot: 'ammo' },
   { id: 'N-04', chapter: 3, title: '소원을 거둬라', hint: '9일차 밤 야간 순찰 때, 2층 휴게실에서 손전등 끄기 [L]', hintLate: '도서관 관리병 네이티오에게 말 걸기', from: 9, nightFrom: 9, clue: 'C-15', spot: 'tv' },
   // ── 4장 「별이 지기 전에」 (10~12일차)

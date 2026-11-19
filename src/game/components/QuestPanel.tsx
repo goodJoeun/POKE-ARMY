@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { BranchId, Effects } from '../types';
 import { useGame, spotLabel, questOffers, PATROL_SPOTS, type QuestOffer } from '../state/store';
 import { QUESTS, QUEST_CHAINS, chainOf } from '../data/quests';
-import { NPC_SKINS, npcDisplayName } from '../data/npcs';
+import { NPC_SKINS, npcDisplayName, npcPresent } from '../data/npcs';
 import { fmtTime } from '../data/branches';
 import { fmt } from '../engine/text';
 import { runtime } from '../engine/runtime';
@@ -58,10 +58,10 @@ export function QuestTracker({ onOpen }: { onOpen: () => void }) {
   if (story) items.push({ title: `📖 ${story.chapter}장 · ${story.title}`, next: missionHint(story, s) });
   const ate = mc && s.daily.includes(`meal_${mc.meal}`);
   // 식사는 미션이 아니다: 1생활관에 가면 분대장이 불러서 다 같이 식당으로 간다 — 길만 안내한다
-  if (mc && !ate) {
-    items.push(runtime.player.map !== 'mess' && s.minute < mc.leaveBy
-      ? { title: '🍚 식사', next: `📍 1생활관 — 분대원들과 다 같이 식당으로 (${fmtTime(mc.leaveBy)}까지 기다려 준다)` }
-      : { title: '🍚 식사', next: '📍 병영식당 — 배식대에서 식판 받고 내 자리(분대 줄)에 앉자' });
+  if (mc && !mc.done && !ate) {
+    items.push(runtime.player.map !== 'mess'
+      ? { title: '🍚 식사 (분대 단위)', next: '📍 먼저 1생활관 — 분대원들과 다 같이 식당으로' }
+      : { title: '🍚 식사 (분대 단위)', next: '📍 병영식당 — 배식대에서 식판 받고 내 자리(분대 줄)에 앉자' });
   }
   if (s.patrol) {
     const left = PATROL_SPOTS.filter((sp) => !s.patrol!.done.includes(sp));
@@ -222,6 +222,8 @@ function ChainsTab({ offers }: { offers: QuestOffer[] }) {
       <p className="hud-dim ql-hint">앞 퀘스트를 끝내면 같은 사람에게서 다음 퀘스트를 받을 수 있다. 체인을 끝까지 마치면 보너스 보상!</p>
       {QUEST_CHAINS.map((ch) => {
         const doneN = ch.quests.filter((q) => s.doneQuests.includes(q)).length;
+        // 의뢰인이 전역해 부대에 없으면, 다 끝낸 체인이 아닌 한 보이지 않는다
+        if (!npcPresent(ch.giver, s.day) && doneN < ch.quests.length) return null;
         return (
           <div key={ch.id} className="quest">
             <b>🔗 {ch.title}</b> <span className="hud-dim">({doneN}/{ch.quests.length})</span>
