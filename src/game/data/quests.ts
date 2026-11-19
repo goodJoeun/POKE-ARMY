@@ -27,7 +27,7 @@ export const QUESTS: Record<string, QuestDef> = {
   },
   q_buddy_study: {
     id: 'q_buddy_study',
-    hint: '4일차 이후',
+    hint: '4일차 이후 · 일과가 끝난 뒤(17:30~) 동기에게 말 걸기',
     title: '동기와 자격증 공부',
     giver: 'buddy',
     together: true,
@@ -220,7 +220,7 @@ export const QUESTS: Record<string, QuestDef> = {
   },
   q_buddy_exam: {
     id: 'q_buddy_exam',
-    hint: '「동기와 자격증 공부」 완료',
+    hint: '「동기와 자격증 공부」 완료 · 일과가 끝난 뒤(17:30~)',
     title: '자격증 시험 접수',
     giver: 'buddy',
     together: true,
@@ -234,7 +234,7 @@ export const QUESTS: Record<string, QuestDef> = {
   },
   q_buddy_result: {
     id: 'q_buddy_result',
-    hint: '「자격증 시험 접수」 완료 · 6일차 이후',
+    hint: '「자격증 시험 접수」 완료 · 6일차 이후 · 일과가 끝난 뒤(17:30~)',
     title: '합격 발표',
     giver: 'buddy',
     together: true,

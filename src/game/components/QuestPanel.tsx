@@ -61,7 +61,7 @@ export function QuestTracker({ onOpen }: { onOpen: () => void }) {
   if (mc && !mc.done && !ate) {
     items.push(runtime.player.map !== 'mess'
       ? { title: '🍚 식사 (분대 단위)', next: '📍 먼저 1생활관 — 분대원들과 다 같이 식당으로' }
-      : { title: '🍚 식사 (분대 단위)', next: '📍 병영식당 — 배식대에서 식판 받고 내 자리(분대 줄)에 앉자' });
+      : { title: '🍚 식사 (분대 단위)', next: '📍 병영식당 — 밥차에서 식판 받고 내 자리(분대 줄)에 앉자' });
   }
   if (s.patrol) {
     const left = PATROL_SPOTS.filter((sp) => !s.patrol!.done.includes(sp));

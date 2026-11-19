@@ -343,9 +343,10 @@ export const DIALOGUES: Dialogue[] = [
   },
   {
     id: 'buddy_study', npc: 'buddy', once: true,
-    when: (c) => c.day >= 4,
+    // 싸지방 부탁은 일과가 끝난 뒤(개인정비 시간)에만 한다
+    when: (c) => c.day >= 4 && isFreeTimeEvening(c.minute),
     lines: [
-      { who: 'npc', text: '나 전역 전에 자격증 하나 따려고! 같이 싸지방 가서 공부할래?' },
+      { who: 'npc', text: '일과 끝났다~ 나 전역 전에 자격증 하나 따려고! 같이 싸지방 가서 공부할래?' },
     ],
     choices: [
       {
@@ -887,7 +888,7 @@ export const DIALOGUES: Dialogue[] = [
   },
   {
     id: 'buddy_exam', npc: 'buddy', once: true,
-    when: (c) => c.done.includes('q_buddy_study'),
+    when: (c) => c.done.includes('q_buddy_study') && isFreeTimeEvening(c.minute),
     lines: [
       { who: 'npc', text: '야, 우리 공부한 거 아깝잖아. 이번 회차 시험 접수하자!' },
       { who: 'npc', text: '싸지방에서 접수하고, 행정반에 외출 승인 서류도 내야 한대.' },
@@ -899,7 +900,7 @@ export const DIALOGUES: Dialogue[] = [
   },
   {
     id: 'buddy_result', npc: 'buddy', once: true,
-    when: (c) => c.done.includes('q_buddy_exam') && c.day >= 6,
+    when: (c) => c.done.includes('q_buddy_exam') && c.day >= 6 && isFreeTimeEvening(c.minute),
     lines: [
       { who: 'npc', text: '오늘… 합격 발표 날이야. 혼자 보기 무서워.' },
       { who: 'npc', text: '싸지방 같이 가 줄 수 있어?' },

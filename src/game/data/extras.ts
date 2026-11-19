@@ -200,4 +200,15 @@ const AMMO_DOG: ExtraDef = {
   lines: ['컹.', '(문 쪽을 보고 엎드려 있다. 꼬리가 한 번 흔들리다 멈춘다.)', '(코를 킁킁거리더니, 다시 문만 본다.)'],
 };
 
-for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN, AMMO_DOG);
+/** 분리수거장 깨봉이 (세 군 공통): 분리수거 당번. 돌탑 쪽엔 가까이 가지 않는다 */
+const RECYCLER: ExtraDef = {
+  id: 'recycler', sprite: 'trubbish', name: '깨봉이', title: '분리수거 당번 일병', map: 'recycle', x: 12, y: 8, wander: 2, color: '#6aa070',
+  lines: [
+    '페트병은 라벨 떼고! 캔은 찌그러뜨리고! 음식물은 물기 빼고!',
+    '…나 쓰레기 아니다. 분리수거 담당이다. 헷갈리지 마라.',
+    '여기 냄새 나는 거 내 탓 아니다. 진짜다.',
+    '저 구석 돌탑? 난 거기 안 간다. 거기만 가면 이상하게 조용해져.',
+  ],
+};
+
+for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN, AMMO_DOG, RECYCLER);

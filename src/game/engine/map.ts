@@ -29,13 +29,15 @@ export enum T {
   CAIRN,
   /** 탄약 상자 더미 (탄약고 안) */
   CRATE,
+  /** 밥차 (병영식당 배식 자리, 가로로 이어 붙는다) */
+  FOODCART,
 }
 
 const SOLID = new Set<T>([
   T.WALL, T.TREE, T.FENCE, T.BED, T.DESK, T.TABLE, T.LOCKER, T.WATER, T.TARGET,
   T.COUNTER, T.PC, T.GYM, T.SANDBAG, T.SHIP, T.BOOTH, T.STAGE, T.HANGAR,
   T.ROOF, T.SHELF, T.TV, T.PLANT, T.BOARD, T.SOFA,
-  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.HOOP, T.BIN, T.AMMO, T.CAIRN, T.CRATE,
+  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.HOOP, T.BIN, T.AMMO, T.CAIRN, T.CRATE, T.FOODCART,
 ]);
 
 export interface SpotDef {
@@ -309,6 +311,9 @@ function buildFacilities(branch: BranchId) {
   // 병영식당 13x13
   const mess = room('mess', 13, 13, branch);
   mess.p.fill(1, 1, 11, 1, T.COUNTER);
+  // 배식 자리(스팟 mess 6,2) 바로 뒤에 밥차: 반찬통 넷(밥 · 국 · 주찬 · 김치)
+  mess.p.fill(5, 1, 6, 1, T.FOODCART);
+  mess.map.labels.push({ text: '밥차', x: 6, y: 0.75 });
   // 식탁 3줄 (y=4·7·10). 자리는 각 식탁 바로 위 줄(y=3·6·9)에서 아래를 보고 앉고,
   // 식탁 사이에 통로(y=5·8)를 둬서 뒷줄 사람이 앞 식탁의 식판을 가리지 않게 한다
   for (const ty of [4, 7, 10]) { mess.p.fill(1, ty, 4, ty, T.TABLE); mess.p.fill(8, ty, 11, ty, T.TABLE); }
@@ -329,7 +334,7 @@ function buildFacilities(branch: BranchId) {
     mess: mess.map, px: px.map,
     entrances: { mess: [[6, 12]] as [number, number][], px: [[4, 6]] as [number, number][] },
     spots: [
-      { id: 'mess', map: 'mess', x: 6, y: 2, label: '식당 배식대' },
+      { id: 'mess', map: 'mess', x: 6, y: 2, label: '식당 밥차' },
       { id: 'kitchen', map: 'kitchen', x: 5, y: 2, label: '조리실' },
       { id: 'px', map: 'px', x: 4, y: 2, label: `${STORE_NAME[branch]} 계산대` },
     ] as SpotDef[],
@@ -686,7 +691,7 @@ function runOf(map: GameMap, x: number, y: number, kinds: T[]): [number, number]
 /** 바닥이 깔리는 타일 (가구 밑에도 바닥이 있다) */
 const ON_FLOOR = new Set<T>([
   T.FLOOR, T.BED, T.DESK, T.TABLE, T.LOCKER, T.COUNTER, T.PC, T.SHELF, T.TV, T.PLANT, T.BOARD, T.SOFA,
-  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.CRATE,
+  T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.CRATE, T.FOODCART,
 ]);
 
 export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement {
@@ -931,6 +936,29 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
       case T.TABLE: {
         slab('#d6b078', '#a8804c');
         if (r > 0.6) { box(4, 4, 8, 5, '#c9ccd8', '#6c7080'); R(5, 5, 2, 2, '#f4f2ea'); R(8, 5, 3, 1, '#e08a4a'); R(8, 7, 2, 1, '#58b058'); }
+        break;
+      }
+      case T.FOODCART: {
+        // 밥차: 스테인리스 카트 위에 반찬통(바트)이 칸마다 둘씩. 왼쪽부터 밥 · 국 · 주찬 · 김치
+        let l = x;
+        while (map.tiles[y][l - 1] === T.FOODCART) l--;
+        const foods = ['#fbfaf4', '#e8b048', '#a0682a', '#d0402a'];
+        const i0 = ((x - l) * 2) % foods.length;
+        const L = !same(-1, 0), Rt = !same(1, 0);
+        R(0, 15, 16, 1, SHADE);
+        // 앞면 (서랍 두 단 · 손잡이) — 배식대보다 키가 커서 위로 솟아 보인다
+        R(0, 5, 16, 9, '#9aa2ae'); R(0, 5, 16, 1, '#c8ccd4'); R(0, 9, 16, 1, '#7c8490'); R(0, 13, 16, 1, '#6c7480');
+        R(3, 7, 4, 1, '#4a525c'); R(9, 7, 4, 1, '#4a525c'); R(3, 11, 4, 1, '#4a525c'); R(9, 11, 4, 1, '#4a525c');
+        // 윗판 + 반찬통 둘 (김이 오른다)
+        R(0, -3, 16, 8, '#d8dce4'); R(0, -3, 16, 1, OUT); R(0, -2, 16, 1, '#f0f2f6');
+        for (const [bx, fi] of [[1, i0], [8, i0 + 1]] as [number, number][]) {
+          const f = foods[fi % foods.length];
+          box(bx, -1, 7, 5, '#8a929e', '#4a525c');
+          R(bx + 1, 0, 5, 3, f); R(bx + 1, 0, 5, 1, shade(f, 30));
+          R(bx + 2, -5, 1, 2, 'rgba(255,255,255,0.55)'); R(bx + 4, -6, 1, 2, 'rgba(255,255,255,0.4)');
+        }
+        if (L) { R(0, -3, 1, 17, OUT); R(1, 14, 3, 2, OUT); }
+        if (Rt) { R(15, -3, 1, 17, OUT); R(12, 14, 3, 2, OUT); }
         break;
       }
       case T.COUNTER:

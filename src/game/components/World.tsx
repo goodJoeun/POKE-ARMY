@@ -255,18 +255,34 @@ const hashStr = (str: string) => {
     h = Math.imul(h ^ str.charCodeAt(i), 16777619);
   return h >>> 0;
 };
-/** 이번 끼니에 각자 자리에 앉은 시각 (자리에 도착한 순간 기록) */
-const mealRt: { key: string; seated: Record<string, number> } = {
+/** 이번 끼니에 각자 자리에 앉은 시각 (자리에 도착한 순간 기록) · me: 내가 앉아 먹기 시작한 시각 */
+const mealRt: { key: string; seated: Record<string, number>; me: number | null } = {
   key: "",
   seated: {},
+  me: null,
 };
 function mealSeated(day: number, minute: number) {
   const k = `${day}-${mealOf(minute)}`;
   if (mealRt.key !== k) {
     mealRt.key = k;
     mealRt.seated = {};
+    mealRt.me = null;
   }
   return mealRt.seated;
+}
+/**
+ * 최선임이 다 먹는 시각 (아직 앉지 않았으면 undefined).
+ * 분대와 함께 온 끼니엔 내가 밥을 받아 앉기 전까지 선임들도 계속 먹는다:
+ * 선임이 앉은 때와 내가 앉은 때 중 늦은 쪽에서 SQUAD_EAT_MIN 뒤
+ */
+function squadLeadDone(st: ReturnType<typeof useGame.getState>): number | undefined {
+  const seated = mealSeated(st.day, st.minute);
+  const lead = squadKeys(st.branch, st.day)[0];
+  const ls = lead ? seated[lead] : undefined;
+  if (ls === undefined) return undefined;
+  const withMe = mealCall.withMe === `${st.day}-${mealOf(st.minute)}`;
+  if (withMe && mealRt.me === null) return Infinity;
+  return Math.max(ls, mealRt.me ?? ls) + SQUAD_EAT_MIN;
 }
 /** 오늘 1분대(1생활관) 사람들, 계급순 */
 function squadKeys(
@@ -345,7 +361,8 @@ function mealGoal(
     const lead = seated[squad[0]];
     // 최선임이 다 먹었다: 내가 식당에서 같이 먹고 있으면 "생활관 간다" 할 때까지 자리에서 기다리고,
     // 내가 없으면 분대끼리 다 같이 일어나 1생활관으로 돌아간다
-    if (lead !== undefined && m >= lead + SQUAD_EAT_MIN)
+    const leadDone = squadLeadDone(st);
+    if (leadDone !== undefined && m >= leadDone)
       return runtime.player.map === "mess" && mealCall.key === mk
         ? seat
         : (MEAL_GATHER[key] ?? "free");
@@ -1989,11 +2006,11 @@ export default function World() {
         "good",
       );
     } else if (e.mode === "slow") {
-      const leadAt = e.lead ? mealSeated(st.day, st.minute)[e.lead] : undefined;
+      const leadDone = squadLeadDone(st);
       if (
         e.lead &&
-        leadAt !== undefined &&
-        st.minute > leadAt + SQUAD_EAT_MIN + 1
+        leadDone !== undefined &&
+        st.minute > leadDone + 1
       )
         finish(
           "🍚 꼭꼭 씹어 든든하게 먹었다. …고개를 들어 보니 분대원들이 다 먹고 나만 기다리고 있다. 눈치가 좀 보인다.",
@@ -2065,7 +2082,7 @@ export default function World() {
           enterDir: "up",
           arrive: { x: MESS_DOOR_IN[0], y: MESS_DOOR_IN[1] + 0.2, dir: "up" },
         } as unknown as Door;
-        s2.toast("🍚 분대와 함께 병영식당에 도착했다. 배식대에서 식판을 받고 내 자리에 앉자.", "info");
+        s2.toast("🍚 분대와 함께 병영식당에 도착했다. 밥차에서 식판을 받고 내 자리에 앉자.", "info");
       },
     });
   };
@@ -2474,7 +2491,7 @@ export default function World() {
     if (best) return best;
     const spotNames: Partial<Record<SpotId, string>> = {
       bed: "내 침상",
-      mess: "식당 배식대",
+      mess: "밥차 (배식)",
       px: STORE_NAME[st.branch],
       admin: "행정반",
       command: "지휘통제실 상황판",
@@ -2845,7 +2862,7 @@ export default function World() {
           break;
         }
         case "mess": {
-          title = "🍚 식당 배식대";
+          title = "🍚 밥차";
           const meal = m < 15 * 60 ? "lunch" : "dinner";
           const ok = isMealTime(m);
           const ate = st.daily.includes(`meal_${meal}`);
@@ -2881,8 +2898,8 @@ export default function World() {
                       who: "narr",
                       text:
                         meal === "lunch"
-                          ? "오늘의 메뉴는 제육볶음! 배식병이 밥을 꾹꾹 눌러 담아 준다."
-                          : "저녁은 카레. 국자 가득 카레가 부어진다.",
+                          ? "오늘의 메뉴는 제육볶음! 배식병이 밥차에서 밥을 꾹꾹 눌러 담아 준다."
+                          : "저녁은 카레. 밥차의 국자 가득 카레가 부어진다.",
                     },
                     {
                       who: "narr",
@@ -3785,11 +3802,14 @@ export default function World() {
     p.moving = false;
     keys.current = {};
     // 분대 선두(분대장)가 같은 줄에서 아직 먹는 중이면 "선임 속도에 맞추기"를 고를 수 있다
+    // (내가 앉는 이 순간부터 선임들의 남은 식사 시간이 흐른다)
     const squad = squadKeys(st.branch, st.day);
     const leadKey = squad[0];
-    const leadAt = leadKey ? mealSeated(st.day, st.minute)[leadKey] : undefined;
+    mealSeated(st.day, st.minute);
+    mealRt.me = st.minute;
+    const leadDone = squadLeadDone(st);
     const leadLeft =
-      leadAt !== undefined ? Math.round(leadAt + SQUAD_EAT_MIN - st.minute) : 0;
+      leadDone !== undefined && Number.isFinite(leadDone) ? Math.round(leadDone - st.minute) : 0;
     const lead = leadKey && leadLeft >= 3 ? leadKey : null;
     const first = !st.flags.mealPace;
     const leadName = lead ? memberName(st.branch, lead) : "";
@@ -4914,7 +4934,7 @@ export default function World() {
           !warpReq.current
         ) {
           const lead = squadKeys(st.branch, st.day)[0];
-          const leadAt = lead ? seated[lead] : undefined;
+          const leadAt = squadLeadDone(st);
           const meDone =
             st.daily.includes(`meal_${mealOf(st.minute)}`) &&
             !myMeal.eating &&
@@ -4924,7 +4944,7 @@ export default function World() {
             st.finishSquadMeal();
           } else if (lead && meDone) {
             // 최선임이 아직 자리에 앉지 못했으면 지금 다 먹은 것으로 본다
-            const leadDone = leadAt !== undefined ? leadAt + SQUAD_EAT_MIN : st.minute;
+            const leadDone = leadAt !== undefined && Number.isFinite(leadAt) ? leadAt : st.minute;
             // 먼저 다 먹었으면 최선임이 숟가락을 놓을 때까지 자리에서 기다린다 (그만큼 시간이 지난다)
             if (st.minute < leadDone) st.spend(Math.ceil(leadDone - st.minute));
             mealBackRef.current(lead);

@@ -30,6 +30,7 @@ export const DEX = {
   jirachi: 385, xatu: 178, unown: 201, hypno: 97,
   // 서브 스토리: 분리수거장 돌탑의 화강돌
   spiritomb: 442,
-  // 서브 스토리: 탄약고 군견 하데리어
+  // 서브 스토리: 탄약고 군견 하데리어(Herdier) · 분리수거장 깨봉이(Trubbish)
   herdier: 507,
+  trubbish: 568,
 };
