@@ -5,7 +5,7 @@ import { useGame, presentNpcs, fmtDelta } from '../state/store';
 import { TEXT_SPEED, useSettings } from '../state/settings';
 import { hasGuardNight, hasNightDuty } from '../data/schedule';
 import { BRANCHES, RANKS, TOTAL_DAYS, fmtMoney, rankIdxForDay, serviceMonth } from '../data/branches';
-import { ARCHETYPE_INFO, PLAYER_SPECIES, findSpecies } from '../data/monsters';
+import { ARCHETYPE_INFO, findSpecies } from '../data/monsters';
 import { PERSONALITY_QUIZ } from '../data/quiz';
 import { NPC_IDS, NPC_SKINS } from '../data/npcs';
 import { npcCap, npcSpeaker } from '../engine/speakers';
@@ -26,18 +26,10 @@ export function Title() {
   const settingsOpen = useSettings((st) => st.open);
   // 설정에서 저장 데이터를 지운 경우를 반영하기 위해 설정 창이 닫힐 때도 다시 확인
   useEffect(() => setHasSave(s.hasSave()), [s, settingsOpen]);
-  const demo = PLAYER_SPECIES.army[0].look;
-  const demo2 = PLAYER_SPECIES.navy[0].look;
-  const demo3 = PLAYER_SPECIES.air[0].look;
   return (
     <div className="scene title-scene">
-      <div className="title-monsters">
-        <MonsterCanvas look={demo} size={120} cap="army" />
-        <MonsterCanvas look={demo2} size={120} cap="navy" />
-        <MonsterCanvas look={demo3} size={120} cap="air" />
-      </div>
-      <h1 className="logo">포켓몬 이등병</h1>
-      <div className="logo-sub">군대 가기 싫다고 했더니… 포켓몬이 되어 입대했다?!</div>
+      <h1 className="logo">Poké Army</h1>
+      <div className="logo-sub">별빛을 찾아서</div>
       <div className="title-form">
         <input
           placeholder="주인공 이름 (예: 김몬스)"

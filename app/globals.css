@@ -53,7 +53,33 @@ button.big:not(.primary) { background: #fff8e6; color: var(--ink); box-shadow: 0
 .d4 { animation-delay: 4.2s; } .d5 { animation-delay: 5.4s; } .d6 { animation-delay: 6.6s; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-.title-scene .title-monsters { display: flex; gap: 8px; }
+/* 타이틀: 표지 그림(public/cover.webp) 위에 로고는 창밖 밤하늘, 입력·버튼은 아래쪽 */
+.title-scene {
+  justify-content: flex-start; padding-top: clamp(40px, 11vh, 120px); gap: 6px;
+  background: #1a1838; isolation: isolate; overflow: hidden;
+}
+/* 뒤: 같은 그림을 흐리게 깔아 빈 가장자리를 채운다 */
+.title-scene::before {
+  content: ''; position: absolute; inset: -40px; z-index: -1;
+  background: url('/cover.webp') center / cover no-repeat;
+  filter: blur(24px) brightness(0.55);
+}
+/* 앞: 화면을 꽉 채우는(cover) 크기보다 15% 작게 — 단, 그림 전체가 보이는(contain) 크기보다는 작아지지 않게 */
+.title-scene::after {
+  --cover-w: max(100vw, 177.7vh);
+  --contain-w: min(100vw, 177.7vh);
+  content: ''; position: absolute; z-index: -1; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: max(var(--contain-w), calc(var(--cover-w) * 0.85)); aspect-ratio: 1672 / 941;
+  background:
+    radial-gradient(ellipse 36% 30% at 50% 22%, rgba(10, 12, 40, 0.5), transparent 70%),
+    linear-gradient(to top, rgba(10, 12, 40, 0.6), transparent 30%),
+    url('/cover.webp') center / 100% 100% no-repeat;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent), linear-gradient(to bottom, transparent, #000 3%, #000 97%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent), linear-gradient(to bottom, transparent, #000 3%, #000 97%, transparent);
+  mask-composite: intersect;
+}
+.title-scene .title-form { margin-top: auto; margin-bottom: 44px; }
 .logo {
   font-size: clamp(44px, 9vw, 84px); margin: 0; color: var(--gold);
   text-shadow: 0 5px 0 #8a5a10, 0 10px 18px rgba(0, 0, 0, 0.5); letter-spacing: 2px;

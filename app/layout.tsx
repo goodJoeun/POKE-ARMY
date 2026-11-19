@@ -4,7 +4,7 @@ import './globals.css';
 import './retro.css';
 
 export const metadata: Metadata = {
-  title: '포켓몬 이등병',
+  title: 'Poké Army — 별빛을 찾아서',
   description: '군대 가기 싫다던 주인공이 포켓몬이 되어 입대한다! 군 생활 시뮬레이션 프로토타입',
 };
 
