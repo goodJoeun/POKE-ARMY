@@ -951,7 +951,7 @@ export default function World() {
           },
           {
             who: "narr",
-            text: '상단에 다음 일정이 뜬다. 집합 시각(상단 "○○까지")에 표시된 장소에 있으면 정시에 시작된다. 미리 도착해서 E로 보고하면 바로 시작. 그 시각에 없으면 끌려가 혼난다!',
+            text: '상단에 다음 일정과 장소가 뜬다. 시계는 저절로 흐르지 않는다: 그 장소에 도착하면 일정이 시작된다. 자유 시간이 남았을 때는 그 장소에서 E를 눌러 시작한다.',
           },
           {
             who: "narr",
@@ -1427,38 +1427,37 @@ export default function World() {
     });
   }, [overlay, rollcall, world, placeAt, setOverlay]);
 
-  // ❓ 새 의혹: 알림으로 불쑥 띄우지 않고, 조작할 수 있게 된 순간 주인공이 이상한 점을 스스로 떠올린다
+  // ❓ 새 의혹: 알림으로 불쑥 띄우지 않고, 조작할 수 있게 된 순간 주인공이 이상한 점을 스스로 떠올린다.
+  // 여러 개가 쌓였으면 한 번에 이어서 떠올리고, 하루가 바뀌며 생긴 의혹은 아침 점호를 마친 뒤(08:00~)에 떠올린다.
   const susNote = useGame((s) => s.susNote);
+  const minuteNow = useGame((s) => s.minute);
   useEffect(() => {
-    if (!susNote.length || overlay || rollcall) return;
+    if (!susNote.length || overlay || rollcall || minuteNow < 8 * 60) return;
     const tm = setTimeout(() => {
       const st = useGame.getState();
-      const id = st.susNote[0];
       if (
-        !id || overlayRef.current || holdRef.current || cer.current || st.rollcall || st.work || st.scene !== "world" ||
+        !st.susNote.length || overlayRef.current || holdRef.current || cer.current || st.rollcall || st.work || st.scene !== "world" ||
         st.nightDuty?.phase === "sleep" || meInBed.current || myMeal.eating || useSettings.getState().open ||
         (st.day === 1 && !st.flags.wokeUp)
       )
         return;
-      const d = SUSPICIONS.find((x) => x.id === id);
-      st.popSusNote(id);
-      if (!d) return;
-      const lead = suspicionLeads(d, st).slice(-1)[0];
+      const lines: Line[] = [];
+      for (const id of st.susNote) {
+        const d = SUSPICIONS.find((x) => x.id === id);
+        if (!d) continue;
+        const lead = suspicionLeads(d, st).slice(-1)[0];
+        if (lead) lines.push({ who: "narr", text: lead });
+        lines.push({ who: "me", text: `(…${d.question})` });
+        lines.push({ who: "narr", text: `❓ 수첩에 의혹을 적었다 — 「${d.title}」 (Tab → 의혹)` });
+      }
+      for (const id of [...st.susNote]) st.popSusNote(id);
+      if (!lines.length) return;
       runtime.player.moving = false;
       keys.current = {};
-      setOverlay({
-        type: "dialogue",
-        script: {
-          lines: [
-            ...(lead ? [{ who: "narr" as const, text: lead }] : []),
-            { who: "me", text: `(…${d.question})` },
-            { who: "narr", text: `❓ 수첩에 의혹을 적었다 — 「${d.title}」 (Tab → 의혹)` },
-          ],
-        },
-      });
-    }, 900);
+      setOverlay({ type: "dialogue", script: { lines } });
+    }, 350);
     return () => clearTimeout(tm);
-  }, [susNote, overlay, rollcall, setOverlay]);
+  }, [susNote, overlay, rollcall, minuteNow, setOverlay]);
 
   /** 📖 스토리 장면이 쓰는 연결: 대화 · 이동 · 사람 배치 · 저항 게이지 */
   const storyCtx = useMemo<StoryCtx>(
@@ -1631,7 +1630,6 @@ export default function World() {
     /** 마주 선 뒤: 명령을 듣는다 → 큰 임무 카드 */
     const playOrder = (id: string) => {
       const st = useGame.getState();
-      const m = STORY_MISSIONS.find((x) => x.id === id)!;
       const o = ORDERS[id];
       const present = npcPresent(o.giver, st.day);
       const brief = o.brief.replace("{ammo}", FACILITY_NAME[st.branch]);
@@ -1659,7 +1657,7 @@ export default function World() {
               kicker: "새 임무",
               title: brief,
               from: present ? `${npcDisplayName(s2.branch, o.giver, s2.day)}의 지시` : "당번표에 적힌 이름",
-              lines: [`📖 ${m.title}`, "퀘스트 창(Q)에서 다시 확인할 수 있다."],
+              lines: ["화면 위 안내와 ❗ 표시를 따라가자. 퀘스트 창(Q)에서 다시 확인할 수 있다."],
             },
           });
         },
@@ -1694,15 +1692,19 @@ export default function World() {
         },
       });
     };
+    /** 마지막으로 다른 일(대화 · 장면 전환 · 식사)이 끝난 때. 곧바로 또 부르지 않고 숨 돌릴 틈을 준다 */
+    let idleSince = performance.now();
     const iv = setInterval(() => {
       const st = useGame.getState();
       const p = runtime.player;
       if (
         overlayRef.current || holdRef.current || st.scene !== "world" || st.busy ||
         st.rollcall || st.nightDuty || st.patrol || st.work || cer.current ||
-        useSettings.getState().open || myMeal.eating || myMeal.tray
-      )
+        useSettings.getState().open || myMeal.eating || myMeal.tray || warpReq.current
+      ) {
+        idleSince = performance.now();
         return;
+      }
       const er = errandNow(st);
       // 🏃 심부름: 시킨 곳에 닿았다 → 그다음부터는 다시 자유롭게 다닐 수 있다
       if (er?.kind === "errand" && er.id && p.map === er.map) {
@@ -1734,6 +1736,8 @@ export default function World() {
       if (er) return;
       // 📢 새 호출: 자유 시간에, 밥을 다 먹은 뒤에만 부른다
       if (st.clues.length === 0 || !orderWindow(st) || (st.mealCheck && !st.mealCheck.done)) return;
+      // 방금 다른 일(보고 · 식사 복귀 · 대화)을 마쳤으면 몇 초는 기다렸다가 부른다
+      if (performance.now() - idleSince < 5000) return;
       // 한 번 부르고 나면 한동안은 다시 부르지 않는다
       const lo = lastOrder.current;
       if (lo && lo.day === st.day && st.minute - lo.minute < 40) return;
@@ -1754,6 +1758,11 @@ export default function World() {
       const meName = `${RANKS[rankIdxForDay(st.day)]} ${st.name}`;
       const office = at.map === "admin" || at.map === "command";
       st.log(present ? `📢 ${who}의 호출을 받았다.` : "📢 당번표에 새 이름이 적혔다는 말을 들었다.");
+      // 같은 방에 있으면 방송이나 전달 없이, 그 사람이 그 자리에서 직접 부른다 (다가가면 바로 이야기가 시작된다)
+      if (present && p.map === at.map) {
+        st.toast(`📢 ${who}: "${st.name}, 잠깐 이리 와 봐라."`, "alert");
+        return;
+      }
       setOverlay({
         type: "notice",
         info: present
@@ -1808,7 +1817,9 @@ export default function World() {
   storyActRef.current = (key: string) => {
     const st = useGame.getState();
     if (key === "roof") {
-      if (!st.flags.roof) {
+      // 옥상은 추리 정리 1을 마쳤거나, 옥상 일을 맡았을 때(이불 당번 등) 열린다
+      const roofOpen = st.flags.roof || st.flags["order_D-02"] || st.flags["order_D-03"];
+      if (!roofOpen) {
         setOverlay({
           type: "dialogue",
           script: {
@@ -2460,6 +2471,7 @@ export default function World() {
         mealCall.talking = false;
         mealCall.key = `${s2.day}-${mealOf(s2.minute)}`;
         mealCall.withMe = mealCall.key;
+        if (s2.mealCheck && !s2.mealCheck.done) useGame.setState({ mealCheck: { ...s2.mealCheck, called: true } });
         // 분대원은 식당 입구 안쪽에 내려서 각자 자리로 간다
         squadKeys(s2.branch, s2.day).forEach((k, i) => {
           const en = entityOf(k);
@@ -3129,6 +3141,16 @@ export default function World() {
       dist(MY_MEAL_SEAT[0] + 0.5, MY_MEAL_SEAT[1] + 0.5) < 1.4
     ) {
       return { key: "meal_seat", kind: "seat", label: "내 자리에 앉아 먹기" };
+    }
+    // 🍱 밥차 앞: 아직 식판을 받지 않았으면, 곁에 서 있는 분대원보다 밥차가 먼저다
+    {
+      const mcT = st.mealCheck;
+      const spM = world.spots.mess;
+      if (
+        mcT && !mcT.done && !myMeal.tray && !myMeal.eating && !st.daily.includes(`meal_${mcT.meal}`) &&
+        p.map === spM.map && dist(spM.x + 0.5, spM.y + 0.5) < 1.4
+      )
+        return { key: "spot_mess", kind: "spot", spot: "mess", label: "밥차 (배식)" };
     }
     let best: Interactable | null = null;
     let bd = 1.5;
@@ -4675,6 +4697,8 @@ export default function World() {
   }, [setOverlay]);
 
   const interact = useCallback(() => {
+    // 🎬 장면이 바뀌는 중(화면 전환 · 연출)에는 상호작용을 받지 않는다 (연타로 같은 일이 두 번 시작되지 않게)
+    if (holdRef.current || warpReq.current) return;
     const it = promptRef.current ?? findInteractable();
     if (!it) return;
     // 📖 전역일: 별에게 대답하기 전엔 위병소를 나서지 않는다
@@ -4714,7 +4738,7 @@ export default function World() {
   // 키 입력
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (overlayRef.current || useGame.getState().rollcall) return;
+      if (overlayRef.current || useGame.getState().rollcall || holdRef.current) return;
       if (useGame.getState().nightDuty?.phase === "sleep") {
         if (
           e.key === "Enter" ||
@@ -5069,6 +5093,21 @@ export default function World() {
               break;
             }
             if (KNOCK_ROOMS[d.to]) {
+              // 불려 간 곳 · 근무 신고와 보고를 하러 가는 곳: 어떻게 들어갈지 묻지 않고, 노크하고 관등성명을 댄 뒤 들어간다
+              const ndK = st.nightDuty;
+              const erK = errandNow(st);
+              const expected =
+                (ndK && (ndK.phase === "checkin" || ndK.phase === "report") && d.to === DUTY_DESK[0]) ||
+                (!!st.patrol && d.to === DUTY_DESK[0]) ||
+                (!!erK && erK.map === d.to && (erK.kind === "summon" || erK.kind === "report"));
+              if (expected) {
+                thought.current = {
+                  text: `(똑똑) "${RANKS[rankIdxForDay(st.day)]} ${st.name}입니다. 들어가도 되겠습니까?"`,
+                  until: now + 2600,
+                };
+                fading = { door: d, phase: "out" };
+                break;
+              }
               p.x = px0;
               p.y = py0;
               knockRef.current(d);
@@ -6694,7 +6733,7 @@ export default function World() {
         onMap={() => setOverlay({ type: "map" })}
         onHome={goHome}
       />
-      {!overlay && !cerShow && (
+      {!overlay && !cerShow && !selfHidden(state) && (
         <QuestTracker onOpen={() => setOverlay({ type: "quests" })} />
       )}
       <div className="location-badge">📍 {world.maps[location].name}</div>

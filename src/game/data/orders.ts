@@ -120,9 +120,9 @@ export const ORDERS: Record<string, OrderDef> = {
     ],
   },
   'M-07': {
-    mission: 'M-07', giver: 'lt', orderAt: COMMAND, reportAt: COMMAND, errand: true, brief: '지휘통제실에서 근무 일지를 베껴 오기 (시각은 벽시계 기준으로 정확히)',
+    mission: 'M-07', giver: 'lt', orderAt: ADMIN_LT, reportAt: ADMIN_LT, errand: true, brief: '지휘통제실에서 근무 일지를 베껴 오기 (시각은 벽시계 기준으로 정확히)',
     order: [
-      say('lt', '주간 근무 결산을 해야 한다. 지휘통제실 가서 근무 일지를 베껴 와라.'),
+      say('lt', '행정반에서 주간 근무 결산을 하는 중이다. 지휘통제실에 가서 근무 일지를 베껴 와라.'),
       say('lt', '시각은 벽시계 기준으로 정확히 적고. 나는 이런 서류가 딱 맞아떨어질 때가 제일 좋다.'),
       me('"정확히 베껴 오겠습니다."'),
     ],

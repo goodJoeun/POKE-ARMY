@@ -99,6 +99,8 @@ export interface MealCheck {
   start: number;
   /** 분대와 함께 먹고 생활관으로 돌아왔다. 그 전에는 배식 시간이 끝나지 않고, 다음 일정·스토리도 진행되지 않는다 */
   done: boolean;
+  /** 분대와 함께 식당에 도착했다 (그 뒤로는 상단 안내가 "식판 받고 자리에 앉기"로 바뀐다) */
+  called?: boolean;
 }
 
 /**
@@ -434,16 +436,17 @@ export const useGame = create<Store>((set, get) => ({
     set({ minute });
     const ev = get().currentEvent();
     // 시간대 알림
-    const ann = (key: string, at: number, text: string, tone: Toast['tone'] = 'info') => {
+    // (until: 이 시각이 지났으면 알림은 건너뛴다 — 시간이 한꺼번에 넘어갔을 때 이미 끝난 시간대를 알리지 않도록)
+    const ann = (key: string, at: number, text: string, tone: Toast['tone'] = 'info', until = Infinity) => {
       if (minute >= at && !get().announced.includes(key)) {
         set({ announced: [...get().announced, key] });
-        get().toast(text, tone);
+        if (minute < until) get().toast(text, tone);
       }
     };
     if (s.day < TOTAL_DAYS) {
-      ann('lunch', 12 * 60, '🍚 점심시간! 오후 일과 전까지 자유 시간이다.');
+      ann('lunch', 12 * 60, '🍚 점심시간! 오후 일과 전까지 자유 시간이다.', 'info', 13 * 60 + 30);
       ann('dinner', 17 * 60 + 30, '🌇 일과 종료! 개인정비 시간 (저녁 식사 ~18:30)');
-      ann('phone', 18 * 60, '📱 휴대폰 사용 시간 (침상에서 사용 가능, ~21:00)');
+      ann('phone', 18 * 60, '📱 휴대폰 사용 시간 (침상에서 사용 가능, ~21:00)', 'info', 21 * 60);
       // 식사 시간이 끝났는데 밥을 안 먹었으면 굶은 대가를 치른다
       const missed = (key: string, at: number, meal: 'meal_lunch' | 'meal_dinner', label: string) => {
         if (minute < at || get().announced.includes(key)) return;
@@ -683,13 +686,15 @@ export const useGame = create<Store>((set, get) => ({
     // 쓰러짐 / 멘붕 처리
     if (stats.hp <= 0) {
       set({ stats: { ...get().stats, hp: 40, mental: clamp(get().stats.mental - 10) } });
-      get().toast('🏥 너무 지쳐서 쓰러졌다… 의무대에서 쉬고 나왔다.', 'bad');
-      get().log('🏥 탈진해서 의무대 신세를 졌다.');
+      const late = !!get().nightDuty || !!get().patrol || get().minute >= 22 * 60 || get().minute < 6 * 60;
+      get().toast(late ? '🏥 다리에 힘이 풀려 잠깐 주저앉았다… 이를 악물고 다시 일어났다. 날이 밝으면 의무대에 들르자.' : '🏥 너무 지쳐서 쓰러졌다… 의무대에서 쉬고 나왔다.', 'bad');
+      get().log(late ? '🏥 한밤중에 탈진해 주저앉았다.' : '🏥 탈진해서 의무대 신세를 졌다.');
     }
     if (get().stats.mental <= 0) {
       set({ stats: { ...get().stats, mental: 35, discipline: clamp(get().stats.discipline - 5) } });
-      get().toast('🫂 병영생활전문상담관과 면담했다. 마음이 조금 편해졌다.', 'info');
-      get().log('🫂 상담관 선생님과 이야기를 나눴다.');
+      const late = !!get().nightDuty || !!get().patrol || get().minute >= 22 * 60 || get().minute < 6 * 60;
+      get().toast(late ? '🫂 마음이 바닥까지 가라앉았다… 숨을 고르고, 날이 밝으면 상담관 선생님을 찾아가기로 했다.' : '🫂 병영생활전문상담관과 면담했다. 마음이 조금 편해졌다.', 'info');
+      get().log(late ? '🫂 한밤중에 마음이 무너질 뻔했다. 날이 밝으면 상담관을 찾아가기로 했다.' : '🫂 상담관 선생님과 이야기를 나눴다.');
     }
     const summary = parts.join(' · ');
     if (!silent && summary) {

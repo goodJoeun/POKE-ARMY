@@ -240,6 +240,14 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
     setResult('right');
   }, [id, solved]);
 
+  // 🧪 개발용: 테스트 플레이에서 퍼즐을 바로 통과한다 (콘솔: __puzzle.win() → __puzzle.finish())
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    const w = window as unknown as Record<string, unknown>;
+    w.__puzzle = { id, win, finish, solved };
+    return () => { if ((w.__puzzle as { id?: string } | undefined)?.id === id) delete w.__puzzle; };
+  }, [id, win, finish, solved]);
+
   const lap = input?.type === 'maze' ? Math.floor(steps / input.forks) : 0;
   const canGiveUp = input?.type === 'maze' && lap >= input.laps - 1;
   /** 미로: 어느 길을 골라도 걷다가 제자리로 돌아온다 */

@@ -11,12 +11,20 @@ import { initSprites } from '../engine/sprites';
 import { DayEnd, Ending, Intro, Promotion, Quiz, Title, Transform } from './Scenes';
 import Dream from './Dream';
 import BgmDirector from './BgmDirector';
-import { dreamPending } from '../data/story';
+import { STORY_MISSIONS, dreamPending, missionState } from '../data/story';
+import { errandNow } from '../data/errands';
+import { ORDERS } from '../data/orders';
 
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   // 개발용 디버그 핸들 (콘솔에서 __game.getState() 등)
   (window as unknown as Record<string, unknown>).__game = useGame;
   (window as unknown as Record<string, unknown>).__runtime = runtime;
+  (window as unknown as Record<string, unknown>).__errand = () => errandNow(useGame.getState());
+  (window as unknown as Record<string, unknown>).__settings = useSettings;
+  (window as unknown as Record<string, unknown>).__storyOpen = () => {
+    const st = useGame.getState();
+    return st.clues.length === 0 ? [] : STORY_MISSIONS.filter((m) => missionState(m, st) === 'open').map((m) => ({ id: m.id, spot: m.spot, hasOrder: !!ORDERS[m.id], ordered: !!st.flags[`order_${m.id}`] }));
+  };
 }
 
 initSprites();

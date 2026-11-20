@@ -116,7 +116,7 @@ export const SUSPICIONS: SuspicionDef[] = [
     question: '밤마다 복도를 도는 똑딱 소리의 주인은 누구일까.',
     open: { flag: 'n03' },
     leads: [
-      { when: { flag: 'n03' }, text: '처음 보는 당직부관. "눈을 감으면 편해져." 다음 날, 그런 사람은 없었다고 한다.' },
+      { when: { flag: 'n03' }, text: '처음 보는 당직부관. "눈을 감으면 편해져." 우리 부대에 그런 간부는 없다.' },
       { when: { clue: 'C-14' }, text: '잠긴 상자 둘레의 둥근 자국. 누군가 별 조각을 숨기고 있었다.' },
     ],
     solved: { flag: 'd03' },

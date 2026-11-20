@@ -466,7 +466,7 @@ export function DayEnd() {
             {affDiff.map(([id, d]) => <span key={id} className={d > 0 ? 'up' : 'down'}>{NPC_SKINS[s.branch][id].name} {sign(d)}</span>)}
           </div>
         )}
-        <p className="diary-sleep">💤 {nightDuty ? '불침번 근무를 마치고 녹초가 되어 잠들었다.' : '취침 나팔과 함께 스르륵 잠들었다.'}</p>
+        <p className="diary-sleep">💤 {hasGuardNight(s.day) ? '야간 위병소 근무를 마치고, 꽁꽁 언 발로 모포 속에 파고들어 잠들었다.' : nightDuty ? '불침번 근무를 마치고 녹초가 되어 잠들었다.' : s.patrol || (s.day >= 5 && s.day % 4 === 1) ? '야간 순찰 보고를 마치고 곯아떨어졌다.' : '취침 나팔과 함께 스르륵 잠들었다.'}</p>
         <button className="primary big" onClick={proceed}>
           {s.day >= TOTAL_DAYS - 1 ? '내일은 드디어… 전역일! ▶' : '다음 날 ▶ (Enter)'}
         </button>
@@ -497,10 +497,29 @@ export function Ending() {
   useEffect(() => { s.wipe(); }, [s]);
 
   if (stage === -1 && storyEnd) return <StoryEndingView end={storyEnd} unanswered={!s.flags.f01} onDone={() => setStage(0)} />;
+  // 🌑 배드 엔딩: 부대를 떠나지 못했다 → "전역"이나 현실로 돌아오는 장면 없이, 남은 기록만 보여 주고 끝난다
+  if (storyEnd === 'bad') {
+    return (
+      <div className="scene ending-scene">
+        <h2>🌑 별이 졌다</h2>
+        <MonsterCanvas look={sp.look} size={160} cap={b.cap} />
+        <div className="ending-title">영원한 이병</div>
+        <p>소원은 거둬지지 않았다. 내일 아침에도 기상나팔은 울리고, 아무도 이상하게 여기지 않는다.</p>
+        <div className="ending-stats">
+          <span>모은 별 조각 {s.stars.length}/7</span>
+          <span>기억의 실마리 {s.clues.length}개</span>
+          <span>푼 퍼즐 {solvedPuzzles}개</span>
+        </div>
+        <p className="hud-dim">별 조각 일곱 개를 모으고, 동기의 이름을 되찾아 주면 다른 아침을 맞을 수 있다.</p>
+        <p className="hud-dim">— 별이 다시 깨어날 때까지, 천 년. —</p>
+        <button className="primary big" onClick={() => s.go('title')}>타이틀로</button>
+      </div>
+    );
+  }
   if (stage === 0) {
     return (
       <div className="scene ending-scene">
-        <h2>🎊 전역을 명받았습니다!</h2>
+        <h2>{storyEnd ? '🎖️ 열이틀의 군 생활, 결산' : '🎊 전역을 명받았습니다!'}</h2>
         <MonsterCanvas look={sp.look} size={160} cap={b.cap} />
         <div className="ending-title">{title}</div>
         <p>{desc}</p>
@@ -520,9 +539,47 @@ export function Ending() {
             );
           })}
         </div>
-        <p>위병소를 나서며 마지막으로 경례했다. <b>"{b.salute}!"</b></p>
-        <p className="hud-dim">그날 밤, 사회에서의 첫 잠자리에 누워 눈을 감았다…</p>
-        <button className="primary big" onClick={() => setStage(1)}>잠들기 💤</button>
+        {storyEnd ? (
+          <>
+            <p>소원이 만든 부대의 정문을 나서며, 마지막으로 경례했다. <b>"{b.salute}!"</b></p>
+            <p className="hud-dim">꿈속의 열이틀은 이렇게 끝났다. 그리고 현실의 아침이 온다…</p>
+            <button className="primary big" onClick={() => setStage(1)}>아침으로 ☀️</button>
+          </>
+        ) : (
+          <>
+            <p>위병소를 나서며 마지막으로 경례했다. <b>"{b.salute}!"</b></p>
+            <p className="hud-dim">그날 밤, 사회에서의 첫 잠자리에 누워 눈을 감았다…</p>
+            <button className="primary big" onClick={() => setStage(1)}>잠들기 💤</button>
+          </>
+        )}
+      </div>
+    );
+  }
+  // 🌠 스토리 결말을 본 뒤: 앞 장면(훈련소에서 눈을 뜸)에 이어지는 짧은 맺음. 같은 기상 장면을 되풀이하지 않는다
+  if (storyEnd) {
+    const lost = s.branch === 'air' ? '날개도' : s.branch === 'navy' ? '물갈퀴도' : '꼬리 불꽃도';
+    return (
+      <div className="scene reality-scene">
+        <div className="reality-text">
+          <p className="fade-in">모포를 걷고 손을 내려다본다. 사람의 손이다. 꼬리도, {lost} 없다.</p>
+          <p className="fade-in d1">{sp.name}의 모습은 온데간데없다. 여기는 <b>훈련소</b>, 진짜 입대 첫 아침이다.</p>
+          {storyEnd === 'true' ? (
+            <>
+              <p className="fade-in d2">옆 침상의 준서가 말없이 주먹을 내민다. 나도 주먹을 맞댄다.</p>
+              <p className="fade-in d3">"야, 관등성명 대는 법은 안 까먹었지?" "…꿈에서 열두 번은 댔다."</p>
+              <p className="fade-in d4">{s.name}{pj(s.name, '은(는)')} 피식 웃었다. 이번엔 해낼 수 있을 것 같다. 둘이서.</p>
+            </>
+          ) : (
+            <>
+              <p className="fade-in d2">비어 있는 옆 침상을 한 번 보고, 전투화 끈을 단단히 묶는다.</p>
+              <p className="fade-in d3">조교가 묻는다. "너, 어디서 군 생활 좀 해 봤냐? 관등성명이 왜 이렇게 자연스러워?"</p>
+              <p className="fade-in d4">{s.name}{pj(s.name, '은(는)')} 피식 웃었다. 이번엔 해낼 수 있을 것 같다. 그리고 기다릴 것이다.</p>
+            </>
+          )}
+          <h2 className="fade-in d5">— 그리고, 진짜 군 생활이 시작된다. —</h2>
+          <p className="fade-in d5 hud-dim">THE END · 플레이해 주셔서 감사합니다</p>
+          <button className="primary big fade-in d5" onClick={() => s.go('title')}>타이틀로</button>
+        </div>
       </div>
     );
   }
