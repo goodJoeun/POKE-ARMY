@@ -216,6 +216,10 @@ interface Store extends Persist {
   findClue: (id: string, memory?: number) => boolean;
   /** 의혹 수첩: 새로 열리거나 풀린 의혹을 알린다 */
   checkSuspicions: () => void;
+  /** 방금 눈에 띈 의혹 (ID). 조작할 수 있게 되면 혼잣말 장면으로 떠올리고 수첩에 적는다 · 저장하지 않는다 */
+  susNote: string[];
+  /** 떠올린 의혹을 목록에서 지운다 */
+  popSusNote: (id: string) => void;
   /** 퍼즐: 오답 기록 */
   puzzleWrong: (id: string) => void;
   /** 퍼즐: 별사탕 1개로 다음 힌트 열기 (열었으면 true) */
@@ -295,6 +299,7 @@ export const useGame = create<Store>((set, get) => ({
   work: null,
  
   nightDuty: null,
+  susNote: [],
   rollcall: null,
  
   toasts: [],
@@ -856,6 +861,8 @@ export const useGame = create<Store>((set, get) => ({
     return true;
   },
 
+  popSusNote: (id) => set({ susNote: get().susNote.filter((x) => x !== id) }),
+
   checkSuspicions: () => {
     const s = get();
     if (s.clues.length === 0) return;
@@ -865,7 +872,8 @@ export const useGame = create<Store>((set, get) => ({
       const st = suspicionState(d, s);
       if (st === 'hidden' || seen[d.id] === st) continue;
       // 열리자마자 풀린 의혹도 물음부터 알린다
-      if (!seen[d.id]) { get().toast(`❓ 새 의혹: ${d.title} — ${d.question}`, 'alert'); get().log(`❓ 수첩에 의혹을 적었다: ${d.title}`); }
+      // 새 의혹은 불쑥 알림으로 띄우지 않는다: 주인공이 이상한 점을 스스로 떠올리는 장면으로 보여 준다 (World)
+      if (!seen[d.id]) { set({ susNote: [...get().susNote.filter((x) => x !== d.id), d.id] }); get().log(`❓ 수첩에 의혹을 적었다: ${d.title}`); }
       if (st === 'solved') { get().toast(`✅ 의혹이 풀렸다: ${d.title}`, 'good'); get().log(`✅ 의혹 「${d.title}」이(가) 풀렸다.`); }
       seen[d.id] = st;
       changed = true;

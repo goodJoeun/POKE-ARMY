@@ -79,6 +79,7 @@ import { memberName } from "../engine/whereabouts";
 import Hud from "./Hud";
 import DialogueBox, { type DialogueScript } from "./DialogueBox";
 import Menu, { type MenuOption } from "./Menu";
+import Notice, { type NoticeInfo } from "./Notice";
 import Notebook from "./Notebook";
 import RollcallCeremony from "./RollcallCeremony";
 import { NIGHT_STAR_LINES, STORY_MISSIONS, missionState } from "../data/story";
@@ -90,6 +91,7 @@ import PuzzleBox from "./PuzzleBox";
 import { CANDY_SPOTS, QUICK_REWARD, QUICK_SPOTS } from "../data/puzzles";
 import { nightScene, workScene } from "../data/workScenes";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
+import { SUSPICIONS, suspicionLeads } from "../data/suspicions";
 import {
   SLIPPER_LOOK,
   buddyForgets,
@@ -151,6 +153,7 @@ type Overlay =
       onFail?: () => void;
     }
   | { type: "menu"; title: string; subtitle?: string; options: MenuOption[] }
+  | { type: "notice"; info: NoticeInfo; onDone?: () => void }
   | { type: "notebook" }
   | { type: "quests" }
   | { type: "map" }
@@ -289,14 +292,14 @@ function juniorToMe(key: string, day: number): boolean {
   const idx = (RANKS as readonly string[]).indexOf(word);
   return idx >= 0 && idx < mine;
 }
-/** 💭 전역했어야 할 사람을 볼 때 떠올리는 생각 */
+/** 💭 전역했어야 할 사람을 찾아가 말을 걸다가: 계급장이 아직도 그대로인 것이 눈에 걸린다 */
 function overdueThought(id: string, name: string, day: number): string {
   if (id === "room2a")
-    return "(2분대 말 없는 병장님. 내가 처음 왔을 때부터 병장이었다. 그 전에도, 그 전의 전에도…)";
+    return "(…2분대의 말 없는 병장님. 내가 이병으로 처음 왔을 때도 병장이었다. 나는 그동안 계급장을 몇 번 바꿔 달았는데, 저 계급장은 그대로다.)";
   const pool = [
-    `(…${name} 병장님. 내가 처음 왔을 때도 이미 고참이었는데. 전역 날짜가 한참 지났을 텐데…)`,
-    `(가만. ${name} 병장님이 전역 신고 하는 걸 본 적이 없다. 분대장님도, 맞선임도 다 떠났는데.)`,
-    `(${name} 병장님은 언제 집에 가는 걸까. …아니, 갈 수는 있는 걸까.)`,
+    `(…가만. ${name} 병장님 계급장이 아직도 그대로네. 병장을 단 지가 언제인데. 전역 날짜가 한참 지났을 텐데…)`,
+    `(${name} 병장님. 내가 진급하는 동안에도 저 계급장은 한 번도 바뀌지 않았다. 전역 신고를 하는 것도 본 적이 없다.)`,
+    `(왜 ${name} 병장님은 아직도 병장이지? 분대장님도, 맞선임도 다 떠났는데.)`,
   ];
   let h = day;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -1385,6 +1388,39 @@ export default function World() {
     });
   }, [overlay, rollcall, world, placeAt, setOverlay]);
 
+  // ❓ 새 의혹: 알림으로 불쑥 띄우지 않고, 조작할 수 있게 된 순간 주인공이 이상한 점을 스스로 떠올린다
+  const susNote = useGame((s) => s.susNote);
+  useEffect(() => {
+    if (!susNote.length || overlay || rollcall) return;
+    const tm = setTimeout(() => {
+      const st = useGame.getState();
+      const id = st.susNote[0];
+      if (
+        !id || overlayRef.current || holdRef.current || cer.current || st.rollcall || st.work || st.scene !== "world" ||
+        st.nightDuty?.phase === "sleep" || meInBed.current || myMeal.eating || useSettings.getState().open ||
+        (st.day === 1 && !st.flags.wokeUp)
+      )
+        return;
+      const d = SUSPICIONS.find((x) => x.id === id);
+      st.popSusNote(id);
+      if (!d) return;
+      const lead = suspicionLeads(d, st).slice(-1)[0];
+      runtime.player.moving = false;
+      keys.current = {};
+      setOverlay({
+        type: "dialogue",
+        script: {
+          lines: [
+            ...(lead ? [{ who: "narr" as const, text: lead }] : []),
+            { who: "me", text: `(…${d.question})` },
+            { who: "narr", text: `❓ 수첩에 의혹을 적었다 — 「${d.title}」 (Tab → 의혹)` },
+          ],
+        },
+      });
+    }, 900);
+    return () => clearTimeout(tm);
+  }, [susNote, overlay, rollcall, setOverlay]);
+
   /** 📖 스토리 장면이 쓰는 연결: 대화 · 이동 · 사람 배치 · 저항 게이지 */
   const storyCtx = useMemo<StoryCtx>(
     () => ({
@@ -1586,8 +1622,18 @@ export default function World() {
           onDone: () => {
             const s2 = useGame.getState();
             s2.applyEffects({ flag: `order_${m.id}` }, undefined, true);
-            s2.toast(`📋 임무: ${brief}`, "alert");
             s2.log(`📋 임무를 받았다: ${brief}`);
+            // 📋 임무 안내는 화면 가운데 큰 카드로 보여 준다
+            setOverlay({
+              type: "notice",
+              info: {
+                icon: "📋",
+                kicker: "새 임무",
+                title: brief,
+                from: present ? `${npcDisplayName(s2.branch, o.giver, s2.day)}의 지시` : "당번표에 적힌 이름",
+                lines: [`📖 ${m.title}`, "퀘스트 창(Q)에서 다시 확인할 수 있다."],
+              },
+            });
           },
         });
       });
@@ -2429,8 +2475,8 @@ export default function World() {
   desertRef.current = () => {
     const st = useGame.getState();
     const p = runtime.player;
-    // 정문 안쪽으로 한 걸음 물러선다 (대화가 끝나도 다시 걸리지 않게)
-    p.y = 27.4;
+    // 정문 선에서 멈춰 선다 (대화가 끝나도 다시 걸리지 않게 선 바로 안쪽)
+    p.y = 28.5;
     p.dir = "up";
     p.moving = false;
     keys.current = {};
@@ -2507,15 +2553,7 @@ export default function World() {
   const askEnterRef = useRef<(d: Door) => void>(() => {});
   askEnterRef.current = (d: Door) => {
     const p = runtime.player;
-    // 대답을 기다리는 동안 문이 다시 열리지 않게 한 발 물러선다
-    const back = {
-      up: [0, 0.7],
-      down: [0, -0.7],
-      left: [0.7, 0],
-      right: [-0.7, 0],
-    }[d.enterDir];
-    p.x += back[0];
-    p.y += back[1];
+    // 문 앞에 멈춰 선 그 자리에서 묻는다
     p.moving = false;
     keys.current = {};
     const inside = extraDefs.find((e) => e.id === "room2a");
@@ -2575,47 +2613,35 @@ export default function World() {
     });
   };
 
-  // 🌙 근무를 마치고 딴 데로 새려 하면: 피곤해서 발길을 돌린다 (내 침상으로 가는 길만 열려 있다)
-  const tiredRef = useRef<(d: Door) => void>(() => {});
-  tiredRef.current = (d: Door) => {
+  /** 💭 머리 위에 잠깐 뜨는 혼잣말 (문 앞에서 발이 멈췄을 때 등 · 조작을 막지 않는다) */
+  const thought = useRef<{ text: string; until: number } | null>(null);
+  /**
+   * 🚪 지금 이 문으로는 나갈 수 없는지: 갈 곳이 정해져 있을 땐 그쪽으로 가는 문만 열려 있다.
+   * 막힌 문 앞에서는 튕겨 나오지 않고 그 자리에 멈춰 서서, 이유를 혼잣말로 떠올린다. (null = 지나갈 수 있다)
+   */
+  const doorLockRef = useRef<(d: Door) => string | null>(() => null);
+  doorLockRef.current = (d: Door) => {
+    const st = useGame.getState();
     const p = runtime.player;
-    const back = { up: [0, 0.7], down: [0, -0.7], left: [0.7, 0], right: [-0.7, 0] }[d.enterDir];
-    p.x += back[0];
-    p.y += back[1];
-    p.moving = false;
-    keys.current = {};
-    const nd = useGame.getState().nightDuty;
-    const lines = [
-      "(하아암… 피곤하다. 딴 데 갈 기운도 없다. 얼른 내 침상으로 가서 자자.)",
-      "(눈꺼풀이 천근만근이다. 지금은 아무 데도 가고 싶지 않아. 내 침상으로 가자.)",
-      "(근무 끝났으면 자는 게 군인의 도리지… 얼른 침상으로.)",
-    ];
-    setOverlay({
-      type: "dialogue",
-      script: {
-        lines: [
-          {
-            who: "me",
-            text:
-              nd?.phase === "wakeNext"
-                ? "(어딜 가… 졸려 죽겠다. 다음 근무자 깨워서 교대하고, 얼른 내 침상으로 가서 자자.)"
-                : nd?.phase === "report"
-                  ? "(피곤하다… 그래도 지휘통제실에 근무 철수 보고부터 하고 자자.)"
-                  : lines[Math.floor(Math.random() * lines.length)],
-          },
-        ],
-      },
-    });
+    const nd = st.nightDuty;
+    // 🌙 근무를 마쳤으면(교대 · 보고 · 복귀) 가야 할 곳으로 가는 문 말고는 나가지 않는다
+    if (nd && (nd.phase === "return" || nd.phase === "report" || (nd.kind === "watch" && nd.phase === "wakeNext"))) {
+      const dest = nd.phase === "report" ? DUTY_DESK[0] : world.spots.bed.map;
+      if (doorToward(world, p.map, dest)?.to !== d.to)
+        return nd.phase === "wakeNext"
+          ? "(어딜 가… 다음 근무자부터 깨워서 교대하자.)"
+          : nd.phase === "report"
+            ? "(지휘통제실에 근무 철수 보고부터 하자.)"
+            : "(하아암… 피곤하다. 얼른 내 침상으로 가서 자자.)";
+    }
+    return null;
   };
 
   // 🚪 지휘통제실 · 행정반: 노크하고 들어간다. 그냥 들어가면 안에 있는 간부나 선임 행정병에게 잔소리를 듣는다
   const knockRef = useRef<(d: Door) => void>(() => {});
   knockRef.current = (d: Door) => {
     const p = runtime.player;
-    // 대답을 기다리는 동안 문이 다시 열리지 않게 한 발 물러선다
-    const back = { up: [0, 0.7], down: [0, -0.7], left: [0.7, 0], right: [-0.7, 0] }[d.enterDir];
-    p.x += back[0];
-    p.y += back[1];
+    // 문 앞에 멈춰 선 그 자리에서 묻는다
     p.moving = false;
     keys.current = {};
     const st = useGame.getState();
@@ -3987,6 +4013,38 @@ export default function World() {
       const st = useGame.getState();
       const ex = extras.current[id];
       const storyOn = st.clues.length > 0;
+      // 💭 전역했어야 할 사람을 찾아가 말을 걸다가: 계급이 왜 아직도 그대로인지 의아해진다 (하루에 한 사람당 한 번)
+      if (
+        storyOn && !st.nightDuty && extraOverdue(def, st.day) && !st.daily.includes(`overdue_${def.id}`) &&
+        !(ex && extraAsleep(id, ex, st.minute))
+      ) {
+        st.markDaily(`overdue_${def.id}`);
+        const first = !st.flags.overdueSeen;
+        setOverlay({
+          type: "dialogue",
+          script: {
+            lines: [
+              { who: "narr", text: `${def.name}에게 말을 걸려다, 가슴의 계급장에 눈이 멈췄다.` },
+              { who: "me", text: overdueThought(def.id, def.name, st.day) },
+              ...(first
+                ? [
+                    { who: "me" as const, text: "(전역 날짜가 지났는데 왜 계급도, 자리도 그대로일까. …이상하다. 수첩에 적어 두자.)" },
+                    { who: "narr" as const, text: "❓ 수첩의 「사라지는 전역자」에 한 줄을 보탰다." },
+                  ]
+                : []),
+            ],
+          },
+          onDone: () => {
+            const s2 = useGame.getState();
+            if (first) {
+              s2.applyEffects({ flag: "overdueSeen" }, undefined, true);
+              s2.checkSuspicions();
+            }
+            openExtraRef.current(id, skipStory);
+          },
+        });
+        return;
+      }
       const sopts =
         skipStory || (ex && extraAsleep(id, ex, st.minute))
           ? []
@@ -4585,8 +4643,6 @@ export default function World() {
     let offerT = 0;
     let offerGivers = new Set<string>();
     // 💭 전역했어야 할 사람을 볼 때의 독백 (한 사람당 하루 한 번, 한동안은 다시 안 함)
-    let overdueT = 0;
-    let lastOverdue = -1e9;
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
@@ -4690,6 +4746,9 @@ export default function World() {
       const dashing = hasShoes && !!keys.current["shift"] && !!(vx || vy);
       sta.dashing = dashing;
       const speed = dashing ? DASH_SPEED : WALK_SPEED;
+      // 막힌 문 앞에서는 이번 걸음을 되돌려 그 자리에 멈춘다
+      const px0 = p.x,
+        py0 = p.y;
       if (vx || vy) {
         const len = Math.hypot(vx, vy);
         const nx = p.x + (vx / len) * speed * dt;
@@ -4728,21 +4787,26 @@ export default function World() {
               Math.abs(p.y - (ty + 0.5)) < 1.0,
           );
           if (hit) {
-            // 🌙 근무를 마쳤으면(교대 · 복귀) 내 침상 쪽으로 가는 문 말고는 나가지 않는다
-            const ndD = st.nightDuty;
-            if (
-              ndD &&
-              (ndD.phase === "return" || ndD.phase === "report" || (ndD.kind === "watch" && ndD.phase === "wakeNext")) &&
-              doorToward(world, p.map, ndD.phase === "report" ? DUTY_DESK[0] : world.spots.bed.map)?.to !== d.to
-            ) {
-              tiredRef.current(d);
+            // 🚪 갈 곳이 정해져 있으면 다른 문은 열리지 않는다: 문 앞에서 발이 멈추고 혼잣말이 뜬다
+            const why = doorLockRef.current(d);
+            if (why) {
+              p.x = px0;
+              p.y = py0;
+              p.moving = false;
+              const th = thought.current;
+              if (!th || th.text !== why || now > th.until - 900)
+                thought.current = { text: why, until: now + 2600 };
               break;
             }
             if (d.to === "room2" && rankIdxForDay(st.day) < 2) {
+              p.x = px0;
+              p.y = py0;
               askEnterRef.current(d);
               break;
             }
             if (KNOCK_ROOMS[d.to]) {
+              p.x = px0;
+              p.y = py0;
               knockRef.current(d);
               break;
             }
@@ -4918,28 +4982,6 @@ export default function World() {
         } else if (!phantomRt.talking) {
           phantomRt.armed = false;
           phantomRt.showAt = 0;
-        }
-      }
-
-      // 💭 전역 날짜가 지났는데 아직 남아 있는 사람 곁을 지나가면, 한 번씩 기억을 되짚는다
-      overdueT -= dt;
-      if (overdueT <= 0 && !blocked && !fading && !st.nightDuty) {
-        overdueT = 0.6;
-        if (now - lastOverdue > 45000) {
-          for (const def of extrasForDay(st.branch, st.day)) {
-            if (!extraOverdue(def, st.day) || st.daily.includes(`overdue_${def.id}`)) continue;
-            if (extraHiddenAtNight(def.id, st.minute)) continue;
-            const e = extras.current[def.id];
-            if (!e || e.map !== p.map || Math.hypot(e.x - p.x, e.y - p.y) > 3) continue;
-            lastOverdue = now;
-            st.markDaily(`overdue_${def.id}`);
-            st.toast(`💭 ${overdueThought(def.id, def.name, st.day)}`, "info");
-            if (!st.flags.overdueSeen) {
-              st.applyEffects({ flag: "overdueSeen" }, undefined, true);
-              st.checkSuspicions();
-            }
-            break;
-          }
         }
       }
 
@@ -6072,6 +6114,51 @@ export default function World() {
         });
       }
       ents.sort((a, c) => a.y - c.y).forEach((e) => e.draw());
+      // 💭 머리 위 혼잣말
+      {
+        const th = thought.current;
+        if (th && now < th.until && !overlayRef.current) {
+          const fadeA = Math.min(1, (th.until - now) / 350);
+          g.save();
+          g.globalAlpha = fadeA;
+          g.font = 'bold 11px "Galmuri11", sans-serif';
+          g.textAlign = "center";
+          // 낱말 단위로 줄을 나눈다 (한 줄 약 130px)
+          const words = th.text.split(" ");
+          const rows: string[] = [];
+          let cur = "";
+          for (const wd of words) {
+            const nx = cur ? `${cur} ${wd}` : wd;
+            if (cur && g.measureText(nx).width > 130) {
+              rows.push(cur);
+              cur = wd;
+            } else cur = nx;
+          }
+          if (cur) rows.push(cur);
+          const bw = Math.max(...rows.map((r) => g.measureText(r).width)) + 16;
+          const bh = rows.length * 14 + 10;
+          const bx = p.x * TILE - bw / 2,
+            by = p.y * TILE - 54 - bh;
+          g.fillStyle = "#ffffff";
+          g.strokeStyle = "#283048";
+          g.lineWidth = 2;
+          g.beginPath();
+          g.roundRect(bx, by, bw, bh, 6);
+          g.fill();
+          g.stroke();
+          g.beginPath();
+          g.arc(p.x * TILE - 4, by + bh + 5, 3, 0, Math.PI * 2);
+          g.fill();
+          g.stroke();
+          g.beginPath();
+          g.arc(p.x * TILE - 1, by + bh + 12, 1.8, 0, Math.PI * 2);
+          g.fill();
+          g.stroke();
+          g.fillStyle = "#283048";
+          rows.forEach((r, i) => g.fillText(r, p.x * TILE, by + 15 + i * 14));
+          g.restore();
+        } else if (th && now >= th.until) thought.current = null;
+      }
       // 📖 옥상 철문 (막사 2층, 계단 옆)
       if (p.map === "hq2" && st.clues.length > 0) {
         const dx0 = ROOF_DOOR[0] * TILE + 4,
@@ -6368,6 +6455,16 @@ export default function World() {
           subtitle={overlay.subtitle}
           options={overlay.options}
           onClose={() => setOverlay(null)}
+        />
+      )}
+      {overlay?.type === "notice" && (
+        <Notice
+          info={overlay.info}
+          onClose={() => {
+            const o = overlay;
+            setOverlay(null);
+            o.onDone?.();
+          }}
         />
       )}
       {overlay?.type === "notebook" && (
