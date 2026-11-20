@@ -477,13 +477,21 @@ export const NIGHT_SCENES: Record<number, WorkScene> = {
 };
 
 /** 그날 밤 근무 시간의 장면. 대본이 없는 날은 지문 두 줄 */
-export function nightScene(day: number, kind: 'watch' | 'guard', partner: string): WorkScene {
+/**
+ * asNpc: 같이 근무 서는 사람의 대사(`{partner}: "…"` 지문)를 그 사람이 직접 말하는 줄(who: 'npc')로 바꾼다.
+ * 대화창에 그 사람의 초상화와 이름이 뜬다 (부르는 쪽에서 script.npc / custom 으로 화자를 넘긴다).
+ */
+export function nightScene(day: number, kind: 'watch' | 'guard', partner: string, asNpc = false): WorkScene {
   const sc = NIGHT_SCENES[day];
   if (!sc) {
     return kind === 'watch'
       ? { lines: [narr('손전등을 들고 생활관을 한 바퀴 돈다. 고른 숨소리, 이불 걷어차는 소리. 이상 없음.'), narr('졸음과 싸우며 근무일지를 적다 보니… 어느새 00:50. 교대할 시간이다.')] }
       : { lines: [narr('초소에 서서 어둠 속 정문을 지켜본다. 이따금 바람 소리, 풀벌레 소리뿐.'), narr('두 시간이 길게도, 짧게도 흘렀다. 저 멀리 다음 근무자들의 손전등 불빛이 다가온다.')] };
   }
-  const put = (l: Line): Line => ({ ...l, text: l.text.replace(/\{partner\}/g, partner) });
+  const put = (l: Line): Line => {
+    const said = asNpc && l.who === 'narr' ? /^\{partner\}: "([\s\S]*)"$/.exec(l.text) : null;
+    if (said) return { who: 'npc', text: said[1].replace(/\{partner\}/g, partner) };
+    return { ...l, text: l.text.replace(/\{partner\}/g, partner) };
+  };
   return { lines: sc.lines.map(put), choices: sc.choices?.map((c) => ({ ...c, reply: c.reply.map(put) })) };
 }

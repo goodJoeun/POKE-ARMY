@@ -725,6 +725,24 @@ function hopToMess(
   return true;
 }
 /** 걷기 · 달리기 속도 (달리기는 지치지 않는다) */
+/** 🌅 아침 점호 집합 대기 중인지 (점호가 시작되기 전) */
+function rollcallWaiting(st: ReturnType<typeof useGame.getState>): boolean {
+  const ev = st.currentEvent();
+  return !!ev && ev.kind === "rollcall_am" && !st.eventBegun && !st.rollcall && st.day < TOTAL_DAYS + 1;
+}
+/** 아침 점호 대열에서 각자 서는 칸 번호 (점호 의식이 세우는 순서와 같다: 1분대 → 나 → 다른 생활관·부대 인원) */
+function rollcallSlots(st: ReturnType<typeof useGame.getState>): Record<string, number> {
+  const out: Record<string, number> = {};
+  const present = presentNpcs(st.day);
+  const order: string[] = SOLDIER_IDS.filter((id) => present.includes(id));
+  // 전입 첫날은 늦잠을 자서 내가 맨 끝에 선다
+  const late = st.day === 1 && !st.flags.tutorial;
+  if (!late) order.splice(Math.max(0, order.indexOf("buddy")), 0, "me");
+  for (const def of extrasForDay(st.branch, st.day))
+    if (!def.officer && !["dog", "guard", "cook"].includes(def.id)) order.push(`x:${def.id}`);
+  order.forEach((k, i) => (out[k] = i));
+  return out;
+}
 const WALK_SPEED = 6;
 const DASH_SPEED = 10.5;
 
@@ -1964,12 +1982,14 @@ export default function World() {
           {
             // 🌙 근무 시간에 있었던 일 (data/workScenes.ts의 NIGHT_SCENES)
             const s3 = useGame.getState();
-            const partner = s3.nightDuty?.partner
-              ? memberName(s3.branch, s3.nightDuty.partner)
-              : "근무자";
+            const pKey = s3.nightDuty?.partner ?? null;
+            const partner = pKey ? memberName(s3.branch, pKey) : "근무자";
+            // 같이 선 사람이 말할 땐 그 사람의 초상화가 뜬다
+            const psp = pKey && entityOf(pKey) ? speakerOf(pKey) : null;
+            const hasFace = !!psp && (!!psp.npc || !!psp.custom);
             setOverlay({
               type: "dialogue",
-              script: nightScene(s3.day, "guard", partner),
+              script: { ...nightScene(s3.day, "guard", partner, hasFace), npc: psp?.npc, custom: psp?.custom },
               onChoice: (c) => {
                 if (c.effects)
                   useGame.getState().applyEffects(c.effects, "야간 근무");
@@ -2927,8 +2947,8 @@ export default function World() {
       gym: "체단실 운동 기구",
       maint: "정비실 작업대",
       library: "도서관 책장",
-      wc1: "화장실",
-      wc2: "화장실",
+      wc1: "세면대",
+      wc2: "세면대",
       laundry1: "세탁기",
       laundry2: "세탁기",
       water1: "정수기",
@@ -5108,6 +5128,22 @@ export default function World() {
           e.moving = false;
           e.path = [];
           continue;
+        }
+        // 🌅 아침 점호 집합: 다른 생활관·부대 인원도 미리 연병장에 오와 열을 맞춰 서 있다 (점호 의식이 세우는 자리 그대로)
+        if (!cer.current && rollcallWaiting(st)) {
+          const slot = rollcallSlots(st)[`x:${def.id}`];
+          if (slot !== undefined) {
+            const sp = world.spots.parade;
+            e.map = sp.map;
+            e.x = sp.x - 2 + (slot % 6);
+            e.y = sp.y - 1.5 + Math.floor(slot / 6);
+            e.dir = "up";
+            e.path = [];
+            e.viaDoor = null;
+            e.moving = false;
+            e.targetKey = "";
+            continue;
+          }
         }
         // 🌙 야간 근무 중: 근무와 상관없는 인원은 이미 침상에서 자고 있다 (깨우는 대화 중에도)
         const bedN = EXTRA_BED[def.id];
