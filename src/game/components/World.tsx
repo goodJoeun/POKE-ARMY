@@ -89,7 +89,7 @@ import TouchPad from "./TouchPad";
 import { ResistMeter, StoryBackdrop } from "./StoryBackdrop";
 import PuzzleBox from "./PuzzleBox";
 import { CANDY_SPOTS, QUICK_REWARD, QUICK_SPOTS } from "../data/puzzles";
-import { nightScene, workScene } from "../data/workScenes";
+import { WATCH_EXTRA, nightScene, workScene } from "../data/workScenes";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
 import { SUSPICIONS, suspicionLeads } from "../data/suspicions";
 import { errandNow, mirrorPending, orderStage, reportStage, selfHidden } from "../data/errands";
@@ -512,6 +512,10 @@ const STAR_POS: Record<"watch" | "guard", [MapId, number, number]> = {
   watch: ["room1", 7.5, 2.4],
   guard: ["depot", 16.6, 20.5],
 };
+/** 🔦 불침번 순찰: 생활관마다 가서 서 봐야 하는 자리 (통로 안쪽) */
+const ROUND_POINT: Record<"room1" | "room2", [number, number]> = { room2: [11.5, 5], room1: [11.5, 5] };
+/** 불침번 순찰에서 다음에 돌아볼 생활관 */
+const nextRound = (nd: { rounds?: string[] }): "room1" | "room2" => ((nd.rounds ?? []).includes("room2") ? "room1" : "room2");
 /** 야간 근무: 깨우러 온 사람·사수/부사수·다음 근무자가 있어야 할 곳 (null = 평소 밤 규칙대로) */
 function nightGoal(
   key: string,
@@ -1927,82 +1931,14 @@ export default function World() {
         ],
         () => {
           const s2 = useGame.getState();
-          s2.setNightDuty({ phase: "shift" });
-          useGame.setState({
-            minute: Math.max(s2.minute, s2.nightDuty!.shiftStart),
-          });
+          // 🌙 인수인계 끝 → 화면이 옮겨 주지 않는다. 내가 직접 지휘통제실로 걸어가 근무 신고를 한다
+          s2.setNightDuty({ phase: "checkin" });
           s2.addTip(
-            "불침번: 취침 시간에 생활관을 지키는 근무. 이전 근무자가 깨우면 인수인계(특이사항·인원·물품)를 받고, 끝나기 10분 전쯤 다음 근무자를 깨워 교대한다.",
+            "불침번: 취침 시간에 생활관을 지키는 근무. 이전 근무자가 깨우면 인수인계(특이사항·인원·물품)를 받고, 당직 간부에게 근무 신고를 한 뒤 생활관을 돌며, 끝나기 10분 전쯤 다음 근무자를 깨워 교대한다.",
           );
-          // 🌙 이전 근무자가 침상으로 돌아가는 것을 보고 → 근무 신고하러 지휘통제실로 → 그 밤의 장면
-          // (근무 단계가 되면 이전 근무자는 스스로 자기 침상으로 걸어간다)
           // 깨우러 왔던 이전 근무자는 이제 풀려나 자기 침상으로 걸어간다
           staged.current.clear();
-          holdRef.current = true;
-          keys.current = {};
-          setTimeout(() => {
-            storyCtxRef.current.goTo("command", 5.5, 4.6, "up", () => {
-              const s3 = useGame.getState();
-              // 당직 간부는 책상 뒤에 앉아 있다
-              placeAt(nightDutyOfficer(s3.day), "command", 5.5, 2.5, "down");
-              // 8일차: 2분대의 말 없는 병장이 문으로 들어와 일지 앞에 선다
-              if (s3.day === 8) placeAt("x:room2a", "command", 4.5, 5.6, "up");
-              holdRef.current = false;
-              setOverlay({
-                type: "dialogue",
-                script: nightScene(s3.day, "watch", "근무자"),
-                onChoice: (c) => {
-                  if (c.effects)
-                    useGame.getState().applyEffects(c.effects, "야간 근무");
-                },
-                onDone: () => {
-                  useGame.getState().finishShift();
-                  // 그사이 50분이 지났다: 나를 깨우고 돌아가던 이전 근무자는 진작 자기 침상에서 자고 있다
-                  {
-                    const prevKey = useGame.getState().nightDuty?.prev;
-                    const pe = prevKey ? entityOf(prevKey) : null;
-                    if (prevKey && pe) {
-                      const bed: [MapId, number, "top" | "bottom"] | undefined = prevKey.startsWith("x:")
-                        ? EXTRA_BED[prevKey.slice(2)]
-                        : BED_X[prevKey as NpcId] !== undefined
-                          ? ["room1", BED_X[prevKey as NpcId]!, "top"]
-                          : undefined;
-                      if (bed) {
-                        pe.map = bed[0];
-                        pe.x = bed[1] + 0.5;
-                        pe.y = bedY(bed[2]);
-                        pe.dir = "down";
-                        pe.path = [];
-                        pe.viaDoor = null;
-                        pe.moving = false;
-                      }
-                    }
-                  }
-                  // 🎬 근무가 끝나 간다 → 먼저 1생활관 다음 근무자의 침상 앞으로 화면이 바뀌고, 그다음 안내
-                  const s4 = useGame.getState();
-                  const nk = s4.nightDuty?.next;
-                  const n = nk ? entityOf(nk) : null;
-                  const top = !n || n.y < 5;
-                  // 침상(두 칸) 바로 옆이 아니라 통로에 선다 (침상 칸 안에 서면 몸이 끼어 움직일 수 없다)
-                  const [tx, ty] = n && n.map === "room1"
-                    ? [n.x, aisleY(top ? "top" : "bottom") + 0.5]
-                    : [3.5, 4.5];
-                  storyCtxRef.current.goTo("room1", tx, ty, top ? "up" : "down", () => {
-                    const nm = nk ? memberName(s4.branch, nk) : "다음 근무자";
-                    setOverlay({
-                      type: "dialogue",
-                      script: {
-                        lines: [
-                          { who: "narr", text: "00:50. 생활관을 몇 바퀴 더 돌고 나니 근무가 끝나 간다." },
-                          { who: "narr", text: `${nm}의 침상 앞. 깨워서 근무를 넘겨주자.` },
-                        ],
-                      },
-                    });
-                  });
-                },
-              });
-            });
-          }, 1400);
+          s2.toast("🔦 먼저 지휘통제실 당직 간부에게 근무 신고를 하러 가자.", "info");
         },
       );
     } else {
@@ -2198,6 +2134,91 @@ export default function World() {
       });
       return;
     }
+    if (key === "duty_checkin") {
+      // 🔦 근무 신고: 지휘통제실 당직 간부 앞에서 → 그 밤의 장면 → 생활관 순찰로
+      st.setNightDuty({ phase: "shift" });
+      useGame.setState({ minute: Math.max(st.minute, nd.shiftStart) });
+      const pl = runtime.player;
+      pl.dir = "up";
+      pl.moving = false;
+      keys.current = {};
+      // 당직 간부는 책상 뒤에 앉아 있다
+      placeAt(nightDutyOfficer(st.day), "command", 5.5, 2.5, "down");
+      // 8일차: 2분대의 말 없는 병장이 문으로 들어와 일지 앞에 선다
+      if (st.day === 8) placeAt("x:room2a", "command", 4.5, 5.6, "up");
+      setOverlay({
+        type: "dialogue",
+        script: nightScene(st.day, "watch", "근무자"),
+        onChoice: (c) => {
+          if (c.effects) useGame.getState().applyEffects(c.effects, "야간 근무");
+        },
+        onDone: () => {
+          useGame.getState().finishShift();
+          // 그사이 나를 깨우고 돌아간 이전 근무자는 진작 자기 침상에서 자고 있다
+          const prevKey = useGame.getState().nightDuty?.prev;
+          const pe = prevKey ? entityOf(prevKey) : null;
+          if (prevKey && pe) {
+            const bed: [MapId, number, "top" | "bottom"] | undefined = prevKey.startsWith("x:")
+              ? EXTRA_BED[prevKey.slice(2)]
+              : BED_X[prevKey as NpcId] !== undefined
+                ? ["room1", BED_X[prevKey as NpcId]!, "top"]
+                : undefined;
+            if (bed) {
+              pe.map = bed[0];
+              pe.x = bed[1] + 0.5;
+              pe.y = bedY(bed[2]);
+              pe.dir = "down";
+              pe.path = [];
+              pe.viaDoor = null;
+              pe.moving = false;
+            }
+          }
+          useGame.getState().toast("🔦 손전등을 들고 생활관 순찰: 2층 2생활관부터 돌아보고, 1생활관으로 돌아오자.", "info");
+        },
+      });
+      return;
+    }
+    if (key === "duty_round2" || key === "duty_round1") {
+      // 🔦 생활관 순찰: 그 생활관 안쪽까지 걸어 들어가 한 바퀴 돈다
+      const room = key === "duty_round2" ? "room2" : "room1";
+      const extra = WATCH_EXTRA[st.day]?.[room] ?? [];
+      keys.current = {};
+      runtime.player.moving = false;
+      setOverlay({
+        type: "dialogue",
+        script: {
+          lines:
+            room === "room2"
+              ? [
+                  { who: "narr", text: "2생활관. 손전등 불빛을 바닥으로 낮추고 침상 사이를 조용히 걷는다." },
+                  { who: "narr", text: "고른 숨소리. 걷어찬 모포를 덮어 주고 인원을 센다. 이상 없음." },
+                  ...extra,
+                  { who: "me", text: "(2생활관 이상 무. 이제 1생활관으로 돌아가자.)" },
+                ]
+              : [
+                  { who: "narr", text: "1생활관으로 돌아와 침상 끝까지 한 바퀴 돈다. 분대원들의 숨소리가 고르다." },
+                  ...extra,
+                  { who: "narr", text: "근무 일지에 적는다. 「생활관 순찰, 이상 무」." },
+                  { who: "narr", text: "…00:50. 근무가 끝나 간다. 다음 근무자를 깨울 시간이다." },
+                ],
+        },
+        onDone: () => {
+          const s2 = useGame.getState();
+          const cur = s2.nightDuty;
+          if (!cur || cur.phase !== "rounds") return;
+          const rounds = [...(cur.rounds ?? []).filter((r) => r !== room), room];
+          if (room === "room2") {
+            s2.setNightDuty({ rounds });
+            useGame.setState({ minute: Math.max(s2.minute, cur.shiftStart + 30) });
+          } else {
+            // 순찰 끝 → 다음 근무자를 깨워 교대
+            s2.setNightDuty({ rounds, phase: "wakeNext" });
+            useGame.setState({ minute: Math.max(s2.minute, cur.shiftEnd - 10) });
+          }
+        },
+      });
+      return;
+    }
     if (key === "duty_wake") {
       const sp = speakerOf(nd.next);
       const nextName = memberName(st.branch, nd.next);
@@ -2264,13 +2285,19 @@ export default function World() {
           custom: sp.custom,
           lines: watch
             ? [
-                { who: "me", text: `(작게) "근무 철수 보고드립니다! 불침번 근무 중 특이사항 없음, 다음 근무자 ${nextName}에게 인계 완료했습니다."` },
-                { who: "npc", text: "(근무 일지에 서명하며) 수고했다. 조용히 들어가 자라. 아침 점호 늦지 말고." },
+                { who: "me", text: `(작게) "근무 철수 보고드립니다! 다음 근무자 ${nextName}에게 인계 완료했습니다."` },
+                ...(WATCH_EXTRA[st.day]?.report
+                  ? [{ who: "npc" as const, text: "(작게) 그래, 수고했다. 생활관은 어떻더냐?" }]
+                  : [{ who: "npc" as const, text: "(근무 일지에 서명하며) 수고했다. 조용히 들어가 자라. 아침 점호 늦지 말고." }]),
               ]
             : [
                 { who: "me", text: '"근무 철수 보고드립니다! 위병소 경계근무 중 특이사항 없음, 다음 근무자에게 인계 완료했습니다!"' },
                 { who: "npc", text: "그래, 추운데 고생했다. 둘 다 들어가 자라." },
               ],
+          choices: watch ? WATCH_EXTRA[st.day]?.report : undefined,
+        },
+        onChoice: (c) => {
+          if (c.effects) useGame.getState().applyEffects(c.effects, "근무 철수 보고");
         },
         onDone: () => {
           const s2 = useGame.getState();
@@ -2808,6 +2835,16 @@ export default function World() {
             ? "(지휘통제실에 근무 철수 보고부터 하자.)"
             : "(하아암… 피곤하다. 얼른 내 침상으로 가서 자자.)";
     }
+    // 🔦 불침번: 근무 신고는 지휘통제실로, 순찰은 2생활관 → 1생활관 순서로만 간다
+    if (nd && nd.kind === "watch" && (nd.phase === "checkin" || nd.phase === "rounds")) {
+      const dest = nd.phase === "checkin" ? DUTY_DESK[0] : nextRound(nd);
+      if (doorToward(world, p.map, dest)?.to !== d.to)
+        return nd.phase === "checkin"
+          ? "(먼저 지휘통제실에 근무 신고부터 하자.)"
+          : dest === "room2"
+            ? "(순찰 중이다. 2층 2생활관부터 돌아보자.)"
+            : "(순찰 중이다. 1생활관으로 돌아가자.)";
+    }
     // 🧭 호출 · 심부름 · 보고 · 첫날 세면: 가야 할 곳으로 가는 문만 열려 있다
     const er = errandNow(st);
     if (er && doorToward(world, p.map, er.map)?.to !== d.to) return er.why;
@@ -3018,6 +3055,14 @@ export default function World() {
             key: "duty_wake",
             kind: "duty",
             label: `${memberName(st.branch, nd.next)} 깨우기 (근무 교대)`,
+          };
+      }
+      if (nd.phase === "checkin") {
+        if (p.map === DUTY_DESK[0] && dist(DUTY_DESK[1] + 0.5, DUTY_DESK[2] + 1.5) < 2.4)
+          return {
+            key: "duty_checkin",
+            kind: "duty",
+            label: "근무 신고 (당직 간부)",
           };
       }
       if (nd.phase === "report") {
@@ -5017,7 +5062,7 @@ export default function World() {
                 thought.current = { text: why, until: now + 2600 };
               break;
             }
-            if (d.to === "room2" && rankIdxForDay(st.day) < 2) {
+            if (d.to === "room2" && rankIdxForDay(st.day) < 2 && !st.nightDuty) {
               p.x = px0;
               p.y = py0;
               askEnterRef.current(d);
@@ -5168,6 +5213,17 @@ export default function World() {
             : "📺 휴게실. TV는 꺼져 있는데, 검은 화면 앞에 무언가 둥둥 떠 있다… [L] 손전등 끄기",
           "alert",
         );
+      }
+
+      // 🔦 불침번 순찰: 그 생활관 안쪽까지 걸어 들어가면 한 바퀴 돈다
+      {
+        const ndR = st.nightDuty;
+        if (ndR && ndR.kind === "watch" && ndR.phase === "rounds" && !blocked && !fading) {
+          const room = nextRound(ndR);
+          const [rx, ry] = ROUND_POINT[room];
+          if (p.map === room && Math.hypot(p.x - rx, p.y - ry) < 1.7)
+            nightActRef.current(room === "room2" ? "duty_round2" : "duty_round1");
+        }
       }
 
       // 🔦 야간 순찰: 점검 장소에 다가가면 자동으로 점검
@@ -5917,8 +5973,12 @@ export default function World() {
           const n = entityOf(ndm.next);
           if (n) tg = { m: n.map, x: n.x, y: n.y - 0.8 };
         }
-        if (ndm.phase === "report")
+        if (ndm.phase === "report" || ndm.phase === "checkin")
           tg = { m: DUTY_DESK[0], x: DUTY_DESK[1] + 0.5, y: DUTY_DESK[2] + 2 };
+        if (ndm.phase === "rounds") {
+          const room = nextRound(ndm);
+          tg = { m: room, x: ROUND_POINT[room][0], y: ROUND_POINT[room][1] };
+        }
         if (ndm.phase === "return") {
           const bd = world.spots.bed;
           tg = { m: bd.map, x: bd.x + 0.5, y: bd.y + 0.5 };

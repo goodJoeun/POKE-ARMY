@@ -357,7 +357,8 @@ export function workScene(day: number, slot: 'am' | 'pm', work: string): WorkSce
  * 야간 근무 장면: 근무 시간(불침번 00:00~01:00 · 위병소 00:00~02:00) 동안 있었던 일.
  * - 키: 일차. 불침번은 2·4·6·8·10일차, 위병소는 3·7·11일차
  * - `{partner}`는 위병소에 같이 서는 사람(3일차는 선임, 7·11일차는 후임)의 이름으로 바뀐다
- * - 불침번 장면의 무대는 지휘통제실이다 (인수인계 뒤 근무 신고를 하러 간다. 당직은 짝수일이라 늘 행보관)
+ * - 불침번 장면의 무대는 지휘통제실이다 (인수인계 뒤 내가 직접 걸어가 근무 신고를 한다. 당직은 짝수일이라 늘 행보관)
+ * - 신고 뒤에는 2생활관 → 1생활관을 직접 돌며 순찰하고, 다음 근무자와 교대한 뒤 다시 지휘통제실에 철수 보고를 한다 (WATCH_EXTRA)
  * - 별빛과의 만남 · 안개 · 가짜 당직부관 · 슬리퍼는 근무 앞뒤에 따로 일어난다 (여기서는 다루지 않는다)
  */
 export const NIGHT_SCENES: Record<number, WorkScene> = {
@@ -367,12 +368,7 @@ export const NIGHT_SCENES: Record<number, WorkScene> = {
       me('(작게) "신고합니다. {myrank} {me}, 불침번 근무 투입하겠습니다."'),
       say('sgm', '(작게) 오~ 신병이 첫 불침번이네. 졸리면 허벅지 꼬집어라. 나는 삼십 년째 꼬집고 있다.'),
       narr('근무 일지에 이름을 적는다. 글씨가 내 글씨 같지 않다. 이 손으로는 처음 써 보는 글씨다.'),
-      narr('신고를 마치고 생활관을 한 바퀴 돌았다. 다들 자면서도 웃고 있다. 한 명도 빠짐없이.'),
-      me('(…포켓몬은 무슨 꿈을 꾸길래.)'),
-    ],
-    choices: [
-      { text: '(작게) "순찰 결과 이상 무!"', grade: 'good', effects: { discipline: 2, affinity: { sgm: 2 } }, reply: [say('sgm', '(작게) 좋아, 좋아. 목소리 줄이는 것까지 합격.')] },
-      { text: '(작게) "행보관님, 다들 왜 자면서 웃습니까?"', grade: 'ok', effects: { affinity: { sgm: 1 }, mental: 1 }, reply: [say('sgm', '(작게) 좋은 꿈을 꾸니까 웃지. 여기선 다들 좋은 꿈만 꾼다. 허허, 좋은 부대 아니냐.')] },
+      say('sgm', '(작게) 신고 받았다. 손전등 들고 생활관부터 한 바퀴 돌고 와라. 2생활관도 빼먹지 말고.'),
     ],
   },
   4: {
@@ -476,6 +472,20 @@ export const NIGHT_SCENES: Record<number, WorkScene> = {
   },
 };
 
+/** 불침번 순찰 · 철수 보고 때 그날만 덧붙는 장면 (순찰 지문 뒤에 이어지는 줄 / 철수 보고 때 고르는 말) */
+export const WATCH_EXTRA: Record<number, { room1?: Line[]; room2?: Line[]; report?: Choice[] }> = {
+  2: {
+    room2: [narr('다들 자면서도 웃고 있다. 한 명도 빠짐없이.'), me('(…포켓몬은 무슨 꿈을 꾸길래.)')],
+    report: [
+      { text: '(작게) "순찰 결과 이상 무!"', grade: 'good', effects: { discipline: 2, affinity: { sgm: 2 } }, reply: [say('sgm', '(작게) 좋아, 좋아. 목소리 줄이는 것까지 합격.')] },
+      { text: '(작게) "행보관님, 다들 왜 자면서 웃습니까?"', grade: 'ok', effects: { affinity: { sgm: 1 }, mental: 1 }, reply: [say('sgm', '(작게) 좋은 꿈을 꾸니까 웃지. 여기선 다들 좋은 꿈만 꾼다. 허허, 좋은 부대 아니냐.')] },
+    ],
+  },
+  4: {
+    room2: [narr('맨 안쪽 침상. 2분대의 말 없는 병장만은 눈을 뜬 채 천장을 보고 있었던 것 같다. 다시 비춰 보니, 눈은 감겨 있다.')],
+  },
+};
+
 /** 그날 밤 근무 시간의 장면. 대본이 없는 날은 지문 두 줄 */
 /**
  * asNpc: 같이 근무 서는 사람의 대사(`{partner}: "…"` 지문)를 그 사람이 직접 말하는 줄(who: 'npc')로 바꾼다.
@@ -485,7 +495,7 @@ export function nightScene(day: number, kind: 'watch' | 'guard', partner: string
   const sc = NIGHT_SCENES[day];
   if (!sc) {
     return kind === 'watch'
-      ? { lines: [narr('손전등을 들고 생활관을 한 바퀴 돈다. 고른 숨소리, 이불 걷어차는 소리. 이상 없음.'), narr('졸음과 싸우며 근무일지를 적다 보니… 어느새 00:50. 교대할 시간이다.')] }
+      ? { lines: [narr('지휘통제실. 당직 간부 앞에서 근무 신고를 하고, 근무 일지에 이름을 적었다.'), narr('손전등을 받아 들었다. 이제 생활관을 돌 차례다.')] }
       : { lines: [narr('초소에 서서 어둠 속 정문을 지켜본다. 이따금 바람 소리, 풀벌레 소리뿐.'), narr('두 시간이 길게도, 짧게도 흘렀다. 저 멀리 다음 근무자들의 손전등 불빛이 다가온다.')] };
   }
   const put = (l: Line): Line => {

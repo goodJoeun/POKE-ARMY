@@ -109,7 +109,14 @@ export interface MealCheck {
 export interface NightDuty {
   kind: 'watch' | 'guard';
   /** report: 교대를 마치고 지휘통제실 당직 간부에게 근무 철수 보고하러 가는 중 → return: 보고를 마치고 침상으로 */
-  phase: 'sleep' | 'woken' | 'toPost' | 'shift' | 'wakeNext' | 'report' | 'return';
+  /**
+   * 불침번: sleep → woken(인수인계) → checkin(지휘통제실로 걸어가 근무 신고) → shift(신고 장면) → rounds(2생활관 · 1생활관 순찰)
+   *        → wakeNext(다음 근무자 깨우기) → report(지휘통제실 철수 보고) → return(침상)
+   * 위병소: sleep → woken → toPost → shift → report → return
+   */
+  phase: 'sleep' | 'woken' | 'checkin' | 'toPost' | 'shift' | 'rounds' | 'wakeNext' | 'report' | 'return';
+  /** 불침번 순찰: 돌아본 생활관 */
+  rounds?: string[];
   /** 나를 깨우는 사람 (불침번: 이전 근무자 / 위병소: 같이 가는 사수·부사수). 주요 NPC id 또는 'x:<엑스트라>' */
   prev: string;
   /** 위병소: 같이 근무하는 사수·부사수 */
@@ -129,9 +136,11 @@ export function nightDutyClockCap(nd: NightDuty): number {
   switch (nd.phase) {
     case 'sleep':
     case 'woken':
+    case 'checkin':
     case 'toPost':
       return nd.shiftStart;
     case 'shift':
+    case 'rounds':
       return nd.kind === 'watch' ? nd.shiftEnd - 10 : nd.shiftEnd;
     case 'wakeNext':
     case 'report':
@@ -720,8 +729,8 @@ export const useGame = create<Store>((set, get) => ({
     const watch = nd.kind === 'watch';
     get().applyEffects({ ...WORKLOAD[watch ? 'night' : 'guard'], discipline: 1 }, watch ? '불침번 근무' : '위병소 근무', true);
     get().log(watch ? '🌙 한 시간 동안 생활관의 밤을 지켰다.' : '🌙 두 시간 동안 위병소 초소를 지켰다.');
-    // 불침번은 끝나기 10분 전 → 다음 근무자 깨우러 / 위병소는 다음 근무자와 교대 → 지휘통제실에 철수 보고
-    set({ nightDuty: { ...nd, phase: watch ? 'wakeNext' : 'report' }, minute: watch ? nd.shiftEnd - 10 : nd.shiftEnd });
+    // 불침번은 근무 신고 뒤 생활관 순찰(2생활관 → 1생활관)로 이어진다 / 위병소는 다음 근무자와 교대 → 지휘통제실에 철수 보고
+    set({ nightDuty: { ...nd, phase: watch ? 'rounds' : 'report', rounds: [] }, minute: watch ? Math.max(get().minute, nd.shiftStart + 15) : nd.shiftEnd });
   },
 
   dialogueCtx: () => {
