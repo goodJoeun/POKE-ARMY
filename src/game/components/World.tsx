@@ -92,6 +92,8 @@ import { CANDY_SPOTS, QUICK_REWARD, QUICK_SPOTS } from "../data/puzzles";
 import { nightScene, workScene } from "../data/workScenes";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
 import { SUSPICIONS, suspicionLeads } from "../data/suspicions";
+import { errandNow, mirrorPending, selfHidden } from "../data/errands";
+import { MirrorReveal } from "./Scenes";
 import {
   SLIPPER_LOOK,
   buddyForgets,
@@ -154,6 +156,7 @@ type Overlay =
     }
   | { type: "menu"; title: string; subtitle?: string; options: MenuOption[] }
   | { type: "notice"; info: NoticeInfo; onDone?: () => void }
+  | { type: "mirror"; onDone: () => void }
   | { type: "notebook" }
   | { type: "quests" }
   | { type: "map" }
@@ -812,33 +815,41 @@ export default function World() {
     mapCanvasRef.current = out;
   }, [world, season]);
 
-  // 1일차: 눈을 떠 보니 늦잠 → 분대장에게 혼나고 연병장으로
+  // 1일차: 눈을 떠 보니 낯선 생활관, 몸이 이상하다 → 분대장에게 혼나고 "세수하고 와" → 화장실 거울에서 처음 내 모습을 본다 → 연병장으로
   useEffect(() => {
     const st = useGame.getState();
     if (st.day !== 1 || st.flags.wokeUp) return;
     const sgt = "sgt" as NpcId;
+    const glimpse = findSpecies(st.speciesId)?.wake ?? "손이… 내 손이 아니다?!";
+    // 대답을 고른 뒤: 넋이 나간 얼굴을 본 분대장이 세수부터 하고 오라고 한다
+    const washOrder = () =>
+      setOverlay({
+        type: "dialogue",
+        script: {
+          npc: sgt,
+          lines: [
+            { who: "npc", text: "…그런데 너, 얼굴이 왜 그 모양이냐. 귀신이라도 본 얼굴인데." },
+            { who: "npc", text: "1층 화장실 가서 세수하고 정신 차리고 와. 3분 준다. 그리고 곧장 연병장으로 튀어나와!" },
+            { who: "me", text: "(화장실… 그래, 거울. 거울을 봐야겠어. 지금 내가 대체 어떻게 생긴 건지.)" },
+            { who: "narr", text: "[조작] WASD/방향키로 이동 · 문 쪽으로 걸어가면 방을 나선다 · ❗ 표시를 따라 1층 화장실 세면대 앞에서 E" },
+          ],
+        },
+        onDone: () => useGame.getState().oversleep(),
+      });
     setOverlay({
       type: "dialogue",
       script: {
         npc: sgt,
         lines: [
-          {
-            who: "narr",
-            text: "쾅! 생활관 문이 벌컥 열렸다. 기상나팔은 이미 끝난 지 오래였다.",
-          },
+          { who: "narr", text: "쾅! 생활관 문이 벌컥 열렸다. 기상나팔은 이미 끝난 지 오래였다." },
           { who: "npc", text: "야!!! 신병!!! 지금 몇 시인 줄 알아?!" },
-          {
-            who: "npc",
-            text: "전입 첫날부터 늦잠이냐? 다들 연병장에 집합해 있다!",
-          },
-          {
-            who: "me",
-            text: "(군대…? 진짜 군대야? 그것도 포켓몬들의 군대…?!)",
-          },
-          {
-            who: "me",
-            text: "(…침착하자. 입대 전에 본 군대 유튜브만 수백 편이다. 「전입 신병 생존 가이드」에서 이럴 땐 분명…)",
-          },
+          { who: "narr", text: "벌떡 일어나 모포를 걷었다. 그런데— 모포 밖으로 나온 것이, 내 몸이 아니다." },
+          { who: "narr", text: glimpse },
+          { who: "me", text: '"으, 으아아아아악?!?! 이게 뭐야!!! 내 손! 내 몸이!!!"' },
+          { who: "npc", text: "…뭐야, 왜 소리를 질러. 가위라도 눌렸나?" },
+          { who: "me", text: "(꿈이 아니야…? 그리고 눈앞의 저건… 포켓몬?! 포켓몬이 모자를 쓰고 나한테 소리를 지르고 있어?!)" },
+          { who: "npc", text: "전입 첫날부터 늦잠이냐? 다들 연병장에 집합해 있다!" },
+          { who: "me", text: "(…침착하자. 입대 전에 본 군대 유튜브만 수백 편이다. 「전입 신병 생존 가이드」에서 이럴 땐 분명…)" },
           { who: "npc", text: "뭘 멍하니 있어! 관등성명!" },
         ],
         choices: [
@@ -847,11 +858,8 @@ export default function World() {
             grade: "good",
             effects: { affinity: { sgt: 6 }, discipline: 2 },
             reply: [
-              { who: "npc", text: "…목소리는 합격이다. 3초 준다. 튀어나와!" },
-              {
-                who: "me",
-                text: "(휴… 유튜브에서 본 그대로다. 관등성명, 사과, 그리고 즉시 행동.)",
-              },
+              { who: "npc", text: "…목소리는 합격이다." },
+              { who: "me", text: "(휴… 몸은 이 모양이어도 유튜브에서 본 그대로다. 관등성명, 사과, 그리고 즉시 행동.)" },
             ],
             tip: '관등성명 = 계급 + 성명. 늦었을 땐 변명보다 "죄송합니다 + 바로 하겠습니다"가 먼저다.',
           },
@@ -860,10 +868,7 @@ export default function World() {
             grade: "ok",
             effects: { affinity: { sgt: -1 } },
             reply: [
-              {
-                who: "npc",
-                text: "잠이 덜 깼구먼. 여기 다 그런 사연 하나씩은 있다. 빨리 일어나!",
-              },
+              { who: "npc", text: "잠이 덜 깼구먼. 여기 다 그런 사연 하나씩은 있다." },
               { who: "me", text: "(…다들 그런 사연이 있다고?)" },
             ],
             tip: '상급자가 부르면 "{S}! 이병 ○○○!"처럼 경례 구호와 관등성명으로 답한다.',
@@ -874,7 +879,7 @@ export default function World() {
             effects: { affinity: { sgt: -5 }, discipline: -3 },
             reply: [
               { who: "narr", text: "……모포가 거칠게 걷혔다." },
-              { who: "npc", text: "연병장으로. 지. 금. 당. 장." },
+              { who: "npc", text: "일어나. 지. 금. 당. 장." },
             ],
           },
         ],
@@ -884,7 +889,35 @@ export default function World() {
         if (c.effects) s2.applyEffects(c.effects, "첫 만남");
         if (c.tip) s2.addTip(c.tip);
       },
-      onDone: () => useGame.getState().oversleep(),
+      onDone: washOrder,
+    });
+  }, [setOverlay]);
+
+  /** 🚿 전입 첫날 화장실 세면대: 세수하고 고개를 들어, 거울 속의 내 모습을 처음 본다 */
+  const mirrorScene = useCallback(() => {
+    keys.current = {};
+    runtime.player.dir = "up";
+    runtime.player.moving = false;
+    setOverlay({
+      type: "dialogue",
+      script: {
+        lines: [
+          { who: "narr", text: "수도꼭지를 틀고 차가운 물을 얼굴에 끼얹었다. 한 번, 두 번. 조금 정신이 든다." },
+          { who: "me", text: "(침착하자. 꿈일 거야. 고개를 들면 평소의 내 얼굴이 있을 거야…)" },
+          { who: "narr", text: "천천히 고개를 들어, 세면대 거울을 봤다." },
+        ],
+      },
+      onDone: () =>
+        setOverlay({
+          type: "mirror",
+          onDone: () => {
+            const s2 = useGame.getState();
+            s2.applyEffects({ flag: "sawSelf" }, undefined, true);
+            s2.log("🪞 화장실 거울에서 처음으로 내 모습을 봤다. 내가… 포켓몬?!");
+            s2.toast("🏃 분대장이 3분 준다고 했다. 연병장으로 뛰자! (화면 위 안내와 붉은 원을 따라가자)", "alert");
+            s2.save();
+          },
+        }),
     });
   }, [setOverlay]);
 
@@ -2563,11 +2596,33 @@ export default function World() {
       return;
     }
     const bed = world.spots.bed;
+    // 🧭 가야 할 곳이 있을 땐 생활관으로 바로 갈 수 없다 (그곳이 생활관이 아니라면)
+    const er = errandNow(st);
+    if (er && er.map !== bed.map) {
+      st.toast(er.hud, "info");
+      return;
+    }
     warpReq.current = {
       tiles: [],
       to: bed.map,
       enterDir: "down",
       arrive: { x: bed.x + 0.5, y: bed.y + 0.5, dir: "down" },
+    };
+  }, [world]);
+
+  /** 🧪 개발용 자동 이동: 콘솔에서 __auto.go('wc1', 6, 2) → 문을 거쳐 그 칸까지 스스로 걸어간다 (테스트 플레이용) */
+  const autopilot = useRef<{ map: MapId; x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    (window as unknown as Record<string, unknown>).__auto = {
+      go: (map: MapId, x: number, y: number) => {
+        autopilot.current = { map, x, y };
+      },
+      stop: () => {
+        autopilot.current = null;
+      },
+      busy: () => !!autopilot.current,
+      spots: world.spots,
     };
   }, [world]);
 
@@ -2659,6 +2714,9 @@ export default function World() {
             ? "(지휘통제실에 근무 철수 보고부터 하자.)"
             : "(하아암… 피곤하다. 얼른 내 침상으로 가서 자자.)";
     }
+    // 🧭 호출 · 심부름 · 보고 · 첫날 세면: 가야 할 곳으로 가는 문만 열려 있다
+    const er = errandNow(st);
+    if (er && doorToward(world, p.map, er.map)?.to !== d.to) return er.why;
     return null;
   };
 
@@ -3017,7 +3075,12 @@ export default function World() {
     for (const [id, label] of Object.entries(spotNames) as [SpotId, string][]) {
       const sp = world.spots[id];
       if (sp.map === p.map && dist(sp.x + 0.5, sp.y + 0.5) < 1.4)
-        return { key: `spot_${id}`, kind: "spot", spot: id, label };
+        return {
+          key: `spot_${id}`,
+          kind: "spot",
+          spot: id,
+          label: (id === "wc1" || id === "wc2") && mirrorPending(st) ? "세면대에서 세수하기" : label,
+        };
     }
     return null;
   }, [world, extraDefs]);
@@ -3250,6 +3313,11 @@ export default function World() {
     (id: SpotId) => {
       const st = useGame.getState();
       const m = st.minute;
+      // 🚿 전입 첫날: 세면대 앞에 서면 곧바로 세수 → 거울 장면
+      if ((id === "wc1" || id === "wc2") && mirrorPending(st)) {
+        mirrorScene();
+        return;
+      }
       // 🍚 식사 시간엔 분대와 먼저 밥을 먹어야 한다: 그 전에는 장소에서 하는 일(퀘스트 · 활동 · 퍼즐)을 미룬다
       const mealFirst = !!st.mealCheck && !st.mealCheck.done;
       const free = !mealFirst && (isFreeTimeEvening(m) || isMealTime(m));
@@ -4025,7 +4093,7 @@ export default function World() {
       opts.push({ label: "닫기", onSelect: () => setOverlay(null) });
       setOverlay({ type: "menu", title, options: opts });
     },
-    [setOverlay],
+    [setOverlay, mirrorScene],
   );
 
   const openExtraRef = useRef<(id: string, skipStory?: boolean) => void>(
@@ -4764,11 +4832,43 @@ export default function World() {
         if (k["arrowup"] || k["w"]) vy -= 1;
         if (k["arrowdown"] || k["s"]) vy += 1;
       }
+      // 🧪 개발용 자동 이동: 목표 칸(다른 맵이면 그쪽 문)까지 길을 찾아 걷는다
+      const ap = autopilot.current;
+      if (ap && !blocked && !fading && !myMeal.eating) {
+        let goal: [number, number] | null = null;
+        let push: Dir | null = null;
+        if (p.map === ap.map) {
+          if (Math.hypot(p.x - (ap.x + 0.5), p.y - (ap.y + 0.5)) < 0.3) autopilot.current = null;
+          else goal = [ap.x, ap.y];
+        } else {
+          const dr = doorToward(world, p.map, ap.map);
+          if (!dr) autopilot.current = null;
+          else {
+            // 가장 가까운 문 칸으로 가서, 문 방향으로 밀고 들어간다
+            const tile = [...dr.tiles].sort(
+              (a, c) => Math.hypot(p.x - a[0] - 0.5, p.y - a[1] - 0.5) - Math.hypot(p.x - c[0] - 0.5, p.y - c[1] - 0.5),
+            )[0];
+            if (Math.hypot(p.x - (tile[0] + 0.5), p.y - (tile[1] + 0.5)) < 0.75) push = dr.enterDir;
+            else goal = tile;
+          }
+        }
+        if (push) {
+          vx = push === "left" ? -1 : push === "right" ? 1 : 0;
+          vy = push === "up" ? -1 : push === "down" ? 1 : 0;
+        } else if (goal) {
+          const path = findPath(map, Math.floor(p.x), Math.floor(p.y), goal[0], goal[1]);
+          const node = path[1] ?? path[0] ?? goal;
+          const dx = node[0] + 0.5 - p.x,
+            dy = node[1] + 0.5 - p.y;
+          vx = dx > 0.08 ? 1 : dx < -0.08 ? -1 : 0;
+          vy = dy > 0.08 ? 1 : dy < -0.08 ? -1 : 0;
+        }
+      }
       // 🏃 Shift를 누른 채 이동하면 달리기 (지치지 않고 계속 달릴 수 있다)
       // 👟 전입 첫날 런닝슈즈를 받기 전에는 달릴 수 없다
       const sta = stamina.current;
       const hasShoes = !!st.flags.runShoes || st.day > 1;
-      const dashing = hasShoes && !!keys.current["shift"] && !!(vx || vy);
+      const dashing = hasShoes && (!!keys.current["shift"] || !!autopilot.current) && !!(vx || vy);
       sta.dashing = dashing;
       const speed = dashing ? DASH_SPEED : WALK_SPEED;
       // 막힌 문 앞에서는 이번 걸음을 되돌려 그 자리에 멈춘다
@@ -5656,10 +5756,13 @@ export default function World() {
       // 목표 지점 표시
       const ev = st.currentEvent();
       let target: { x: number; y: number; viaDoor: boolean } | null = null;
+      // 🧭 먼저 가야 할 곳(호출 · 심부름 · 보고 · 첫날 세면)이 있으면 다음 일정 표시는 잠시 접어 둔다
+      const erNow = errandNow(st);
       if (
         ev &&
         !st.eventBegun &&
         ev.spot &&
+        !erNow &&
         (st.minute >= ev.start || ev.kind === "farewell")
       ) {
         const sp = world.spots[ev.spot];
@@ -5713,6 +5816,12 @@ export default function World() {
           tg = { m: bd.map, x: bd.x + 0.5, y: bd.y + 0.5 };
         }
         const gd = tg && guide(tg.m, tg.x, tg.y);
+        if (gd) qTargets.push({ x: gd.x, y: gd.y - (gd.viaDoor ? 0.6 : 0) });
+      }
+      {
+        // 🧭 호출 · 심부름 · 보고 · 첫날 세면: 가야 할 곳
+        const er = erNow;
+        const gd = er && guide(er.map, er.x, er.y);
         if (gd) qTargets.push({ x: gd.x, y: gd.y - (gd.viaDoor ? 0.6 : 0) });
       }
       if (isMealTime(st.minute) && st.day < TOTAL_DAYS) {
@@ -6077,7 +6186,9 @@ export default function World() {
               p.x * TILE,
               p.y * TILE + 12 + fx.dy - fx.hop,
               36,
-              { dir: fx.dir, t, walking: p.moving, cap: b.cap },
+              selfHidden(st)
+                ? { dir: fx.dir, t, walking: p.moving, cap: null, silhouette: "#23232e" }
+                : { dir: fx.dir, t, walking: p.moving, cap: b.cap },
             );
             if (myMeal.tray && !myMeal.eating)
               drawTray(
@@ -6489,6 +6600,15 @@ export default function World() {
             const o = overlay;
             setOverlay(null);
             o.onDone?.();
+          }}
+        />
+      )}
+      {overlay?.type === "mirror" && (
+        <MirrorReveal
+          onDone={() => {
+            const o = overlay;
+            setOverlay(null);
+            o.onDone();
           }}
         />
       )}

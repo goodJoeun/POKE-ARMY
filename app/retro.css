@@ -637,3 +637,8 @@ canvas { image-rendering: pixelated; }
 @keyframes noticeDim { from { opacity: 0; } to { opacity: 1; } }
 @keyframes noticePop { from { opacity: 0; transform: scale(0.86); } to { opacity: 1; transform: none; } }
 @media (max-width: 600px) { .notice-title { font-size: 20px; } .notice { padding: 20px 18px 16px; } }
+
+/* ───────── 화장실 거울: 내 모습을 처음 보는 장면 (부대 화면 위에 뜬다) ───────── */
+.mirror-scene { z-index: 40; }
+.mirror-scene.stage-0 { background: radial-gradient(circle at 50% 40%, #3a4858 0%, #10141c 70%); }
+.mirror-frame { padding: 14px 22px 4px; border: 6px solid #c8d0d8; border-radius: 14px 14px 6px 6px; background: linear-gradient(160deg, rgba(255,255,255,0.28), rgba(160,190,210,0.12) 45%, rgba(255,255,255,0.2)); box-shadow: 0 6px 0 rgba(0,0,0,0.35), inset 0 0 0 2px rgba(255,255,255,0.5); }

@@ -495,19 +495,19 @@ export const useGame = create<Store>((set, get) => ({
     }
     const now = get();
     if (now.eventBegun || now.currentEvent()?.id !== ev.id) return;
-    get().toast(`✅ 집합 완료! ${ev.label} 시작`, 'good');
-    get().beginEvent();
+    // 전입 첫날 아침 점호는 늦잠 탓에 맨 끝자리에 늦게 합류한다
+    const late = s.day === 1 && ev.kind === 'rollcall_am';
+    get().toast(late ? `🏃 헐레벌떡 도착! ${ev.label} 대열 맨 끝에 섰다` : `✅ 집합 완료! ${ev.label} 시작`, late ? 'info' : 'good');
+    get().beginEvent(late);
   },
 
   oversleep: () => {
+    // 전입 첫날: 분대장에게 혼나고 → 화장실에서 세수(거울) → 내 발로 연병장에 뛰어간다 (도착하면 늦게 합류한 점호가 시작된다)
     const s = get();
-    const sp = getWorld(s.branch, BRANCHES[s.branch].trainArea).spots.parade;
-    teleport(sp.map, sp.x + 0.5, sp.y + 1.5, 'up');
     get().applyEffects({ discipline: -5, mental: -2, flag: 'wokeUp' }, '전입 첫날 늦잠');
-    get().log('😱 눈을 떠 보니 포켓몬이 되어 있었다. 게다가 전입 첫날부터 늦잠…');
+    get().log('😱 눈을 떠 보니 몸이 이상하다. 게다가 전입 첫날부터 늦잠…');
     get().markSeen('sgt_first');
     set({ lateCount: s.lateCount + 1, minute: Math.max(s.minute, 6 * 60 + 25) });
-    get().beginEvent(true);
   },
 
   beginEvent: (late = false) => {

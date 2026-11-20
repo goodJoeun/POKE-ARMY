@@ -186,46 +186,78 @@ export function Quiz() {
   );
 }
 
-// ───────── 잠에서 깨어 변신을 깨닫는 장면 ─────────
+// ───────── 잠에서 깨는 장면: 아직 내 모습은 보이지 않는다 (화장실 거울에서 처음 본다 → MirrorReveal) ─────────
 export function Transform() {
   const s = useGame();
-  const sp = findSpecies(s.speciesId)!;
-  const b = BRANCHES[s.branch];
-  // 단계별 연출: 0~3 어둠 속 독백 → 4 첫 모습 → 5 패닉 → 6 결과 카드
   const lines = [
     '……',
     '눈꺼풀 너머로 희미한 빛이 들어온다.',
     '눈을 떴다. 낯선 천장. 꿉꿉한 모포 냄새. 여긴… 내 방이 아니다.',
-    '기지개를 켜려고 팔을 쭉 뻗었는데…',
-    sp.wake,
-    '"으아아아악?!"',
+    '기지개를 켜려고 팔을 쭉 뻗었는데… 이상하다. 팔이 평소만큼 뻗어지지 않는다.',
+    '(…뭐지? 몸이 내 몸 같지 않아. 아직 꿈인가?)',
+    '그 순간, 문이 벌컥 열리며 누군가 소리쳤다—',
   ];
   const [stage, setStage] = useState(0);
-  const last = lines.length; // 결과 카드 단계
-  const next = () => setStage((v) => Math.min(last, v + 1));
+  const next = () => (stage < lines.length - 1 ? setStage(stage + 1) : s.startDay());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'e') {
         e.preventDefault();
-        if (stage < last) next(); else s.startDay();
+        next();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
-  const revealed = stage >= 4;
+  return (
+    <div className="scene transform-scene stage-0" onClick={next}>
+      <div className="wake-text">
+        <p key={stage} className="fade-in">{lines[stage]}</p>
+        <div className="hud-dim">클릭 또는 Enter</div>
+      </div>
+    </div>
+  );
+}
+
+// ───────── 화장실 거울: 처음으로 내 모습 전체를 본다 (부대 화면 위에 뜬다) ─────────
+export function MirrorReveal({ onDone }: { onDone: () => void }) {
+  const s = useGame();
+  const sp = findSpecies(s.speciesId)!;
+  const b = BRANCHES[s.branch];
+  // 0 거울 속 그림자 → 1 모습이 드러난다 → 2 비명 → 3 결과 카드
+  const lines = [
+    '김 서린 거울 속에, 낯선 그림자가 서 있다.',
+    '손등으로 거울을 닦았다. 내가 손을 들자, 거울 속의 그것도 손을 든다.',
+    '"으아아아악?!"',
+  ];
+  const [stage, setStage] = useState(0);
+  const last = lines.length;
+  const openedAt = useRef(0);
+  useEffect(() => { openedAt.current = performance.now(); }, []);
+  const next = () => {
+    if (performance.now() - openedAt.current < 350) return;
+    if (stage < last) setStage(stage + 1); else onDone();
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        if (!e.repeat) next();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const shakeOn = useSettings((st) => st.screenShake);
   return (
-    <div className={`scene transform-scene ${revealed ? 'stage-2' : 'stage-0'} ${stage === 5 && shakeOn ? 'shake' : ''}`} onClick={() => stage < last && next()}>
-      {revealed && (
-        <div className={`transform-reveal ${stage === 4 ? 'peek' : ''}`}>
-          {stage >= last && <div className="sparkle" />}
-          <MonsterCanvas look={sp.look} size={220} cap={stage >= last ? b.cap : null} />
-        </div>
-      )}
+    <div className={`scene transform-scene mirror-scene ${stage >= 1 ? 'stage-2' : 'stage-0'} ${stage === 2 && shakeOn ? 'shake' : ''}`} onClick={() => stage < last && next()}>
+      <div className={`transform-reveal mirror-frame ${stage === 1 ? 'peek' : ''}`}>
+        {stage >= last && <div className="sparkle" />}
+        <MonsterCanvas look={sp.look} size={220} cap={stage >= 1 ? b.cap : null} silhouette={stage === 0 ? '#1a1a24' : undefined} />
+      </div>
       {stage < last && (
         <div className="wake-text">
-          <p key={stage} className={`fade-in ${stage === 5 ? 'scream' : ''}`}>{lines[stage]}</p>
+          <p key={stage} className={`fade-in ${stage === 2 ? 'scream' : ''}`}>{lines[stage]}</p>
           <div className="hud-dim">클릭 또는 Enter</div>
         </div>
       )}
@@ -236,8 +268,8 @@ export function Transform() {
           <p>{sp.desc}</p>
           <p>성격 분석 결과: <b>{ARCHETYPE_INFO[s.archetype].name}</b> — {ARCHETYPE_INFO[s.archetype].desc}<br />
             <span className="perk">✨ {ARCHETYPE_INFO[s.archetype].perk}</span></p>
-          <p className="hud-dim">꿈이 아니다. 머리 위에는 {b.name} 모자까지 얹혀 있다. 그리고 그 순간, 문이 벌컥 열리며 누군가 소리쳤다—</p>
-          <button className="primary big" onClick={() => s.startDay()}>▶ 다음 (Enter)</button>
+          <p className="hud-dim">꿈이 아니다. 머리 위에는 {b.name} 모자까지 얹혀 있다. …분대장이 3분 준다고 했다. 일단 연병장으로 뛰자!</p>
+          <button className="primary big" onClick={onDone}>▶ 연병장으로 (Enter)</button>
         </div>
       )}
     </div>

@@ -244,7 +244,7 @@ function build(info: CeremonyInfo, ctl: CeremonyCtl, aide: SpeakerInfo | null, s
       steps.push(
         { t: 'wait', secs: 1.4, before: () => ctl.move(D, info.marks.stage[0], info.marks.stage[1], 1.2, 'down') },
         { t: 'talk', script: { lines: [
-          ...(info.late ? [{ who: 'me' as LineWho, text: '(늦게 끌려온 탓에 맨 뒷줄 끝자리에 섰다… 시선이 따갑다.)' }] : []),
+          ...(info.late ? [{ who: 'me' as LineWho, text: '(늦게 뛰어온 탓에 맨 뒷줄 끝자리에 섰다… 시선이 따갑다.)' }] : []),
           { who: 'narr', text: `아침 점호. 구령대 위의 {r:${D}}이(가) 정렬한 장병들을 훑어본다.` },
           ...amClosing(),
         ] } },
@@ -273,7 +273,7 @@ function build(info: CeremonyInfo, ctl: CeremonyCtl, aide: SpeakerInfo | null, s
         script: {
           lines: [
             { who: 'narr', text: '연병장. 전 장병이 오와 열을 맞춰 정렬했다. 구령대 위로 아침 해가 떠오른다.' },
-            ...(info.late ? [{ who: 'me' as LineWho, text: '(늦게 끌려온 탓에 맨 뒷줄 끝자리에 섰다… 시선이 따갑다.)' }] : []),
+            ...(info.late ? [{ who: 'me' as LineWho, text: '(늦게 뛰어온 탓에 맨 뒷줄 끝자리에 섰다… 시선이 따갑다.)' }] : []),
             { who: 'narr', text: `오늘 당직사관은 {r:${D}}. 저벅저벅 구령대로 올라간다.` },
           ],
         },

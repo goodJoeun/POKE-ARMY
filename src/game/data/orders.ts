@@ -23,6 +23,8 @@ const COMMAND: Stage = { map: 'command', me: [5.5, 4.6, 'up'], giver: [5.5, 2.5,
 /** 행정반 책상 앞 (행보관 · 중대장) */
 const ADMIN_SGM: Stage = { map: 'admin', me: [6.5, 4.6, 'up'], giver: [6.5, 2.5, 'down'] };
 const ADMIN_CPT: Stage = { map: 'admin', me: [5.5, 4.6, 'up'], giver: [5.5, 2.5, 'down'] };
+/** 행정반 책상 앞 (소대장이 행정반으로 불렀을 때) */
+const ADMIN_LT: Stage = { map: 'admin', me: [4.5, 4.6, 'up'], giver: [4.5, 2.5, 'down'] };
 /** 2층 복도: 체단실 문 앞 / 옥상 철문(계단) 앞 */
 const HQ2_GYM: Stage = { map: 'hq2', me: [9.3, 1.6, 'right'], giver: [10.8, 1.6, 'left'] };
 const HQ2_ROOF: Stage = { map: 'hq2', me: [20.2, 3.5, 'right'], giver: [21.7, 3.5, 'left'] };
@@ -37,6 +39,8 @@ export interface OrderDef {
   reportAt: Stage;
   /** 퀘스트 알림에 뜨는 한 줄 */
   brief: string;
+  /** 심부름: 명령을 받으면 시킨 곳에 닿을 때까지 곧장 그리로 간다 (다른 문은 열리지 않는다) */
+  errand?: boolean;
   order: Line[];
   report: Line[];
 }
@@ -47,20 +51,20 @@ const me = (text: string) => say('me', text);
 
 export const ORDERS: Record<string, OrderDef> = {
   'M-02': {
-    mission: 'M-02', giver: 'sgt', orderAt: ROOM1, reportAt: ROOM1, brief: '용모 점검 전에 1층 화장실에서 세면하기',
+    mission: 'M-02', giver: 'sgt', orderAt: ROOM1, reportAt: ROOM1, errand: true, brief: '용모 점검 전에 1층 화장실에서 세면하기',
     order: [
       say('sgt', '신병. 오후에 용모 점검이 있다. 눈곱 낀 얼굴로 서 있을 거냐.'),
       say('sgt', '1층 화장실 가서 세면하고 와라. 3분 준다. 시계 보고 정확히 맞춰 와.'),
       me('"예! 다녀오겠습니다!"'),
     ],
     report: [
-      narr('생활관으로 뛰어 돌아왔다.'),
+      narr('생활관으로 뛰어 돌아와 분대장 앞에 섰다.'),
       say('sgt', '2분 50초. 합격. …얼굴이 왜 그렇게 하얗게 질렸냐. 물이 찼냐.'),
       me('(거울에서 본 걸 말할 틈은 없었다.)'),
     ],
   },
   'M-03': {
-    mission: 'M-03', giver: 'senior', orderAt: ROOM1, reportAt: ROOM1, brief: '1층 복도 게시판에서 이번 달 생일자와 초의 개수 세어 오기',
+    mission: 'M-03', giver: 'senior', orderAt: ROOM1, reportAt: ROOM1, errand: true, brief: '1층 복도 게시판에서 이번 달 생일자와 초의 개수 세어 오기',
     order: [
       say('senior', '야, 좋은 소식. 이번 달 생일 파티 준비를 우리 분대가 맡았다. 다들 엄청 기대하고 있어.'),
       say('senior', '1층 복도 게시판에 명단 붙어 있거든. 몇 명인지, 초가 몇 개 필요한지 세어 와라. 행정반 메모도 같이 보고.'),
@@ -74,20 +78,21 @@ export const ORDERS: Record<string, OrderDef> = {
     ],
   },
   'M-04': {
-    mission: 'M-04', giver: 'lt', orderAt: COMMAND, reportAt: COMMAND, brief: '도서관 관리병에게서 정훈 교재 다섯 권 받아 오기',
+    mission: 'M-04', giver: 'lt', orderAt: ADMIN_LT, reportAt: ADMIN_LT, errand: true, brief: '2층 도서관 관리병에게서 정훈 교재 다섯 권 받아 오기',
     order: [
-      say('lt', '내일 정훈 교육이 있다. 2층 도서관 관리병한테 가서 교재 다섯 권을 받아 와라.'),
+      say('lt', '왔나. 행정반으로 부른 건 다름이 아니라, 내일 있을 정훈 교육 준비 때문이다.'),
+      say('lt', '교육 때 쓸 교재가 2층 도서관에 있다. 관리병한테 가서 다섯 권을 받아 와라.'),
       say('lt', '순서대로 꽂혀 있을 거다. 순서 흐트러뜨리지 말고. 교육은 순서가 생명이다.'),
       me('"교재 다섯 권, 받아 오겠습니다."'),
     ],
     report: [
-      narr('책을 들고 소대장에게 갔다. 다섯 권이었던 것이 한 권이 되어 있다.'),
+      narr('책을 들고 행정반의 소대장에게 갔다. 다섯 권이었던 것이 한 권이 되어 있다.'),
       say('lt', '음? 이게 아닌데. 다섯 권이라고 했잖나. …뭐, 내가 다시 알아보지. 그건 네가 갖고 있어라.'),
       narr('소대장은 표지를 한참 보다가 돌려준다. 제목을 읽지 못하는 눈치다.'),
     ],
   },
   'M-05': {
-    mission: 'M-05', giver: 'sgm', orderAt: ADMIN_SGM, reportAt: ADMIN_SGM, brief: '싸지방에서 분대 앞으로 온 인터넷 편지를 날짜순으로 뽑아 오기',
+    mission: 'M-05', giver: 'sgm', orderAt: ADMIN_SGM, reportAt: ADMIN_SGM, errand: true, brief: '싸지방에서 분대 앞으로 온 인터넷 편지를 날짜순으로 뽑아 오기',
     order: [
       say('sgm', '오~ 한가하지? 싸지방 가서 우리 분대 앞으로 온 인터넷 편지 좀 뽑아 와라.'),
       say('sgm', '날짜순으로 정리해서. 편지 받고 웃는 얼굴 보는 게 내 낙이다, 허허.'),
@@ -113,7 +118,7 @@ export const ORDERS: Record<string, OrderDef> = {
     ],
   },
   'M-07': {
-    mission: 'M-07', giver: 'lt', orderAt: COMMAND, reportAt: COMMAND, brief: '지휘통제실에서 근무 일지를 베껴 오기 (시각은 벽시계 기준으로 정확히)',
+    mission: 'M-07', giver: 'lt', orderAt: COMMAND, reportAt: COMMAND, errand: true, brief: '지휘통제실에서 근무 일지를 베껴 오기 (시각은 벽시계 기준으로 정확히)',
     order: [
       say('lt', '주간 근무 결산을 해야 한다. 지휘통제실 가서 근무 일지를 베껴 와라.'),
       say('lt', '시각은 벽시계 기준으로 정확히 적고. 나는 이런 서류가 딱 맞아떨어질 때가 제일 좋다.'),

@@ -6,6 +6,7 @@ import { TEXT_SPEED, useSettings } from '../state/settings';
 import { fmt } from '../engine/text';
 import { npcSpeaker, playerSpeaker, type SpeakerInfo } from '../engine/speakers';
 import MonsterCanvas from './MonsterCanvas';
+import { selfHidden } from '../data/errands';
 
 export interface DialogueScript {
   npc?: NpcId;
@@ -22,7 +23,9 @@ interface Props {
 }
 
 export default function DialogueBox({ script, onChoice, onClose }: Props) {
-  const { branch, name, day, speciesId } = useGame();
+  const { branch, name, day, speciesId, flags } = useGame();
+  // 전입 첫날, 화장실 거울을 보기 전: 아직 내 모습을 모른다 → 내 초상화는 그림자로
+  const hideMe = selfHidden({ day, flags });
   const ctx = { branch, name, day };
   const [lines, setLines] = useState<Line[]>(script.lines);
   const [idx, setIdx] = useState(0);
@@ -46,12 +49,15 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
   const speaker: SpeakerInfo | null = useMemo(() => {
     if (!line) return null;
     if (line.who === 'narr') return null;
-    if (line.who === 'me') return playerSpeaker(branch, speciesId, name, day);
+    if (line.who === 'me') {
+      const me = playerSpeaker(branch, speciesId, name, day);
+      return hideMe ? { ...me, sub: '나 · ???', cap: null } : me;
+    }
     if (line.who === 'npc' && script.custom) return script.custom;
     const id = (line.who === 'npc' ? script.npc : line.who) as NpcId | undefined;
     if (!id) return null;
     return npcSpeaker(branch, id, day);
-  }, [line, branch, speciesId, name, day, script.npc, script.custom]);
+  }, [line, branch, speciesId, name, day, script.npc, script.custom, hideMe]);
 
   const advance = useCallback(() => {
     if (phase === 'choices') return;
@@ -93,7 +99,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
       <div className="dialogue">
         {speaker?.look && (
           <div className="portrait">
-            <MonsterCanvas look={speaker.look} size={124} cap={speaker.cap} />
+            <MonsterCanvas look={speaker.look} size={124} cap={speaker.cap} silhouette={hideMe && line?.who === 'me' ? '#23232e' : undefined} />
           </div>
         )}
         <div className="dialogue-body">
