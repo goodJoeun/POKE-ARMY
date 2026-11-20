@@ -9,7 +9,7 @@ import type {
   NpcId,
   SpotId,
 } from "../types";
-import { extraLook, extrasForDay } from "../data/extras";
+import { extraLook, extrasForDay, extraOverdue } from "../data/extras";
 import {
   useGame,
   presentNpcs,
@@ -289,6 +289,24 @@ function juniorToMe(key: string, day: number): boolean {
   const idx = (RANKS as readonly string[]).indexOf(word);
   return idx >= 0 && idx < mine;
 }
+/** 💭 전역했어야 할 사람을 볼 때 떠올리는 생각 */
+function overdueThought(id: string, name: string, day: number): string {
+  if (id === "room2a")
+    return "(2분대 말 없는 병장님. 내가 처음 왔을 때부터 병장이었다. 그 전에도, 그 전의 전에도…)";
+  const pool = [
+    `(…${name} 병장님. 내가 처음 왔을 때도 이미 고참이었는데. 전역 날짜가 한참 지났을 텐데…)`,
+    `(가만. ${name} 병장님이 전역 신고 하는 걸 본 적이 없다. 분대장님도, 맞선임도 다 떠났는데.)`,
+    `(${name} 병장님은 언제 집에 가는 걸까. …아니, 갈 수는 있는 걸까.)`,
+  ];
+  let h = day;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return pool[h % pool.length];
+}
+/** 👻 팬텀: 야간 순찰 때 화장실 거울 속에 비치는 그림자 (거울 쪽을 등지고 돌아섰을 때만 보인다) */
+const PHANTOM_LOOK = { sprite: "gengar", body: "#6a4a9a", belly: "#6a4a9a", accent: "#e84a6a", shape: "round", ears: "pointy", tail: "none", eyes: "sharp", mouth: "fang" } as MonsterLook;
+/** 세면대 두 개(6,1 · 7,1) 위 거울 (논리 픽셀 box(3,-9,10,8)) 를 잇는 영역, 월드 픽셀 */
+const PHANTOM_MIRROR = { x: 6 * TILE + 6, y: TILE - 18, w: 2 * TILE - 12, h: 16 };
+const phantomRt: { armed: boolean; showAt: number; talking: boolean } = { armed: false, showAt: 0, talking: false };
 /** 📖 나를 잊은 동기가 하는 말 (낯선 사람을 대하듯, 그래도 어딘가 낯익다) */
 const BUDDY_FORGOT_TALK = [
   "…저, 혹시 저 아십니까? 이상하게 낯이 익어서요.",
@@ -366,7 +384,7 @@ function drawTray(
  * - key: 분대가 식당으로 출발했다 · withMe: 나도 같이 왔다(이때만 배식을 받는다)
  * - back: 다 먹고 다 같이 생활관으로 돌아왔다 · talking: 최선임이 부르는 중
  */
-const mealCall = { key: "", withMe: "", back: "", talking: false };
+const mealCall = { key: "", withMe: "", back: "", talking: false, waitSince: 0 };
 /**
  * ⏱ 시간은 저절로 흐르지 않는다. 다음 일정이 이만큼(분) 안이면 장소에 도착하는 순간 시작하고,
  * 그보다 멀면(점심·저녁 자유 시간) 장소에서 E로 "시작하기"를 눌러야 그 시각으로 넘어간다.
@@ -1508,7 +1526,8 @@ export default function World() {
         overlayRef.current || holdRef.current || st.scene !== "world" || st.busy ||
         st.rollcall || st.nightDuty || st.patrol || st.work ||
         useSettings.getState().open || st.clues.length === 0 ||
-        myMeal.eating || myMeal.tray || !orderWindow(st)
+        myMeal.eating || myMeal.tray || !orderWindow(st) ||
+        (st.mealCheck && !st.mealCheck.done)
       )
         return;
       // 한 번 부르고 나면 한동안은 다시 부르지 않는다
@@ -2335,6 +2354,56 @@ export default function World() {
     !st.clues.includes("C-04") &&
     ((st.day === 3 && st.minute >= 22 * 60) || st.day >= 4);
 
+  // 👻 팬텀: 순찰 중 화장실을 점검하고 돌아섰을 때, 등 뒤 거울 속에서
+  const phantomRef = useRef<() => void>(() => {});
+  phantomRef.current = () => {
+    const st = useGame.getState();
+    const p = runtime.player;
+    p.moving = false;
+    keys.current = {};
+    const first = !st.flags.phantomMet;
+    const sp: SpeakerInfo = {
+      name: first ? "??? (거울 속)" : "팬텀",
+      sub: first ? "등 뒤 거울 속의 그림자" : "거울 속의 그림자",
+      look: PHANTOM_LOOK,
+      cap: null,
+    };
+    setOverlay({
+      type: "dialogue",
+      script: {
+        custom: sp,
+        lines: first
+          ? [
+              { who: "narr", text: "(…뒤통수가 서늘하다. 손전등 불빛이 저절로 흔들린다.)" },
+              { who: "narr", text: "(등 뒤, 세면대 거울 속에서 — 무언가가 나를 보며 웃고 있다.)" },
+              { who: "npc", text: "키히히… 뒤돌아보지 마. 돌아보면 사라져 줄 테니까." },
+              { who: "npc", text: "거울엔 네 얼굴이 안 비치지? 여기 오래 있으면 다 그렇게 돼. 그림자부터 없어지거든." },
+              { who: "npc", text: "꿈을 먹는 녀석도 있지만… 나는 그림자를 먹어. 네 그림자, 맛있겠다." },
+              { who: "me", text: "(이를 악물고 돌아섰다—)" },
+              { who: "narr", text: "…아무것도 없다. 거울엔 손전등을 든 내 모습뿐이다. 아니, 저게 정말 내 모습인가?" },
+            ]
+          : [
+              { who: "narr", text: "(또다. 등 뒤 거울 속에서, 그 웃음소리가.)" },
+              { who: "npc", text: "또 만났네? 이름 정도는 알려 줄게. 팬텀. 곧 친구가 될 테니까." },
+              { who: "npc", text: "별 조각 모으는 거 다 봤어. 똑딱거리는 그 녀석한테 빼앗기기 전에… 마지막 밤엔 네 그림자를 나한테 놓고 가." },
+              { who: "npc", text: "그럼 하나도 안 아파. 거울 속은 조용하고 따뜻하거든. 키히히…" },
+              { who: "me", text: "(돌아서자—)" },
+              { who: "narr", text: "거울은 다시 텅 비어 있다. 세면대 위에, 누가 손바닥을 댄 것 같은 김 서림만 남았다." },
+            ],
+      },
+      onDone: () => {
+        const s2 = useGame.getState();
+        runtime.player.dir = "up";
+        phantomRt.armed = false;
+        phantomRt.showAt = 0;
+        phantomRt.talking = false;
+        s2.applyEffects({ flag: `phantom_${s2.day}` }, undefined, true);
+        s2.applyEffects({ flag: "phantomMet" }, undefined, true);
+        s2.log(first ? "👻 순찰 중 화장실 거울 속에서, 내가 아닌 무언가를 봤다." : "👻 거울 속의 그림자가 이름을 댔다. 팬텀.");
+      },
+    });
+  };
+
   // 🚫 정문 밖으로 그냥 걸어 나가려 하면: 위병이 막아서고, 스스로 탈영할 수는 없다며 돌아선다
   const desertRef = useRef<() => void>(() => {});
   desertRef.current = () => {
@@ -2391,6 +2460,15 @@ export default function World() {
       return;
     if (myMeal.eating) {
       st.toast("🍚 식사 중이다. 다 먹고 일어나자.", "info");
+      return;
+    }
+    if (st.nightDuty && st.nightDuty.phase !== "return") {
+      st.toast(
+        st.nightDuty.phase === "report"
+          ? "📋 근무 철수 보고부터 하자. 지휘통제실로 가야 한다."
+          : "🌙 근무 중이다. 생활관으로 바로 갈 수는 없다.",
+        "info",
+      );
       return;
     }
     const bed = world.spots.bed;
@@ -4486,6 +4564,9 @@ export default function World() {
     let npcRetarget = 0;
     let offerT = 0;
     let offerGivers = new Set<string>();
+    // 💭 전역했어야 할 사람을 볼 때의 독백 (한 사람당 하루 한 번, 한동안은 다시 안 함)
+    let overdueT = 0;
+    let lastOverdue = -1e9;
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
@@ -4796,6 +4877,47 @@ export default function World() {
             Math.hypot(p.x - (sp.x + 0.5), p.y - (sp.y + 0.5)) < 1.8
           ) {
             st.patrolCheck(sid);
+            break;
+          }
+        }
+      }
+
+      // 👻 순찰 중 화장실: 점검을 마치고 거울(세면대) 쪽을 등지고 돌아서면, 거울 속에 팬텀이 비친다
+      {
+        const ptl = st.patrol;
+        const inWc = p.map === "wc1" || p.map === "wc2";
+        if (ptl && inWc && st.clues.length > 0 && !st.flags[`phantom_${st.day}`] && ptl.done.includes(p.map as SpotId)) {
+          if (!phantomRt.talking) {
+            if (p.dir === "up") phantomRt.armed = true;
+            else if (phantomRt.armed && p.dir === "down" && !phantomRt.showAt && !blocked && !fading) phantomRt.showAt = now;
+            if (phantomRt.showAt && now - phantomRt.showAt > 900 && !blocked && !fading) {
+              phantomRt.talking = true;
+              phantomRef.current();
+            }
+          }
+        } else if (!phantomRt.talking) {
+          phantomRt.armed = false;
+          phantomRt.showAt = 0;
+        }
+      }
+
+      // 💭 전역 날짜가 지났는데 아직 남아 있는 사람 곁을 지나가면, 한 번씩 기억을 되짚는다
+      overdueT -= dt;
+      if (overdueT <= 0 && !blocked && !fading && !st.nightDuty) {
+        overdueT = 0.6;
+        if (now - lastOverdue > 45000) {
+          for (const def of extrasForDay(st.branch, st.day)) {
+            if (!extraOverdue(def, st.day) || st.daily.includes(`overdue_${def.id}`)) continue;
+            if (extraHiddenAtNight(def.id, st.minute)) continue;
+            const e = extras.current[def.id];
+            if (!e || e.map !== p.map || Math.hypot(e.x - p.x, e.y - p.y) > 3) continue;
+            lastOverdue = now;
+            st.markDaily(`overdue_${def.id}`);
+            st.toast(`💭 ${overdueThought(def.id, def.name, st.day)}`, "info");
+            if (!st.flags.overdueSeen) {
+              st.applyEffects({ flag: "overdueSeen" }, undefined, true);
+              st.checkSuspicions();
+            }
             break;
           }
         }
@@ -5253,24 +5375,24 @@ export default function World() {
           mcM.meal === mealOf(st.minute)
         ) {
           const squad = squadKeys(st.branch, st.day);
-          const lead = squadLeadKey(st.day);
-          const le = lead ? entityOf(lead) : undefined;
+          const lead0 = squadLeadKey(st.day);
+          const le = lead0 ? entityOf(lead0) : undefined;
+          // 분대장이 화면에 없으면(아직 안 나타남 등) 내가 데리고 간다
+          const lead = lead0 && le ? lead0 : null;
+          // 정확한 자리가 아니어도 생활관 안에만 있으면 모인 것 (나를 따라다니는 사람도 생활관에 있다)
           const inRoom = (k: string) => {
-            const g = MEAL_GATHER[k],
-              e = entityOf(k);
-            return !g || !e || (e.map === g[0] && Math.hypot(e.x - (g[1] + 0.5), e.y - (g[2] + 0.5)) < 1.5);
+            const e = entityOf(k);
+            return !e || e.map === "room1";
           };
           const meReady =
             !myAte && p.map === "room1" && !blocked && !fading && !warpReq.current && !myMeal.eating;
-          if (
-            lead &&
-            le &&
-            meReady &&
-            le.map === "room1" &&
-            (squad.every(inRoom) || st.minute >= mcM.start + 4)
-          )
+          // 시간은 멈춰 있으니, 생활관에 들어서고 잠깐(3초) 기다려도 다 안 모이면 그냥 출발한다
+          if (!meReady) mealCall.waitSince = 0;
+          else if (!mealCall.waitSince) mealCall.waitSince = now;
+          const gathered = squad.every(inRoom) || (meReady && now - mealCall.waitSince > 3000);
+          if (lead && le && meReady && le.map === "room1" && gathered)
             mealCallRef.current(lead);
-          else if (!lead && squad.length && meReady && (squad.every(inRoom) || st.minute >= mcM.start + 4))
+          else if (!lead && squad.length && meReady && gathered)
             // 내가 분대장: 생활관에 들어서면 내가 분대원들을 데리고 간다
             mealCallRef.current(null);
           else if (!lead && !squad.length) {
@@ -5381,6 +5503,27 @@ export default function World() {
           g.fillRect(6, 10, mw, mh);
         }
         g.drawImage(mc, 0, 0);
+      }
+      // 👻 거울 속의 팬텀 (돌아서 있는 동안만)
+      if (phantomRt.showAt && (p.map === "wc1" || p.map === "wc2")) {
+        const m = PHANTOM_MIRROR;
+        const pulse = 0.5 + Math.sin(t * 5) * 0.5;
+        g.save();
+        // 거울 둘레로 번지는 보랏빛
+        const glow = g.createRadialGradient(m.x + m.w / 2, m.y + m.h / 2, 4, m.x + m.w / 2, m.y + m.h / 2, 46);
+        glow.addColorStop(0, `rgba(150,70,210,${0.45 + pulse * 0.25})`);
+        glow.addColorStop(1, "rgba(150,70,210,0)");
+        g.fillStyle = glow;
+        g.fillRect(m.x - 40, m.y - 30, m.w + 80, m.h + 70);
+        // 거울 속: 어두운 보랏빛 + 씩 웃는 팬텀
+        g.fillStyle = "rgba(40,16,64,0.85)";
+        g.fillRect(m.x, m.y, m.w, m.h);
+        g.beginPath();
+        g.rect(m.x, m.y, m.w, m.h);
+        g.clip();
+        g.globalAlpha = 0.8 + pulse * 0.2;
+        drawMonster(g, PHANTOM_LOOK, m.x + m.w / 2, m.y + m.h + 16, 34, { dir: "down", t });
+        g.restore();
       }
 
       // 라벨

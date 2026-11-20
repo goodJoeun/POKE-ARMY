@@ -2,7 +2,7 @@
   "name": "poke-army",
   "version": "0.1.0",
   "private": true,
-  "description": "Poké Army: 별빛을 찾아서 - 포켓몬이 되어 군생활을 하는 생활 시뮬레이션 프로토타입",
+  "description": "Poké Army: 별빛에 소원을 빌던 밤 - 포켓몬이 되어 군생활을 하는 생활 시뮬레이션 프로토타입",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -35,4 +35,6 @@ export const DEX = {
   trubbish: 568,
   // 조리실 먹고자(Munchlax)
   munchlax: 446,
+  // 빌런: 거울 속의 팬텀(Gengar)
+  gengar: 94,
 };

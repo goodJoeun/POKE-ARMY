@@ -148,24 +148,6 @@ kbd {
 .sched tr.now { background: #fff0a8; }
 
 /* 타이틀 · 씬 */
-.logo {
-  font-family: 'Galmuri14', sans-serif; color: #f8d030; letter-spacing: 4px;
-  text-shadow: 3px 0 0 #2850a0, -3px 0 0 #2850a0, 0 3px 0 #2850a0, 0 -3px 0 #2850a0,
-    3px 3px 0 #2850a0, -3px -3px 0 #2850a0, 3px -3px 0 #2850a0, -3px 3px 0 #2850a0, 6px 8px 0 #101828;
-}
-.logo-sub { font-size: 14px; }
-/* 표지 로고: 바탕화면 wallpaper_title.png 와 같은 스타일 (갈무리11 Bold, 금색 + 남색 테두리) */
-.title-scene .logo {
-  font-family: 'Galmuri11', sans-serif; font-weight: 700; font-size: clamp(44px, 7.5vw, 112px); line-height: 1.1;
-  letter-spacing: 2px;
-  text-shadow: 4px 0 0 #2850a0, -4px 0 0 #2850a0, 0 4px 0 #2850a0, 0 -4px 0 #2850a0,
-    4px 4px 0 #2850a0, -4px -4px 0 #2850a0, 4px -4px 0 #2850a0, -4px 4px 0 #2850a0, 8px 10px 0 #101828;
-}
-.title-scene .logo-sub {
-  font-family: 'Galmuri11', sans-serif; font-weight: 700; font-size: clamp(20px, 3vw, 34px); color: #fff4d6; opacity: 1;
-  text-shadow: 2px 0 0 #2850a0, -2px 0 0 #2850a0, 0 2px 0 #2850a0, 0 -2px 0 #2850a0,
-    2px 2px 0 #2850a0, -2px -2px 0 #2850a0, 2px -2px 0 #2850a0, -2px 2px 0 #2850a0, 4px 5px 0 #101828;
-}
 .title-scene .title-foot { text-shadow: 0 1px 0 #000; opacity: 0.8; }
 .title-form input {
   font-family: 'Galmuri11', sans-serif; border: 3px solid var(--win-frame); border-radius: 6px; background: var(--win-bg);

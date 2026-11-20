@@ -28,8 +28,7 @@ export function Title() {
   useEffect(() => setHasSave(s.hasSave()), [s, settingsOpen]);
   return (
     <div className="scene title-scene">
-      <h1 className="logo">Poké Army</h1>
-      <div className="logo-sub">별빛을 찾아서</div>
+      {/* 타이틀과 부제는 표지 그림(public/cover.webp)에 그려져 있다 */}
       <div className="title-form">
         <input
           placeholder="주인공 이름 (예: 김몬스)"

@@ -59,6 +59,23 @@ export function extraTitleOnDay(def: ExtraDef, day: number): string {
   return words.join(' ');
 }
 
+/**
+ * 전역했어야 할 사람인지: 병장을 단 지 DAYS_PER_RANK일이 지나도 아직 부대에 있다 (주인공이라면 이미 전역했을 때).
+ * 2분대의 말 없는 병장처럼 처음부터 병장이던 사람은 진작 지났다.
+ */
+export function extraOverdue(def: ExtraDef, day: number): boolean {
+  if (def.officer) return false;
+  const words = def.title.split(' ');
+  const r0 = (RANKS as readonly string[]).indexOf(words[words.length - 1]);
+  if (r0 < 0) return false;
+  let h = 0;
+  for (const ch of def.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const phase = h % DAYS_PER_RANK;
+  // 병장을 단 날 = (day - 1 + r0*3 + phase) / 3 이 처음 3이 되는 날
+  const sgtDay = (RANKS.length - 1) * DAYS_PER_RANK + 1 - r0 * DAYS_PER_RANK - phase;
+  return day >= sgtDay + DAYS_PER_RANK;
+}
+
 const dayCache = new Map<string, ExtraDef[]>();
 /** 그날 부대에 있는 엑스트라 (직책의 계급은 그날 계급으로) */
 export function extrasForDay(branch: BranchId, day: number): ExtraDef[] {
@@ -188,7 +205,7 @@ const LIBRARIAN: ExtraDef = {
 const MORE: Record<BranchId, ExtraDef[]> = {
   army: [
     SERVER,
-    { id: 'sq1', sprite: 'hitmonchan', name: '홍수몬', title: '1분대 상병', map: 'room1', x: 12, y: 6, wander: 1, color: '#b88a5a', until: 8, squad1Senior: true,
+    { id: 'sq1', sprite: 'hitmonchan', name: '홍수몬', title: '1분대 상병', map: 'room1', x: 12, y: 6, wander: 1, color: '#b88a5a', until: 7, squad1Senior: true,
       lines: ['펀치 연습은 체단실에서. 생활관에선 조용히.', '분대장님 전역하면 다음은 나다. 각오해라~', '신병, 모르는 거 있으면 나한테 물어봐.'] },
     { id: 'r2b', sprite: 'hitmonlee', name: '시라소몬', title: '2분대 상병', map: 'room2', x: 4, y: 5, wander: 1, color: '#a87a5a',
       lines: ['2분대 생활관은 발차기 금지 구역이다… 내가 정했다.', '1분대 신병이 우리 생활관엔 웬일이냐?', '혹한기 준비하느라 바쁘다.'] },
@@ -199,7 +216,7 @@ const MORE: Record<BranchId, ExtraDef[]> = {
   ],
   navy: [
     SERVER,
-    { id: 'sq1', sprite: 'seel', name: '쥬쥬', title: '1분대 상병', map: 'room1', x: 12, y: 6, wander: 1, color: '#e8eef4', until: 8, squad1Senior: true,
+    { id: 'sq1', sprite: 'seel', name: '쥬쥬', title: '1분대 상병', map: 'room1', x: 12, y: 6, wander: 1, color: '#e8eef4', until: 7, squad1Senior: true,
       lines: ['겨울 바다 당직도 끄떡없다. 원래 추위에 강하거든.', '분대장님 전역하면 다음은 나다~', '신병, 배 멀미는 괜찮냐?'] },
     { id: 'r2b', sprite: 'krabby', name: '크랩', title: '2분대 상병', map: 'room2', x: 4, y: 5, wander: 1, color: '#e86848',
       lines: ['집게 조심해라. 장난이야~', '2분대는 다음 출항 준비 중이다.', '1분대 신병이 우리 생활관엔 웬일이냐?'] },
@@ -210,7 +227,7 @@ const MORE: Record<BranchId, ExtraDef[]> = {
   ],
   air: [
     SERVER,
-    { id: 'sq1', sprite: 'hoothoot', name: '부우부', title: '1분대 상병', map: 'room1', x: 12, y: 6, wander: 1, color: '#a87a4a', until: 8, squad1Senior: true,
+    { id: 'sq1', sprite: 'hoothoot', name: '부우부', title: '1분대 상병', map: 'room1', x: 12, y: 6, wander: 1, color: '#a87a4a', until: 7, squad1Senior: true,
       lines: ['야간 비상대기 때 난 눈이 말똥말똥하다.', '분대장님 전역하면 다음은 나다~', '신병, FOD 워크다운 해 봤냐?'] },
     { id: 'r2b', sprite: 'noctowl', name: '야부엉', title: '2분대 상병', map: 'room2', x: 4, y: 5, wander: 1, color: '#a87a4a',
       lines: ['밤눈이 밝아서 야간 비상대기는 내 담당이다.', '2분대는 다음 주 비상대기다.', '1분대 신병이 우리 생활관엔 웬일이냐?'] },
