@@ -62,6 +62,14 @@ export function buildSchedule(day: number, branch: BranchId): ScheduleEvent[] {
   return events;
 }
 
+/**
+ * 일과가 끝난 자리에서 분대장 인솔로 곧장 식당에 가는 끼니 (생활관에 모였다 가는 날과 번갈아 나온다).
+ * 1일차 점심은 생활관 집합부터 배우고, 그날 저녁은 일과 장소에서 바로 간다.
+ */
+export function mealFromWork(day: number, meal: 'lunch' | 'dinner') {
+  return (day + (meal === 'dinner' ? 1 : 0)) % 2 === 0;
+}
+
 export function isMealTime(min: number) {
   return (min >= 12 * 60 && min < 13 * 60) || (min >= 17 * 60 + 30 && min < 18 * 60 + 30);
 }

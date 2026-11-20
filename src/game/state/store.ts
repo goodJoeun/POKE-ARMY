@@ -7,7 +7,7 @@ import type {
 import { BRANCHES, FACILITY_NAME, MONTHLY_PAY, RANKS, STORE_NAME, TOTAL_DAYS, fmtMoney, rankIdxForDay, seasonForDay } from '../data/branches';
 import { pickSpecies, topArchetype } from '../data/monsters';
 import { NPC_IDS, NPC_SKINS, SOLDIER_IDS, birthdayNpcs, currentSquadLeader, npcPresent, arriveDay, leaveDay } from '../data/npcs';
-import { buildSchedule } from '../data/schedule';
+import { buildSchedule, mealFromWork } from '../data/schedule';
 import { DIALOGUES } from '../data/dialogues';
 import { QUESTS, QUEST_CHAINS, chainOf } from '../data/quests';
 import { ITEMS, GIFT_AFFINITY } from '../data/items';
@@ -451,7 +451,8 @@ export const useGame = create<Store>((set, get) => ({
         if (minute < at || get().announced.includes(key)) return;
         set({ announced: [...get().announced, key] });
         set({ mealCheck: { meal, start: at, done: false } });
-        get().toast('🍚 식사 시간. 먼저 1생활관에 가자 — 분대원들과 다 같이 식당으로 간다.', 'info');
+        // 일과 장소에서 분대장이 곧장 인솔하는 끼니는 그 자리에서 부른다 (World) → 생활관 안내는 띄우지 않는다
+        if (!(minute === at && mealFromWork(s.day, meal))) get().toast('🍚 식사 시간. 먼저 1생활관에 가자 — 분대원들과 다 같이 식당으로 간다.', 'info');
       };
       const endMeal = (key: string, at: number, meal: MealCheck['meal']) => {
         if (minute < at || get().announced.includes(key)) return;

@@ -47,7 +47,7 @@ import {
 } from "../data/dialogues";
 import { ITEMS } from "../data/items";
 import { QUESTS } from "../data/quests";
-import { isFreeTimeEvening, isMealTime } from "../data/schedule";
+import { isFreeTimeEvening, isMealTime, mealFromWork } from "../data/schedule";
 import { clampMapZoom, useSettings } from "../state/settings";
 import { inEventArea } from "../engine/eventArea";
 import {
@@ -1510,7 +1510,18 @@ export default function World() {
         onChoice: (c) => {
           if (c.effects) useGame.getState().applyEffects(c.effects, title);
         },
-        onDone: () => useGame.getState().finishWork(),
+        onDone: () => {
+          useGame.getState().finishWork();
+          // 🍚 일과가 끝난 자리에서 곧장 식당으로 가는 날: 분대장이 그 자리에서 인솔한다 (생활관에 모였다 가는 날과 번갈아)
+          const s2 = useGame.getState();
+          const mc = s2.mealCheck;
+          if (s2.scene !== "world" || !mc || mc.done || !isMealTime(s2.minute) || !mealFromWork(s2.day, mc.meal)) return;
+          if (mealCall.key === `${s2.day}-${mc.meal}` || mealCall.talking) return;
+          const lead0 = squadLeadKey(s2.day);
+          const lead = lead0 && entityOf(lead0) ? lead0 : null;
+          if (!lead && !squadKeys(s2.branch, s2.day).length) return; // 분대원이 없는 날은 혼자 간다
+          mealCallRef.current(lead, true);
+        },
       });
     };
     // 🎬 먼저 집합 장소에 분대원과 (말을 하는) 간부가 모여 선 다음에 장면이 시작된다
@@ -2250,8 +2261,9 @@ export default function World() {
   };
 
   // 🍚 식사: 1생활관에 모인 분대에게 분대장이 "밥 먹으러 가자" → 화면 전환 → 다 같이 병영식당 입구
-  const mealCallRef = useRef<(lead: string | null) => void>(() => {});
-  mealCallRef.current = (lead) => {
+  // (fromWork: 일과가 끝난 자리에서 분대장이 생활관에 들르지 않고 곧장 인솔한다)
+  const mealCallRef = useRef<(lead: string | null, fromWork?: boolean) => void>(() => {});
+  mealCallRef.current = (lead, fromWork = false) => {
     const st = useGame.getState();
     const p = runtime.player;
     p.moving = false;
@@ -2261,9 +2273,17 @@ export default function World() {
     // 분대장이 외치고 내가 받는다 / 내가 분대장이면 내가 외치고 후임이 받는다
     const resp = lead ? null : squadResponder(st.day);
     const sp = speakerOf(lead ?? resp ?? "buddy");
-    const call = meal === "lunch"
-      ? "자, 1생활관! 점심 먹으러 가자. 다들 따라와."
-      : "오늘 일과 끝! 다들 저녁 먹으러 가자.";
+    const call = fromWork
+      ? meal === "lunch"
+        ? lead
+          ? "오전 일과 끝! 생활관에 들를 것 없이 이대로 식당으로 간다. 2열 종대로 따라와."
+          : "오전 일과 끝! 생활관에 들를 것 없이 이대로 다 같이 밥 먹으러 가자."
+        : lead
+          ? "오늘 일과 끝! 다들 고생했다. 이대로 다 같이 저녁 먹으러 간다. 따라와."
+          : "오늘 일과 끝! 다들 고생했어. 이대로 다 같이 저녁 먹으러 가자."
+      : meal === "lunch"
+        ? "자, 1생활관! 점심 먹으러 가자. 다들 따라와."
+        : "오늘 일과 끝! 다들 저녁 먹으러 가자.";
     setOverlay({
       type: "dialogue",
       script: {
@@ -2305,7 +2325,12 @@ export default function World() {
           enterDir: "up",
           arrive: { x: MESS_DOOR_IN[0], y: MESS_DOOR_IN[1] + 0.2, dir: "up" },
         } as unknown as Door;
-        s2.toast("🍚 분대와 함께 병영식당에 도착했다. 밥차에서 식판을 받고 내 자리에 앉자.", "info");
+        s2.toast(
+          fromWork
+            ? "🍚 일과를 마친 그대로 분대와 병영식당에 도착했다. 밥차에서 식판을 받고 내 자리에 앉자."
+            : "🍚 분대와 함께 병영식당에 도착했다. 밥차에서 식판을 받고 내 자리에 앉자.",
+          "info",
+        );
       },
     });
   };
