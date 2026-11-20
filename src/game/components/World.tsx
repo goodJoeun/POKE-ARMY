@@ -74,7 +74,7 @@ import type {
   CeremonyInfo,
   CeremonyRt,
 } from "../engine/ceremony";
-import { fmt } from "../engine/text";
+import { fmt, fixJosa } from "../engine/text";
 import { memberName } from "../engine/whereabouts";
 import Hud from "./Hud";
 import DialogueBox, { type DialogueScript } from "./DialogueBox";
@@ -92,7 +92,7 @@ import { CANDY_SPOTS, QUICK_REWARD, QUICK_SPOTS } from "../data/puzzles";
 import { nightScene, workScene } from "../data/workScenes";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
 import { SUSPICIONS, suspicionLeads } from "../data/suspicions";
-import { errandNow, mirrorPending, selfHidden } from "../data/errands";
+import { errandNow, mirrorPending, orderStage, reportStage, selfHidden } from "../data/errands";
 import { MirrorReveal } from "./Scenes";
 import {
   SLIPPER_LOOK,
@@ -1327,6 +1327,8 @@ export default function World() {
    * 대화창이 닫히면(화면 전환 중이 아닐 때) 비워져서 다시 제 할 일을 한다.
    */
   const staged = useRef<Set<string>>(new Set());
+  /** 📢 호출 · 보고를 기다리는 사람이 서 있는 자리: 내가 그 방에 들어서면 거기 서서 나를 기다린다 */
+  const waitAt = useRef<{ key: string; map: MapId; x: number; y: number; dir: Dir } | null>(null);
   const placeAt = useCallback(
     (key: string, map: MapId, x: number, y: number, dir: Dir) => {
       const e = entityOf(key);
@@ -1615,73 +1617,165 @@ export default function World() {
     }
   }, [work, overlay, setOverlay, world, placeAt]);
 
-  // 📋 명령 전달: 할 수 있게 된 스토리 미션이 있으면, 자유 시간에 시킨 사람이 나를 불러 임무를 준다
+  // 📋 명령 전달: 할 수 있게 된 스토리 미션이 있으면, 자유 시간에 시킨 사람이 나를 부른다(호출).
+  // 화면이 옮겨 주지 않는다 → 내가 직접 그 사람이 있는 곳으로 걸어가 마주 서면 명령을 듣고,
+  // 일을 마치면 다시 내 발로 돌아가 보고한다. (가야 할 곳이 있는 동안 다른 문은 열리지 않는다 · data/errands.ts)
   const lastOrder = useRef<{ day: number; minute: number } | null>(null);
   useEffect(() => {
+    const faceTo = (fx: number, fy: number, tx: number, ty: number): Dir =>
+      Math.abs(tx - fx) > Math.abs(ty - fy) ? (tx > fx ? "right" : "left") : ty > fy ? "down" : "up";
+    /** 마주 선 뒤: 명령을 듣는다 → 큰 임무 카드 */
+    const playOrder = (id: string) => {
+      const st = useGame.getState();
+      const m = STORY_MISSIONS.find((x) => x.id === id)!;
+      const o = ORDERS[id];
+      const present = npcPresent(o.giver, st.day);
+      const brief = o.brief.replace("{ammo}", FACILITY_NAME[st.branch]);
+      setOverlay({
+        type: "dialogue",
+        script: present
+          ? { npc: o.giver, lines: o.order }
+          : {
+              lines: [
+                {
+                  who: "narr",
+                  text: `생활관 문 옆 당번표에 내 이름이 적혀 있다. 「${brief}」 누가 적었는지는 알 수 없다.`,
+                },
+              ],
+            },
+        onDone: () => {
+          const s2 = useGame.getState();
+          s2.applyEffects({ flag: `order_${id}` }, undefined, true);
+          s2.log(`📋 임무를 받았다: ${brief}`);
+          // 📋 임무 안내는 화면 가운데 큰 카드로 보여 준다
+          setOverlay({
+            type: "notice",
+            info: {
+              icon: "📋",
+              kicker: "새 임무",
+              title: brief,
+              from: present ? `${npcDisplayName(s2.branch, o.giver, s2.day)}의 지시` : "당번표에 적힌 이름",
+              lines: [`📖 ${m.title}`, "퀘스트 창(Q)에서 다시 확인할 수 있다."],
+            },
+          });
+        },
+      });
+    };
+    /** 마주 선 뒤: 일을 마쳤다고 보고한다 */
+    const playReport = (id: string) => {
+      const st = useGame.getState();
+      const o = ORDERS[id];
+      const present = npcPresent(o.giver, st.day);
+      setOverlay({
+        type: "dialogue",
+        script: present
+          ? { npc: o.giver, lines: o.report }
+          : {
+              lines: [
+                {
+                  who: "narr",
+                  text: '보고하러 왔지만, 일을 시킨 사람의 자리는 비어 있다. 당번표에 "완료"라고만 적어 두었다. 아무도 그 이름을 묻지 않는다.',
+                },
+              ],
+            },
+        onDone: () => {
+          const s2 = useGame.getState();
+          s2.applyEffects(
+            { flag: `report_${id}`, discipline: 1, affinity: present ? { [o.giver]: 2 } : undefined },
+            "임무 보고",
+            true,
+          );
+          s2.toast("✅ 보고 완료. 다시 자유롭게 움직일 수 있다.", "good");
+          s2.log(`📋 임무를 마치고 보고했다: ${o.brief.replace("{ammo}", FACILITY_NAME[s2.branch])}`);
+        },
+      });
+    };
     const iv = setInterval(() => {
       const st = useGame.getState();
+      const p = runtime.player;
       if (
         overlayRef.current || holdRef.current || st.scene !== "world" || st.busy ||
-        st.rollcall || st.nightDuty || st.patrol || st.work ||
-        useSettings.getState().open || st.clues.length === 0 ||
-        myMeal.eating || myMeal.tray || !orderWindow(st) ||
-        (st.mealCheck && !st.mealCheck.done)
+        st.rollcall || st.nightDuty || st.patrol || st.work || cer.current ||
+        useSettings.getState().open || myMeal.eating || myMeal.tray
       )
         return;
+      const er = errandNow(st);
+      // 🏃 심부름: 시킨 곳에 닿았다 → 그다음부터는 다시 자유롭게 다닐 수 있다
+      if (er?.kind === "errand" && er.id && p.map === er.map) {
+        st.applyEffects({ flag: `at_${er.id}` }, undefined, true);
+        return;
+      }
+      // 📢 호출 · 📋 보고: 그 방에 들어서면 그 사람이 제자리에서 기다리고, 다가가 마주 서면 장면이 시작된다
+      if (er && (er.kind === "summon" || er.kind === "report") && er.id) {
+        const id = er.id;
+        const o = ORDERS[id];
+        const present = npcPresent(o.giver, st.day);
+        const at = er.kind === "summon" ? orderStage(id, st.day) : reportStage(id, st.day);
+        // 그 사람은 제자리에 가서 기다린다 (내 눈앞에서 사라지지 않게, 나와 다른 곳에 있을 때 옮겨 둔다)
+        const ge = npcs.current[o.giver];
+        if (present && (p.map === at.map || !ge || ge.map !== p.map))
+          waitAt.current = { key: o.giver, map: at.map, x: at.giver[0], y: at.giver[1], dir: at.giver[2] };
+        if (p.map !== at.map) return;
+        if (Math.hypot(p.x - at.giver[0], p.y - at.giver[1]) > 3.4) return;
+        waitAt.current = null;
+        keys.current = {};
+        p.moving = false;
+        p.dir = faceTo(p.x, p.y, at.giver[0], at.giver[1]);
+        if (present) placeAt(o.giver, at.map, at.giver[0], at.giver[1], faceTo(at.giver[0], at.giver[1], p.x, p.y));
+        if (er.kind === "summon") playOrder(id);
+        else playReport(id);
+        return;
+      }
+      waitAt.current = null;
+      if (er) return;
+      // 📢 새 호출: 자유 시간에, 밥을 다 먹은 뒤에만 부른다
+      if (st.clues.length === 0 || !orderWindow(st) || (st.mealCheck && !st.mealCheck.done)) return;
       // 한 번 부르고 나면 한동안은 다시 부르지 않는다
       const lo = lastOrder.current;
       if (lo && lo.day === st.day && st.minute - lo.minute < 40) return;
       const m = STORY_MISSIONS.find(
-        (x) => ORDERS[x.id] && !st.flags[`order_${x.id}`] && missionState(x, st) === "open",
+        (x) =>
+          ORDERS[x.id] && !st.flags[`order_${x.id}`] && !st.flags[`summon_${x.id}`] && missionState(x, st) === "open",
       );
       if (!m) return;
       const o = ORDERS[m.id];
       const present = npcPresent(o.giver, st.day);
-      const brief = o.brief.replace("{ammo}", FACILITY_NAME[st.branch]);
+      const at = orderStage(m.id, st.day);
       lastOrder.current = { day: st.day, minute: st.minute };
       keys.current = {};
-      // 🎬 먼저 부른 사람이 있는 곳으로 화면이 바뀌고, 마주 선 다음에 명령을 듣는다
-      const at = present ? o.orderAt : DUTY_BOARD;
-      st.toast(
-        present
-          ? `📢 ${npcDisplayName(st.branch, o.giver, st.day)}의 호출이다.`
-          : "📢 당번표에 새 이름이 적혔다는 말을 들었다.",
-        "info",
-      );
-      storyCtxRef.current.goTo(at.map, at.me[0], at.me[1], at.me[2], () => {
-        if (present)
-          placeAt(o.giver, at.map, at.giver[0], at.giver[1], at.giver[2]);
-        setOverlay({
-          type: "dialogue",
-          script: present
-            ? { npc: o.giver, lines: o.order }
-            : {
-                lines: [
-                  {
-                    who: "narr",
-                    text: `생활관 문 옆 당번표에 내 이름이 적혀 있다. 「${brief}」 누가 적었는지는 알 수 없다.`,
-                  },
-                ],
-              },
-          onDone: () => {
-            const s2 = useGame.getState();
-            s2.applyEffects({ flag: `order_${m.id}` }, undefined, true);
-            s2.log(`📋 임무를 받았다: ${brief}`);
-            // 📋 임무 안내는 화면 가운데 큰 카드로 보여 준다
-            setOverlay({
-              type: "notice",
-              info: {
-                icon: "📋",
-                kicker: "새 임무",
-                title: brief,
-                from: present ? `${npcDisplayName(s2.branch, o.giver, s2.day)}의 지시` : "당번표에 적힌 이름",
-                lines: [`📖 ${m.title}`, "퀘스트 창(Q)에서 다시 확인할 수 있다."],
-              },
-            });
-          },
-        });
+      p.moving = false;
+      st.applyEffects({ flag: `summon_${m.id}` }, undefined, true);
+      const who = npcDisplayName(st.branch, o.giver, st.day);
+      const room = MAP_NAMES[at.map];
+      const meName = `${RANKS[rankIdxForDay(st.day)]} ${st.name}`;
+      const office = at.map === "admin" || at.map === "command";
+      st.log(present ? `📢 ${who}의 호출을 받았다.` : "📢 당번표에 새 이름이 적혔다는 말을 들었다.");
+      setOverlay({
+        type: "notice",
+        info: present
+          ? {
+              icon: "📢",
+              kicker: "호출",
+              title: fixJosa(office ? `${room}(으)로 오라는 호출이다` : `${who}이(가) ${room}에서 찾는다`),
+              from: `${who} · 📍 ${room}`,
+              lines: [
+                fixJosa(
+                  office
+                    ? `(막사 스피커) "${room}에서 전달한다. ${meName}, ${meName}은(는) 지금 즉시 ${room}(으)로 올 것. 이상."`
+                    : `지나가던 분대원이 전해 줬다. "야, ${who}님이 생활관에서 너 찾으시더라. 얼른 가 봐."`,
+                ),
+                "직접 걸어가자. 화면 위 안내와 ❗ 표시가 길을 알려 준다.",
+              ],
+            }
+          : {
+              icon: "📢",
+              kicker: "호출",
+              title: "당번표에 새 이름이 적혔다",
+              from: "📍 1생활관 문 옆 당번표",
+              lines: ["누가 적었는지는 아무도 모른다고 한다.", "직접 걸어가서 확인하자."],
+            },
       });
-    }, 1500);
+    }, 400);
     return () => clearInterval(iv);
   }, [setOverlay, placeAt]);
 
@@ -5126,7 +5220,7 @@ export default function World() {
       if (npcRetarget <= 0 && !cer.current) {
         npcRetarget = 0.5;
         for (const id of present) {
-          if (staged.current.has(id)) continue;
+          if (staged.current.has(id) || waitAt.current?.key === id) continue;
           let n = npcs.current[id];
           const target = npcTarget(id);
           const key = `${target[0]}:${target[1]},${target[2]}`;
@@ -5171,6 +5265,20 @@ export default function World() {
         if (staged.current.has(id)) {
           n.moving = false;
           n.path = [];
+          continue;
+        }
+        // 📢 호출 · 보고를 기다리는 사람은 제자리(책상 뒤 · 생활관 통로)에서 나를 기다린다
+        const wa = waitAt.current;
+        if (wa && wa.key === id) {
+          n.map = wa.map;
+          n.x = wa.x;
+          n.y = wa.y;
+          n.dir = wa.dir;
+          n.path = [];
+          n.viaDoor = null;
+          n.moving = false;
+          n.att = false;
+          n.targetKey = "";
           continue;
         }
         // 🌙 야간 근무 중: 근무와 상관없는 1분대원은 이미 자기 침상에서 자고 있다 (걸어가는 중이었어도)

@@ -22,6 +22,8 @@ import { extraLook, extrasForDay } from '../data/extras';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
 import { memberName } from '../engine/whereabouts';
 import { DUTY_BOARD, ORDERS } from '../data/orders';
+import { npcDisplayName } from '../data/npcs';
+import { MAP_NAMES } from '../engine/map';
 import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
@@ -103,8 +105,20 @@ export function withReport(ctx: StoryCtx, id: string, done?: () => void) {
   const s = G();
   if (!o || !s.flags[`order_${id}`] || s.flags[`report_${id}`]) { done?.(); return; }
   const present = npcPresent(o.giver, s.day);
-  // 🎬 먼저 보고할 사람이 있는 곳으로 화면이 바뀌고, 그 사람과 마주 선 다음에 말을 꺼낸다
   const at = present ? o.reportAt : DUTY_BOARD;
+  // 🚶 찾아가 보고하는 일: 화면이 옮겨 주지 않는다. 내가 직접 걸어가 그 사람 앞에 서면 보고 장면이 시작된다 (World)
+  if (!at.passing) {
+    s.applyEffects({ flag: `toReport_${id}` }, undefined, true);
+    s.toast(
+      present
+        ? `📋 일을 마쳤다. ${MAP_NAMES[at.map]}의 ${npcDisplayName(s.branch, o.giver, s.day)}에게 보고하러 가자.`
+        : '📋 일을 마쳤다. 1생활관 당번표에 적으러 가자.',
+      'alert',
+    );
+    done?.();
+    return;
+  }
+  // 🎬 일을 마치고 나오는 길에 마주치는 장면: 그 자리로 화면이 바뀌고 곧바로 이어진다
   ctx.goTo(at.map, at.me[0], at.me[1], at.me[2], () => {
     if (present) ctx.place(o.giver, at.map, at.giver[0], at.giver[1], at.giver[2]);
     ctx.play({

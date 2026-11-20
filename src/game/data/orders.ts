@@ -5,8 +5,8 @@ import type { Dir } from '../engine/drawMonster';
 /**
  * 명령 · 임무 (docs/lore/scenario.md)
  * 퍼즐이 있는 공간에는 늘 누군가의 명령이나 맡은 임무로 간다. 일은 평범하고 밝다. 어긋난 것은 그 일을 하다 보인다.
- * - order: 임무를 받는 장면 (자유 시간에 시킨 사람이 부른다)
- * - report: 일을 마치고 돌아가 보고하는 장면. 시킨 사람은 대개 이상한 점을 보지 못한다
+ * - order: 임무를 받는 장면 (자유 시간에 시킨 사람이 부른다 → 내가 직접 그 사람이 있는 곳으로 걸어간다)
+ * - report: 일을 마치고 내 발로 돌아가 보고하는 장면. 시킨 사람은 대개 이상한 점을 보지 못한다
  * - 시킨 사람이 그사이 전역해 부대에 없으면 absent 문구로 대신한다
  * 키는 스토리 미션 ID (data/story.ts).
  */
@@ -15,6 +15,8 @@ export interface Stage {
   map: MapId;
   me: [number, number, Dir];
   giver: [number, number, Dir];
+  /** 일을 마치고 나오는 길에 마주치는 자리: 찾아가 보고하는 게 아니라, 그 자리에서 곧바로 장면이 이어진다 */
+  passing?: boolean;
 }
 /** 1생활관 통로 (분대장 · 맞선임) */
 const ROOM1: Stage = { map: 'room1', me: [7.8, 5.5, 'left'], giver: [6.3, 5.5, 'right'] };
@@ -26,8 +28,8 @@ const ADMIN_CPT: Stage = { map: 'admin', me: [5.5, 4.6, 'up'], giver: [5.5, 2.5,
 /** 행정반 책상 앞 (소대장이 행정반으로 불렀을 때) */
 const ADMIN_LT: Stage = { map: 'admin', me: [4.5, 4.6, 'up'], giver: [4.5, 2.5, 'down'] };
 /** 2층 복도: 체단실 문 앞 / 옥상 철문(계단) 앞 */
-const HQ2_GYM: Stage = { map: 'hq2', me: [9.3, 1.6, 'right'], giver: [10.8, 1.6, 'left'] };
-const HQ2_ROOF: Stage = { map: 'hq2', me: [20.2, 3.5, 'right'], giver: [21.7, 3.5, 'left'] };
+const HQ2_GYM: Stage = { map: 'hq2', me: [9.3, 1.6, 'right'], giver: [10.8, 1.6, 'left'], passing: true };
+const HQ2_ROOF: Stage = { map: 'hq2', me: [20.2, 3.5, 'right'], giver: [21.7, 3.5, 'left'], passing: true };
 /** 시킨 사람이 부대에 없을 때: 생활관 문 옆 당번표 앞 */
 export const DUTY_BOARD: Stage = { map: 'room1', me: [6.5, 1.6, 'up'], giver: [6.5, 1.6, 'up'] };
 
