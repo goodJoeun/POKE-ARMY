@@ -128,6 +128,8 @@ interface NpcRt {
   viaDoor: Door | null;
   /** 나와 동행 중: 내 발자취를 따라 바로 뒤에 붙었다 */
   att?: boolean;
+  /** 앞사람과 겹치지 않으려고 잠깐 멈춰 서 있다 (같은 길을 가는 앞사람이 한 걸음 멀어질 때까지) */
+  held?: boolean;
 }
 
 /** 맵 + 타일 좌표 */
@@ -5168,6 +5170,37 @@ export default function World() {
 
       // 👣 내 발자취 기록 → 동행하는 사람이 내 바로 뒤를 따라온다
       trackMyTrail(p, world.maps[p.map]);
+      /**
+       * 🚶 겹쳐 걷지 않기: 같은 방향으로 가는 사람이 바로 앞(한 칸 안)에서 걷고 있으면, 그 사람이 멀어질 때까지 멈춰 선다.
+       * 서 있는 사람이나 마주 오는 사람은 기다리지 않는다 (서로 영영 못 가는 일이 없도록 그냥 지나간다).
+       */
+      const DIR_VEC: Record<Dir, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+      const yieldFor = (n: NpcRt, key: string, gx: number, gy: number): boolean => {
+        const hx = gx - n.x,
+          hy = gy - n.y;
+        const hl = Math.hypot(hx, hy);
+        if (hl < 0.01) return false;
+        const test = (o: NpcRt | undefined, ok: string): boolean => {
+          if (!o || o === n || o.map !== n.map) return false;
+          const dx = o.x - n.x,
+            dy = o.y - n.y;
+          const d = Math.hypot(dx, dy);
+          if (d > 0.85) return false;
+          const going = o.moving || (!!o.held && o.path.length > 0);
+          if (!going) return false;
+          const [ox, oy] = DIR_VEC[o.dir];
+          // 가는 방향이 다르면(마주 오거나 가로질러 가면) 기다리지 않는다
+          if ((ox * hx + oy * hy) / hl < 0.3) return false;
+          // 같은 자리에서 같이 출발했으면 한쪽만 먼저 간다
+          if (d < 0.08) return key > ok;
+          // 그 사람이 내 앞에 있을 때만
+          return (dx * hx + dy * hy) / (d * hl) > 0.35;
+        };
+        for (const [ok, o] of Object.entries(npcs.current)) if (test(o, ok)) return true;
+        for (const [ok, o] of Object.entries(extras.current)) if (test(o, `x:${ok}`)) return true;
+        return false;
+      };
+
       /** 동행: 가까이 오면 내 뒤에 붙어서, 내가 걸어온 길 그대로 한 칸 뒤를 따라온다. (아직 멀면 false → 길을 찾아 다가온다) */
       const followStep = (n: NpcRt): boolean => {
         if (n.map !== p.map) {
@@ -5462,6 +5495,12 @@ export default function World() {
           const dx = gx - n.x,
             dy = gy - n.y;
           const d = Math.hypot(dx, dy);
+          if (yieldFor(n, id, gx, gy)) {
+            n.moving = false;
+            n.held = true;
+            continue;
+          }
+          n.held = false;
           // 식사하러 줄지어 갈 땐 조금 빠른 걸음
           const sp =
             (follow
@@ -5640,6 +5679,12 @@ export default function World() {
             const dx = gx - e.x,
               dy = gy - e.y;
             const d = Math.hypot(dx, dy);
+            if (yieldFor(e, `x:${def.id}`, gx, gy)) {
+              e.moving = false;
+              e.held = true;
+              continue;
+            }
+            e.held = false;
             const sp = (follow ? 5.6 : 3) * dt;
             if (d <= sp) {
               e.x = gx;
@@ -5709,6 +5754,12 @@ export default function World() {
             const dx = gx - e.x,
               dy = gy - e.y;
             const d = Math.hypot(dx, dy);
+            if (yieldFor(e, `x:${def.id}`, gx, gy)) {
+              e.moving = false;
+              e.held = true;
+              continue;
+            }
+            e.held = false;
             const sp = (SQUAD_KEYS.includes(xkey) ? 5 : 3) * dt;
             if (d <= sp) {
               e.x = gx;
@@ -5755,6 +5806,12 @@ export default function World() {
           const dx = gx - e.x,
             dy = gy - e.y;
           const d = Math.hypot(dx, dy);
+          if (yieldFor(e, `x:${def.id}`, gx, gy)) {
+            e.moving = false;
+            e.held = true;
+            continue;
+          }
+          e.held = false;
           const sp = (def.route ? 3.2 : 2.2) * dt;
           if (d <= sp) {
             e.x = gx;
@@ -6267,12 +6324,36 @@ export default function World() {
           drawTray(g, tr.x * TILE + 6, tr.y * TILE + 9, tr.left ?? 1);
       }
 
+      // 🚶 거의 같은 자리에 겹쳐 선 둘(스쳐 지나가는 순간 등)은 좌우로 조금씩 벌려 그린다
+      const nudges = new Map<object, number>();
+      {
+        const vis: NpcRt[] = [];
+        for (const id of present) {
+          const n = npcs.current[id];
+          if (n && n.map === p.map && !npcAsleep(id, n, st.minute)) vis.push(n);
+        }
+        for (const def of extraDefs) {
+          const e = extras.current[def.id];
+          if (e && e.map === p.map && !extraHiddenAtNight(def.id, st.minute) && !extraAsleep(def.id, e, st.minute)) vis.push(e);
+        }
+        for (let i = 0; i < vis.length; i++)
+          for (let j = i + 1; j < vis.length; j++) {
+            const va = vis[i],
+              vb = vis[j];
+            if (Math.abs(va.y - vb.y) < 0.4 && Math.abs(va.x - vb.x) < 0.55) {
+              const side = va.x <= vb.x ? -1 : 1;
+              nudges.set(va, (nudges.get(va) ?? 0) + side * 9);
+              nudges.set(vb, (nudges.get(vb) ?? 0) - side * 9);
+            }
+          }
+      }
       // 엔티티 (y 정렬, 같은 맵만)
       const ents: { y: number; draw: () => void }[] = [];
       for (const id of present) {
         const n = npcs.current[id];
         if (!n || n.map !== p.map) continue;
         const sk = NPC_SKINS[st.branch][id];
+        const nx0 = nudges.get(n) ?? 0;
         if (npcAsleep(id, n, st.minute)) {
           ents.push({
             y: n.y,
@@ -6292,7 +6373,7 @@ export default function World() {
             drawMonster(
               g,
               sk.look,
-              n.x * TILE,
+              (n.x * TILE + nx0),
               n.y * TILE + 12 - chew + fx.dy - fx.hop,
               34,
               {
@@ -6314,9 +6395,9 @@ export default function World() {
             g.fillStyle = NPC_ROLES[id].officer
               ? "rgba(60,50,20,0.8)"
               : "rgba(20,30,40,0.7)";
-            g.fillRect(n.x * TILE - tw / 2, n.y * TILE - 44, tw, 14);
+            g.fillRect((n.x * TILE + nx0) - tw / 2, n.y * TILE - 44, tw, 14);
             g.fillStyle = NPC_ROLES[id].officer ? "#ffe08a" : "#ffffff";
-            g.fillText(nm, n.x * TILE, n.y * TILE - 33);
+            g.fillText(nm, (n.x * TILE + nx0), n.y * TILE - 33);
             if (offerGivers.has(id)) {
               // 말풍선: 부탁할 게 있다
               const by = n.y * TILE - 66 + Math.sin(t * 3 + id.length) * 2;
@@ -6324,17 +6405,17 @@ export default function World() {
               g.strokeStyle = "#283048";
               g.lineWidth = 2;
               g.beginPath();
-              g.roundRect(n.x * TILE - 13, by, 26, 18, 5);
+              g.roundRect((n.x * TILE + nx0) - 13, by, 26, 18, 5);
               g.fill();
               g.stroke();
               g.beginPath();
-              g.moveTo(n.x * TILE - 4, by + 18);
-              g.lineTo(n.x * TILE, by + 24);
-              g.lineTo(n.x * TILE + 4, by + 18);
+              g.moveTo((n.x * TILE + nx0) - 4, by + 18);
+              g.lineTo((n.x * TILE + nx0), by + 24);
+              g.lineTo((n.x * TILE + nx0) + 4, by + 18);
               g.fill();
               g.font = "bold 12px sans-serif";
               g.fillStyle = "#e8a030";
-              g.fillText("···", n.x * TILE, by + 13);
+              g.fillText("···", (n.x * TILE + nx0), by + 13);
             }
           },
         });
@@ -6344,13 +6425,14 @@ export default function World() {
         if (!e || e.map !== p.map || extraHiddenAtNight(def.id, st.minute))
           continue;
         const elook = extraLook(def);
+        const ex0 = nudges.get(e) ?? 0;
         if (extraAsleep(def.id, e, st.minute)) {
           if (snorlaxCookAsleep(def.id, st.minute)) {
             // 잠만보: 제자리에 드러누워 쿨쿨 (덩치 그대로, 모포 없이)
             ents.push({
               y: e.y,
               draw: () => {
-                drawMonster(g, elook, e.x * TILE, e.y * TILE + 12, 44, {
+                drawMonster(g, elook, (e.x * TILE + ex0), e.y * TILE + 12, 44, {
                   dir: "down",
                   t,
                   sleeping: true,
@@ -6360,7 +6442,7 @@ export default function World() {
                 g.textAlign = "center";
                 g.fillText(
                   "Z".repeat(1 + (Math.floor(t * 1.5) % 3)),
-                  e.x * TILE + 18,
+                  (e.x * TILE + ex0) + 18,
                   e.y * TILE - 30 - ((t * 6) % 8),
                 );
               },
@@ -6402,7 +6484,7 @@ export default function World() {
             drawMonster(
               g,
               elook,
-              e.x * TILE,
+              (e.x * TILE + ex0),
               e.y * TILE + 12 - chew + fx.dy - fx.hop,
               32,
               {
@@ -6421,9 +6503,9 @@ export default function World() {
             g.font = '10px "Galmuri11", sans-serif';
             const tw = g.measureText(def.name).width + 8;
             g.fillStyle = "rgba(70,74,84,0.72)";
-            g.fillRect(e.x * TILE - tw / 2, e.y * TILE - 42, tw, 13);
+            g.fillRect((e.x * TILE + ex0) - tw / 2, e.y * TILE - 42, tw, 13);
             g.fillStyle = "#e8ecf2";
-            g.fillText(def.name, e.x * TILE, e.y * TILE - 32);
+            g.fillText(def.name, (e.x * TILE + ex0), e.y * TILE - 32);
           },
         });
       }
