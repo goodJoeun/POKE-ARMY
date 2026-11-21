@@ -146,6 +146,29 @@ const digits = (v: string, max: number) => {
   return d !== '' && Number(d) > max ? String(max) : d;
 };
 
+/** 분리수거장 마당 (가로 12칸 · 세로 8칸)과 한쪽에 치우친 폐지 더미 (가로 4칸 · 세로 3칸). 풀면 반으로 가르는 줄이 그어진다 */
+function YardArt({ solved }: { solved: boolean }) {
+  const C = 22; // 한 칸
+  const X0 = 26, Y0 = 10, W = 12, H = 8;
+  const y = (v: number) => Y0 + (H - v) * C; // 바닥에서 v칸 높이
+  return (
+    <svg className="pz-yard" viewBox={`0 0 ${X0 * 2 + W * C} ${Y0 * 2 + H * C + 8}`} role="img" aria-label="마당은 가로 12칸, 세로 8칸. 폐지 더미는 왼쪽에서 7칸부터 11칸까지, 바닥에서 4칸부터 7칸 높이까지 놓여 있다.">
+      <rect x={X0} y={Y0} width={W * C} height={H * C} fill="#e9e2c8" stroke="#283048" strokeWidth="2" />
+      {Array.from({ length: W - 1 }, (_, i) => <line key={`v${i}`} x1={X0 + (i + 1) * C} y1={Y0} x2={X0 + (i + 1) * C} y2={Y0 + H * C} stroke="#b9b092" strokeWidth="1" />)}
+      {Array.from({ length: H - 1 }, (_, i) => <line key={`h${i}`} x1={X0} y1={Y0 + (i + 1) * C} x2={X0 + W * C} y2={Y0 + (i + 1) * C} stroke="#b9b092" strokeWidth="1" />)}
+      <rect x={X0 + 7 * C} y={y(7)} width={4 * C} height={3 * C} fill="#b88a58" stroke="#6a4a28" strokeWidth="2" />
+      <text x={X0 + 9 * C} y={y(5.5) + 4} textAnchor="middle" fontSize="11" fontWeight="700" fill="#3a2a14">폐지 더미</text>
+      {Array.from({ length: H + 1 }, (_, v) => (
+        <g key={`t${v}`}>
+          <text x={X0 - 6} y={y(v) + 4} textAnchor="end" fontSize="10" fill="#283048">{v}</text>
+          <text x={X0 + W * C + 6} y={y(v) + 4} textAnchor="start" fontSize="10" fill="#283048">{v}</text>
+        </g>
+      ))}
+      {solved && <line x1={X0} y1={y(1)} x2={X0 + W * C} y2={y(7)} stroke="#d03838" strokeWidth="3" strokeDasharray="6 4" />}
+    </svg>
+  );
+}
+
 /** 두뇌 퍼즐 창: 지문 · 그림 · 답 입력 · 힌트. 열려 있는 동안 게임 시계는 멈춘다 (월드의 오버레이 규칙) */
 export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveProp, onFail }: Props) {
   const def = puzzleDef(id);
@@ -455,6 +478,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
           {def.art === 'mirrorClock' && <MirrorClock />}
           {def.art === 'digital' && <div className="pz-digital" role="img" aria-label={`거울 속 전자시계에 보이는 숫자: ${def.artText}`}>{def.artText}</div>}
           {def.art === 'pendulum' && !solved && !failed && <div className="pz-pendulum" aria-hidden="true"><i /></div>}
+          {def.art === 'yard' && <YardArt solved={solved} />}
           <div className="pz-prompt">
             {def.prompt.map((p, i) => <p key={i}>{p}</p>)}
           </div>
@@ -534,14 +558,14 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
                 const it = input.items.find((x) => x.id === oid)!;
                 return (
                   <button key={oid} disabled={solved} className={`pz-book ${held === i ? 'held' : ''}`} style={{ background: it.color }} aria-label={`${i + 1}번 자리: ${it.label}${held === i ? ' (집음)' : ''}`} onClick={() => tapSlot(i)}>
-                    <span className="pz-book-letter">{solved ? it.reveal : ''}</span>
+                    <span className="pz-book-letter">{solved ? (input.revealAt?.[i] ?? it.reveal) : ''}</span>
                     <span className="pz-book-name">{it.label}</span>
                     <span className="pz-book-num">{i + 1}</span>
                   </button>
                 );
               })}
             </div>
-            {!solved && <div className="hud-dim">{held === null ? '책을 하나 누르고, 바꿀 자리의 책을 누르면 서로 자리를 바꾼다. (숫자키 1~5)' : `${held + 1}번 자리의 책을 집었다. 바꿀 자리를 누르자.`}</div>}
+            {!solved && <div className="hud-dim">{held === null ? `책을 하나 누르고, 바꿀 자리의 책을 누르면 서로 자리를 바꾼다. (숫자키 1~${order.length})` : `${held + 1}번 자리의 책을 집었다. 바꿀 자리를 누르자.`}</div>}
           </>
         )}
 
