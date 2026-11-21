@@ -53,7 +53,9 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome }: { onNoteboo
     if (ev.kind === 'farewell') objective = `🎊 모두에게 작별 인사 후 ${spotLabel(s.branch, 'gate')}으로!`;
     else if (ev.kind === 'patrol' && s.patrol) objective = `🔦 야간 순찰 ${s.patrol.done.length}/6 — 막사 1·2층 복도·세탁실·화장실 점검 후 지휘통제실 보고 (23:00까지)`;
     else if (pending && ev.spot && freeTime)
-      objective = `🕊️ 자유 시간 — 준비되면 ${spotLabel(s.branch, ev.spot)}에서 ${fmtTime(ev.start)} ${ev.label} 시작 (E)`;
+      objective = s.solo
+        ? `🔎 혼자 실마리 찾기 — ${spotLabel(s.branch, s.solo as Parameters<typeof spotLabel>[1])} 살펴보기 (❗ 표시) · 그 뒤 ${fmtTime(ev.start)} ${ev.label}`
+        : `🕊️ 자유 시간 — 준비되면 ${spotLabel(s.branch, ev.spot)}에서 ${fmtTime(ev.start)} ${ev.label} 시작 (E)`;
     else if (pending && ev.spot)
       objective = `📍 ${ev.label} → ${spotLabel(s.branch, ev.spot)} (도착하면 ${fmtTime(ev.start)} 시작)`;
   }

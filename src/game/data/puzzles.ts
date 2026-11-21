@@ -116,6 +116,13 @@ export const QUICK_LEVELS: Record<QuickLevel, { name: string; stars: string; ran
  * 짬짬이 퍼즐이 붙는 장소 (장소 ID → 퍼즐). 선택이고, 점심·개인정비 시간에만 풀 수 있다.
  * 풀면 그 장소에서 사라진다. 쉬운 문제는 처음부터, 보통은 일병부터, 어려운 문제는 상병부터 도전할 수 있다.
  */
+/** 지금 계급으로 도전할 수 있는, 아직 풀지 않은 짬짬이 퍼즐이 있는 장소 (쉬운 것부터). 없으면 null */
+export function nextQuickSpot(rank: number, solved: (id: string) => boolean): string | null {
+  const open = Object.entries(QUICK_SPOTS)
+    .filter(([, q]) => !solved(q.puzzle) && QUICK_LEVELS[PUZZLES[q.puzzle]?.level ?? 1].rank <= rank)
+    .sort((a, b) => (PUZZLES[a[1].puzzle]?.level ?? 1) - (PUZZLES[b[1].puzzle]?.level ?? 1));
+  return open[0]?.[0] ?? null;
+}
 export const QUICK_SPOTS: Record<string, { puzzle: string; label: string }> = {
   // 쉬움 (이병부터)
   kitchen: { puzzle: 'Q-21', label: '꽁치 세 마리 굽는 시간 재기' },
@@ -170,16 +177,16 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     title: '첫 번째 조각',
     prompt: [
       '언덕 위에 떠 있는 창문. 틀은 비어 있고, 일곱 조각의 자리가 흐린 선으로 남아 있다.',
-      '손에 쥔 별 조각은 큰 세모 모양이다.',
-      '조각을 돌려서 맞는 자리에 끼워라.',
+      '손에 쥔 별 조각은 아직 물렁하다. 언덕의 샘에 고인 별빛을 정확히 네 모금 머금어야 창틀에 끼울 만큼 단단해진다. 모자라면 흩어지고, 넘치면 녹아 버린다.',
+      '샘가에 놓인 그릇은 눈금 없는 종지(3모금들이)와 사발(5모금들이)뿐이다. 채우고, 비우고, 옮겨 부어서 어느 한쪽에 별빛을 정확히 4모금 남겨라.',
     ],
-    input: { type: 'tangram1' },
+    input: { type: 'jugs', caps: [3, 5], names: ['종지', '사발'], unit: '모금', target: 4, par: 6 },
     hints: [
-      '큰 세모가 들어갈 자리는 둘이다. 창문의 위쪽과 왼쪽.',
-      '세모의 뾰족한 끝이 창문 한가운데를 향해야 한다.',
-      '뾰족한 끝이 아래를 보면 위쪽 자리, 오른쪽을 보면 왼쪽 자리에 맞는다.',
+      '사발을 가득 채워 종지에 부으면, 사발에는 2모금이 남는다.',
+      '종지를 비우고, 사발에 남은 2모금을 종지로 옮겨 둔다. 이제 종지에는 1모금만 더 들어간다.',
+      '사발 채우기 → 사발에서 종지로 → 종지 비우기 → 사발에서 종지로 → 사발 채우기 → 사발에서 종지로.',
     ],
-    solvedText: '조각이 끼워지자, 창문 한 귀퉁이에 내 방의 불빛이 비친다.',
+    solvedText: '별빛 네 모금을 머금은 조각이 단단해진다. 창틀에 끼우자, 창문 한 귀퉁이에 내 방의 불빛이 비친다.',
     gate: true,
   },
   'P-02': {

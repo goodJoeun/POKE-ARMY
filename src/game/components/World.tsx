@@ -16,8 +16,7 @@ import {
   questOffers,
   dialogueById,
   PATROL_SPOTS,
-  buddyForgot,
-} from "../state/store";
+  buddyForgot, spotLabel } from "../state/store";
 import {
   BRANCHES,
   FACILITY_NAME,
@@ -88,7 +87,7 @@ import MapView from "./MapView";
 import TouchPad from "./TouchPad";
 import { ResistMeter, StoryBackdrop } from "./StoryBackdrop";
 import PuzzleBox from "./PuzzleBox";
-import { CANDY_SPOTS, PUZZLES, QUICK_LEVELS, QUICK_SPOTS } from "../data/puzzles";
+import { CANDY_SPOTS, PUZZLES, QUICK_LEVELS, QUICK_SPOTS, nextQuickSpot } from "../data/puzzles";
 import { WATCH_EXTRA, nightScene, workScene } from "../data/workScenes";
 import { breakfastTalk, mealTalk } from "../data/mealTalks";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
@@ -738,6 +737,8 @@ function hopToMess(
   return true;
 }
 /** 걷기 · 달리기 속도 (달리기는 지치지 않는다) */
+/** 🔎 자유 시간의 혼자만의 탐색: 이번 자유 시간에 살펴보러 가기로 한 곳과, 그 자리의 장면을 이미 봤는지 */
+const soloLead: { key: string; spot: string | null; tried: boolean } = { key: "", spot: null, tried: false };
 /** 🍳 내가 분대장인 날, 아침 점호 직후: 아직 분대와 아침을 먹지 않았다 (먹고 나서야 오전 일과로 넘어간다) */
 function breakfastPending(st: ReturnType<typeof useGame.getState>): boolean {
   if (st.day >= TOTAL_DAYS || currentSquadLeader(st.day) !== "me" || st.daily.includes("breakfast")) return false;
@@ -904,6 +905,46 @@ export default function World() {
       onDone: washOrder,
     });
   }, [setOverlay]);
+
+  /** 🔎 혼자만의 탐색: 살펴보러 온 자리에서 눈에 걸리던 것을 들여다본다 → 그 자리의 퍼즐 → 풀면 한 걸음 나아간 느낌 */
+  const soloRef = useRef<(spot: string) => void>(() => {});
+  soloRef.current = (spot) => {
+    const q = QUICK_SPOTS[spot];
+    const def = q ? PUZZLES[q.puzzle] : undefined;
+    if (!q || !def) return;
+    const lv = QUICK_LEVELS[def.level ?? 1];
+    keys.current = {};
+    runtime.player.moving = false;
+    setOverlay({
+      type: "dialogue",
+      script: {
+        lines: [
+          { who: "narr", text: `${def.mission}. 평소라면 그냥 지나쳤을 곳이다. 오늘은 걸음이 멈춘다.` },
+          { who: "me", text: "(여기서는 다들 묻지 않고 넘어간다. 나는 하나씩 따져 보자. 눈앞의 이것부터.)" },
+        ],
+      },
+      onDone: () =>
+        setOverlay({
+          type: "puzzle",
+          id: q.puzzle,
+          onSolved: () => {
+            const s2 = useGame.getState();
+            s2.applyEffects(lv.reward, "혼자 찾은 실마리");
+            soloLead.spot = null;
+            useGame.setState({ solo: null });
+            setOverlay({
+              type: "dialogue",
+              script: {
+                lines: [
+                  { who: "me", text: "(…풀렸다. 따져 보니 답이 있다. 이 부대의 이상한 점들도, 이렇게 하나씩 따져 가면 풀릴지 모른다.)" },
+                  { who: "narr", text: "🌟 스스로 생각한 만큼, 흐려지던 기억이 조금 또렷해진다." },
+                ],
+              },
+            });
+          },
+        }),
+    });
+  };
 
   /** 1일차: 세수하고 생활관으로 돌아오자, 기다리던 맞선임이 정신 차리라고 한마디 한다 → 연병장으로 */
   const wakeTalkRef = useRef<() => void>(() => {});
@@ -1779,18 +1820,68 @@ export default function World() {
       }
       waitAt.current = null;
       if (er) return;
+      // 🔎 혼자 살펴보러 가던 곳: 자유 시간이 끝났거나 그 퍼즐을 풀었으면 접는다
+      const freeNow = orderWindow(st) && !(st.mealCheck && !st.mealCheck.done);
+      if (st.solo && (!freeNow || st.puzzles[QUICK_SPOTS[st.solo]?.puzzle ?? ""]?.solved)) {
+        soloLead.spot = null;
+        useGame.setState({ solo: null });
+      }
       // 📢 새 호출: 자유 시간에, 밥을 다 먹은 뒤에만 부른다
-      if (st.clues.length === 0 || !orderWindow(st) || (st.mealCheck && !st.mealCheck.done)) return;
+      if (!freeNow) return;
       // 방금 다른 일(보고 · 식사 복귀 · 대화)을 마쳤으면 몇 초는 기다렸다가 부른다
       if (performance.now() - idleSince < 5000) return;
       // 한 번 부르고 나면 한동안은 다시 부르지 않는다
       const lo = lastOrder.current;
-      if (lo && lo.day === st.day && st.minute - lo.minute < 40) return;
-      const m = STORY_MISSIONS.find(
-        (x) =>
-          ORDERS[x.id] && !st.flags[`order_${x.id}`] && !st.flags[`summon_${x.id}`] && missionState(x, st) === "open",
-      );
-      if (!m) return;
+      const recent = !!lo && lo.day === st.day && st.minute - lo.minute < 40;
+      const m =
+        st.clues.length > 0 && !recent
+          ? STORY_MISSIONS.find(
+              (x) =>
+                ORDERS[x.id] && !st.flags[`order_${x.id}`] && !st.flags[`summon_${x.id}`] && missionState(x, st) === "open",
+            )
+          : undefined;
+      if (!m) {
+        // 🔎 부르는 사람이 없는 자유 시간: 가만히 있지 않고, 혼자서라도 실마리를 찾아 나선다 (자유 시간마다 한 번)
+        const win = st.minute < 15 * 60 ? "lunch" : "dinner";
+        const sk = `solo_${win}`;
+        if (st.daily.includes(sk)) return;
+        const spot = nextQuickSpot(rankIdxForDay(st.day), (id) => !!st.puzzles[id]?.solved);
+        if (!spot) return;
+        st.markDaily(sk);
+        soloLead.key = `${st.day}-${win}`;
+        soloLead.spot = spot;
+        soloLead.tried = false;
+        useGame.setState({ solo: spot });
+        const place = spotLabel(st.branch, spot as SpotId);
+        keys.current = {};
+        p.moving = false;
+        setOverlay({
+          type: "dialogue",
+          script: {
+            lines: [
+              {
+                who: "me",
+                text:
+                  st.clues.length === 0
+                    ? win === "lunch"
+                      ? "(…자유 시간이다. 다들 아무렇지 않게 웃고 떠든다. 나만 이 상황이 이상한 건가.)"
+                      : "(일과가 끝났다. 정신없이 하루가 갔는데, 왜 내가 여기 있는지는 아직도 모르겠다.)"
+                    : win === "lunch"
+                      ? "(…자유 시간이다. 가만히 있으면 오늘도 그냥 지나간다.)"
+                      : "(개인정비 시간. 다들 편하게 쉰다. 편한 게 이상하다고 느끼는 건 나뿐인 것 같다.)",
+              },
+              {
+                who: "me",
+                text: "(누가 알려 주길 기다려서는 안 된다. 혼자서라도 이 부대의 실마리를 찾아봐야겠다. 작은 것부터, 눈에 걸리는 것부터.)",
+              },
+              { who: "me", text: `(…${place} 쪽이 아까부터 마음에 걸린다. 가 보자.)` },
+            ],
+          },
+          onDone: () =>
+            useGame.getState().toast(`🔎 혼자 실마리 찾기 — ${place}에 가 보자. (❗ 표시를 따라가자)`, "info"),
+        });
+        return;
+      }
       const o = ORDERS[m.id];
       const present = npcPresent(o.giver, st.day);
       const at = orderStage(m.id, st.day);
@@ -4389,7 +4480,7 @@ export default function World() {
       // 🧩 짬짬이 퍼즐: 선택. 풀면 기억과 별사탕을 얻고, 그 장소에서 사라진다.
       // 난이도별로 놓여 있다: 쉬움은 처음부터, 보통은 일병부터, 어려움은 상병부터 (짬이 차야 선임들이 어려운 문제를 내준다)
       const quick = QUICK_SPOTS[id];
-      if (quick && st.clues.length > 0 && !st.puzzles[quick.puzzle]?.solved) {
+      if (quick && (st.clues.length > 0 || st.solo === id) && !st.puzzles[quick.puzzle]?.solved) {
         const lv = QUICK_LEVELS[PUZZLES[quick.puzzle]?.level ?? 1];
         const ranked = rankIdxForDay(st.day) >= lv.rank;
         opts.push({
@@ -5156,6 +5247,14 @@ export default function World() {
         }
       }
 
+      // 🔎 혼자 살펴보러 온 곳에 닿으면: 눈에 걸리던 것을 들여다본다 (짧은 장면 → 퍼즐)
+      if (st.solo && soloLead.spot === st.solo && !soloLead.tried && !blocked && !fading) {
+        const ss = world.spots[st.solo as SpotId];
+        if (ss && ss.map === p.map && Math.hypot(p.x - (ss.x + 0.5), p.y - (ss.y + 0.5)) < 1.5) {
+          soloLead.tried = true;
+          soloRef.current(st.solo);
+        }
+      }
       // 🌅 내가 생활관을 나서면, 분대원들도 아침 점호 집합에 나선다
       if (morningOut.day !== st.day) {
         morningOut.day = st.day;
@@ -6142,6 +6241,10 @@ export default function World() {
         const er = erNow;
         const gd = er && guide(er.map, er.x, er.y);
         if (gd) qTargets.push({ x: gd.x, y: gd.y - (gd.viaDoor ? 0.6 : 0) });
+        // 🔎 혼자 살펴보러 가기로 한 곳
+        const ss = !er && st.solo ? world.spots[st.solo as SpotId] : null;
+        const gs = ss && guide(ss.map, ss.x + 0.5, ss.y + 0.5);
+        if (gs) qTargets.push({ x: gs.x, y: gs.y - (gs.viaDoor ? 0.6 : 0) });
       }
       if (isMealTime(st.minute) && st.day < TOTAL_DAYS) {
         const mealKey = st.minute < 15 * 60 ? "meal_lunch" : "meal_dinner";

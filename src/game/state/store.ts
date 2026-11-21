@@ -229,6 +229,8 @@ interface Store extends Persist {
   checkSuspicions: () => void;
   /** 방금 눈에 띈 의혹 (ID). 조작할 수 있게 되면 혼잣말 장면으로 떠올리고 수첩에 적는다 · 저장하지 않는다 */
   susNote: string[];
+  /** 🔎 자유 시간에 혼자 살펴보러 가기로 한 곳 (장소 ID · 상단 안내용 · 저장하지 않는다) */
+  solo: string | null;
   /** 떠올린 의혹을 목록에서 지운다 */
   popSusNote: (id: string) => void;
   /** 퍼즐: 오답 기록 */
@@ -311,6 +313,7 @@ export const useGame = create<Store>((set, get) => ({
  
   nightDuty: null,
   susNote: [],
+  solo: null,
   rollcall: null,
  
   toasts: [],
