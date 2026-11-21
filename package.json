@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "sprites": "node scripts/fetch-sprites.mjs",
     "followers": "node scripts/import-followers.mjs",
-    "anotherred": "node scripts/import-another-red.mjs"
+    "anotherred": "node scripts/import-another-red.mjs",
+    "tiles": "node scripts/tileset/build.mjs"
   },
   "dependencies": {
     "galmuri": "^2.40.3",

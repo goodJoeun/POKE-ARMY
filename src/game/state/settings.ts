@@ -17,11 +17,25 @@ export interface Settings {
   bgmVolume: number;
   /** 효과음·징글 음량 (0~100, 0 = 끔) */
   sfxVolume: number;
+  /** 시제품: 실내 맵을 그림 파일(타일셋)로 그린다. 끄면 기존처럼 코드로 그린다 */
+  tilesetProto: boolean;
 }
 
 export const MAP_ZOOM_MIN = 0.6;
 export const MAP_ZOOM_MAX = 1.8;
 export const clampMapZoom = (v: number) => Math.max(MAP_ZOOM_MIN, Math.min(MAP_ZOOM_MAX, Math.round(v * 100) / 100));
+
+/**
+ * 도트가 고르게 보이는 확대 단계의 간격 (mapZoom 단위).
+ * 부대 맵은 도트 한 칸이 화면 픽셀 정수 개가 되는 배율로만 그리므로, 그 간격을 화면 크기에 맞춰 여기에 알려 둔다.
+ */
+let mapZoomUnit = 0;
+export const setMapZoomUnit = (u: number) => { mapZoomUnit = u; };
+/** 한 단계 확대(+1) · 축소(-1)한 mapZoom. 단계 간격을 아직 모르면(맵을 띄우기 전) 10%씩 */
+export function stepMapZoom(cur: number, dir: 1 | -1): number {
+  if (!(mapZoomUnit > 0)) return clampMapZoom(cur * (dir > 0 ? 1.1 : 1 / 1.1));
+  return clampMapZoom(Math.max(1, Math.round(cur / mapZoomUnit) + dir) * mapZoomUnit);
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   textSpeed: 'normal',
@@ -31,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   testerMode: false,
   bgmVolume: 60,
   sfxVolume: 70,
+  tilesetProto: true,
 };
 
 /** 대사 타자 속도: [간격 ms, 한 번에 나오는 글자 수] */
@@ -63,6 +78,7 @@ function persist(s: Settings) {
       textSpeed: s.textSpeed,
       screenShake: s.screenShake, showTips: s.showTips, mapZoom: s.mapZoom,
       testerMode: s.testerMode, bgmVolume: s.bgmVolume, sfxVolume: s.sfxVolume,
+      tilesetProto: s.tilesetProto,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch { /* noop */ }

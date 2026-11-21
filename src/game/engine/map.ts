@@ -1254,7 +1254,12 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
     for (let x = 4; x <= 15; x++) { g.fillStyle = '#ffffff'; g.fillText(kinds[x % kinds.length], (x + 0.5) * TILE, 5 * TILE + 22); }
   }
 
-  // 문 · 계단 · 길 끝 안내판 ("행정반", "2층 ↑", "병영식당 →" 등)
+  drawDoorSigns(g, map);
+  return c;
+}
+
+/** 문 · 계단 · 길 끝 안내판 ("행정반", "2층 ↑", "병영식당 →" 등). 타일셋 렌더러(tileset.ts)도 같이 쓴다 */
+export function drawDoorSigns(g: CanvasRenderingContext2D, map: GameMap) {
   g.textAlign = 'center';
   for (const d of map.doors) {
     if (!d.sign) continue;
@@ -1282,5 +1287,4 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
     g.fillStyle = '#ffffff';
     g.fillText(d.sign, lx, cy + (map.indoor ? 2 : 3));
   }
-  return c;
 }

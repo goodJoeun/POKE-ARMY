@@ -47,7 +47,16 @@ import {
 import { ITEMS } from "../data/items";
 import { QUESTS } from "../data/quests";
 import { isFreeTimeEvening, isMealTime, mealFromWork } from "../data/schedule";
-import { clampMapZoom, useSettings } from "../state/settings";
+import {
+  setMapZoomUnit,
+  stepMapZoom,
+  useSettings,
+} from "../state/settings";
+import {
+  loadTileAtlas,
+  renderTilesetMap,
+  supportsTileset,
+} from "../engine/tileset";
 import { inEventArea } from "../engine/eventArea";
 import {
   MAP_NAMES,
@@ -851,15 +860,35 @@ export default function World() {
   useEffect(() => {
     const out: Partial<Record<MapId, HTMLCanvasElement>> = {};
     for (const m of Object.values(world.maps))
-      out[m.id] = renderMapCanvas(m, season);
+      out[m.id] =
+        tileAtlas && supportsTileset(m)
+          ? renderTilesetMap(m, tileAtlas)
+          : renderMapCanvas(m, season);
     mapCanvasRef.current = out;
-  }, [world, season]);
+  }, [world, season, tileAtlas]);
 
   // 1일차: 눈을 뜨자 눈앞에 포켓몬(분대장)이 있다 → 놀라고 혼난 뒤 "세수하고 와" → 화장실 거울에서 내 모습을 확인 → 생활관으로 돌아와 맞선임의 한마디 → 연병장
   useEffect(() => {
     const st = useGame.getState();
     if (st.day !== 1 || st.flags.wokeUp) return;
     const sgt = "sgt" as NpcId;
+  // 시제품: 타일셋(그림 파일) 아틀라스. 설정에서 켜져 있고 다 불러왔을 때만 값이 있다
+  const tilesetOn = useSettings((s) => s.tilesetProto);
+  const [tileAtlas, setTileAtlas] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    if (!tilesetOn) {
+      setTileAtlas(null);
+      return;
+    }
+    let alive = true;
+    loadTileAtlas()
+      .then((img) => alive && setTileAtlas(img))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [tilesetOn]);
+
     // 대답을 고른 뒤: 넋이 나간 얼굴을 본 분대장이 세수부터 하고 오라고 한다
     const washOrder = () =>
       setOverlay({
@@ -4999,9 +5028,7 @@ export default function World() {
         const st = useSettings.getState();
         st.set(
           "mapZoom",
-          clampMapZoom(
-            st.mapZoom * (e.key === "-" || e.key === "_" ? 1 / 1.1 : 1.1),
-          ),
+          stepMapZoom(st.mapZoom, e.key === "-" || e.key === "_" ? -1 : 1),
         );
       }
     };
@@ -5034,8 +5061,8 @@ export default function World() {
       const r = wrapRef.current!.getBoundingClientRect();
       w = r.width;
       h = r.height;
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
     };
@@ -5049,7 +5076,7 @@ export default function World() {
       if (overlayRef.current || useSettings.getState().open) return;
       e.preventDefault();
       const cur = useSettings.getState().mapZoom;
-      const next = clampMapZoom(cur * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+      const next = stepMapZoom(cur, e.deltaY < 0 ? 1 : -1);
       if (next !== cur) useSettings.getState().set("mapZoom", next);
     };
     canvas.addEventListener("wheel", onWheel, { passive: false });
@@ -6193,7 +6220,15 @@ export default function World() {
         1.1,
         Math.min(2.2, Math.min(w / (20 * TILE), h / (12.5 * TILE))),
       );
-      const targetZoom = baseZoom * useSettings.getState().mapZoom;
+      // 도트 한 칸(맵 캔버스의 TILE/16 px)이 화면 픽셀 정수 개가 되는 배율로만 멈춘다.
+      // 소수 배율이면 같은 1px 선이 어디는 굵고 어디는 가늘게 보인다
+      const zoomUnit = 16 / (TILE * dpr);
+      setMapZoomUnit(zoomUnit / baseZoom);
+      const targetZoom =
+        Math.max(
+          1,
+          Math.round((baseZoom * useSettings.getState().mapZoom) / zoomUnit),
+        ) * zoomUnit;
       shownZoom =
         shownZoom === 0
           ? targetZoom
@@ -6210,7 +6245,9 @@ export default function World() {
       if (mh < vh) camY = (mh - vh) / 2;
       g.save();
       g.scale(zoom, zoom);
-      g.translate(-Math.round(camX), -Math.round(camY));
+      // 카메라도 화면 픽셀 단위로 맞춘다 (반 픽셀 어긋나면 도트 경계가 번진다)
+      const snapCam = (v: number) => Math.round(v * zoom * dpr) / (zoom * dpr);
+      g.translate(-snapCam(camX), -snapCam(camY));
       const mc = mapCanvasRef.current[p.map];
       if (mc) {
         if (map.indoor) {
@@ -6431,6 +6468,7 @@ export default function World() {
         if (cerC.kind === "am" && p.map === "outdoor") {
           // 구령대 옆 국기 게양대
           const fx0 = 24.2 * TILE,
+      if (Math.abs(targetZoom - shownZoom) < 0.004) shownZoom = targetZoom;
             fy0 = 17.9 * TILE;
           g.fillStyle = "#d8d8d8";
           g.fillRect(fx0 - 1, fy0 - 70, 3, 70);

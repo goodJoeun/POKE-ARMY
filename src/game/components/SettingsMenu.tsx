@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useGame } from '../state/store';
-import { MAP_ZOOM_MAX, MAP_ZOOM_MIN, clampMapZoom, useSettings, type Settings } from '../state/settings';
+import { MAP_ZOOM_MAX, MAP_ZOOM_MIN, stepMapZoom, useSettings, type Settings } from '../state/settings';
 import { playSfx } from '../engine/audio';
 
 interface Option<V> { value: V; label: string }
@@ -26,14 +26,14 @@ const ON_OFF: Option<boolean>[] = [{ value: true, label: '켜기' }, { value: fa
 function ZoomRow() {
   const zoom = useSettings((s) => s.mapZoom);
   const set = useSettings((s) => s.set);
-  const step = (mul: number) => set('mapZoom', clampMapZoom(zoom * mul));
+  const step = (dir: 1 | -1) => set('mapZoom', stepMapZoom(zoom, dir));
   return (
     <div className="set-row">
       <div><b>맵 확대</b><div className="hud-dim">부대 맵에서 마우스 휠 또는 +/- 키로도 조절</div></div>
       <div className="seg">
-        <button onClick={() => step(1 / 1.1)} disabled={zoom <= MAP_ZOOM_MIN}>－ 축소</button>
+        <button onClick={() => step(-1)} disabled={zoom <= MAP_ZOOM_MIN}>－ 축소</button>
         <button className="on" onClick={() => set('mapZoom', 1)} title="기본 배율로">{Math.round(zoom * 100)}%</button>
-        <button onClick={() => step(1.1)} disabled={zoom >= MAP_ZOOM_MAX}>＋ 확대</button>
+        <button onClick={() => step(1)} disabled={zoom >= MAP_ZOOM_MAX}>＋ 확대</button>
       </div>
     </div>
   );
@@ -114,6 +114,10 @@ export default function SettingsMenu() {
           <section>
             <h4>화면 · 대사</h4>
             <ZoomRow />
+            <div className="set-row">
+              <div><b>🧱 실내 타일셋 (시제품)</b><div className="hud-dim">건물 안을 그림 파일로 그립니다. 끄면 기존 화면</div></div>
+              <Segmented k="tilesetProto" options={ON_OFF} />
+            </div>
             <div className="set-row">
               <div><b>대사 속도</b></div>
               <Segmented k="textSpeed" options={[{ value: 'slow', label: '느리게' }, { value: 'normal', label: '보통' }, { value: 'fast', label: '빠르게' }, { value: 'instant', label: '즉시' }]} />
