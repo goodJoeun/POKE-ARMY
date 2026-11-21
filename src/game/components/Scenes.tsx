@@ -195,7 +195,7 @@ export function Transform() {
     '눈을 떴다. 낯선 천장. 꿉꿉한 모포 냄새. 여긴… 내 방이 아니다.',
     '기지개를 켜려고 팔을 쭉 뻗었는데… 이상하다. 팔이 평소만큼 뻗어지지 않는다.',
     '(…뭐지? 몸이 내 몸 같지 않아. 아직 꿈인가?)',
-    '눈을 떴다. 그리고 바로 눈앞에— 누군가의 얼굴이 있다.',
+    '…그때, 머리맡으로 그림자가 드리운다. 누군가 나를 내려다보고 있다.',
   ];
   const [stage, setStage] = useState(0);
   const next = () => (stage < lines.length - 1 ? setStage(stage + 1) : s.startDay());

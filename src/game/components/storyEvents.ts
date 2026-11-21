@@ -982,7 +982,8 @@ export function slipperBoss(ctx: StoryCtx, onEnd: () => void, tries = 0) {
 /** F-01 별이 지기 전에 — 전역일, 연병장 구령대 */
 export function finalStar(ctx: StoryCtx) {
   const s = G();
-  const sgJoin = sergeantJoins(s);
+  // 말 없는 병장이 곁에 서는 건 함께 돌아가는 진 엔딩 길에서만 (동기가 이름을 되찾았을 때)
+  const sgJoin = sergeantJoins(s) && flag('buddyBack');
   const sgName = extrasForDay(s.branch, s.day).find((d) => d.id === 'room2a')?.name ?? '말 없는 병장';
   const buddyHere = npcPresent('buddy', s.day);
   // 🌙 동기가 끝내 이름을 되찾지 못했다면(M-13 미완): 품고 있던 일곱 번째 조각을, 왜 쥐고 있는지도 모른 채 건넨다.

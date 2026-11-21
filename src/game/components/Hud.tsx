@@ -61,9 +61,12 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome }: { onNoteboo
   }
   // 🍚 식사는 분대 단위: 분대와 먹고 돌아오기 전에는 다음 일정이 진행되지 않는다
   if (s.mealCheck && !s.mealCheck.done && !s.nightDuty)
-    objective = s.mealCheck.called
-      ? '🍚 병영식당 — 밥차에서 식판을 받아 내 자리에 앉아 먹기 (다 먹으면 분대와 함께 생활관으로)'
-      : '🍚 식사 시간 — 먼저 1생활관에 들러 분대와 함께 식당으로';
+    objective = !s.mealCheck.called
+      ? '🍚 식사 시간 — 먼저 1생활관에 들러 분대와 함께 식당으로'
+      : // 식판을 직접 받는 건 첫 끼(1일차 점심)뿐이다. 그 뒤로는 받아서 자리에 앉은 채로 시작한다
+        !s.flags.trayOnce || (s.day === 1 && s.mealCheck.meal === 'lunch')
+        ? '🍚 병영식당 — 밥차에서 식판을 받아 내 자리에 앉아 먹기 (다 먹으면 분대와 함께 생활관으로)'
+        : '🍚 병영식당 — 분대와 함께 식사 중 (다 먹으면 분대와 함께 생활관으로)';
   // 🧭 호출 · 심부름 · 보고 · 첫날 세면: 가야 할 곳이 정해져 있으면 그 안내가 먼저다
   const errand = errandNow(s);
   if (errand) objective = errand.hud;
