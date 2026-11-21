@@ -87,6 +87,8 @@ import MapView from "./MapView";
 import TouchPad from "./TouchPad";
 import { ResistMeter, StoryBackdrop } from "./StoryBackdrop";
 import PuzzleBox from "./PuzzleBox";
+import { playSfx, setBgmMood, type BgmMood } from "../engine/audio";
+import { sceneMood, type SceneHint } from "../engine/soundCues";
 import { CANDY_SPOTS, PUZZLES, QUICK_LEVELS, QUICK_SPOTS, nextQuickSpot } from "../data/puzzles";
 import { WANDER_MEMORY, WANDER_MINUTES, nextWander, quickOpenAt, wanderAt } from "../data/wanders";
 import { WATCH_EXTRA, nightScene, workScene } from "../data/workScenes";
@@ -148,6 +150,8 @@ type Overlay =
       onChoice?: (c: Choice) => void;
       onDone?: () => void;
       bg?: StoryBg;
+      /** 🔊 이 장면 동안 흐를 곡 (없으면 화자·배경을 보고 고른다) */
+      bgm?: BgmMood;
       nonce?: number;
     }
   | { type: "resist"; opts: ResistOpts; onDone: (ok: boolean) => void }
@@ -164,6 +168,17 @@ type Overlay =
   | { type: "quests" }
   | { type: "map" }
   | null;
+
+/** 🔊 지금 떠 있는 창이 어떤 장면인지 (곡을 고르는 데 쓴다 · engine/soundCues.ts) */
+function overlayHint(o: Overlay): SceneHint | null {
+  if (!o) return null;
+  if (o.type === "dialogue")
+    return { type: "dialogue", bg: o.bg, speaker: o.script.custom?.name, speakerSub: o.script.custom?.sub, bgm: o.bgm };
+  if (o.type === "puzzle") return { type: "puzzle", puzzle: o.id };
+  if (o.type === "resist") return { type: "resist", resistMode: o.opts.mode };
+  if (o.type === "mirror" || o.type === "notice" || o.type === "menu") return { type: o.type };
+  return { type: "other" };
+}
 
 interface Interactable {
   key: string;
@@ -819,6 +834,13 @@ export default function World() {
   const setOverlay = useCallback((o: Overlay) => {
     // 같은 첫 줄의 대사를 이어서 다시 열어도(재도전 등) 대화창이 새로 시작되도록 번호를 붙인다
     if (o && o.type === "dialogue") o.nonce = ++dlgSeq.current;
+    // 🔊 장면에 어울리는 곡으로 · 수첩/지도/임무 카드가 뜨고 닫히는 소리
+    setBgmMood(sceneMood(overlayHint(o)));
+    const was = overlayRef.current?.type;
+    if (o?.type === "notice") playSfx("sfx_alert", 0.9);
+    else if (o?.type === "notebook") playSfx("sfx_paper", 0.7);
+    else if (o?.type === "quests" || o?.type === "map") playSfx("sfx_cursor", 0.6);
+    else if (!o && (was === "notebook" || was === "quests" || was === "map")) playSfx("sfx_cancel", 0.4);
     overlayRef.current = o;
     setOverlayState(o);
     useGame.getState().setBusy(o !== null);
@@ -1401,6 +1423,7 @@ export default function World() {
   const [flash, setFlash] = useState(false);
   useEffect(() => {
     if (!flash) return;
+    playSfx("sfx_flash", 0.7);
     const tm = setTimeout(() => setFlash(false), 1200);
     return () => clearTimeout(tm);
   }, [flash]);
@@ -1574,6 +1597,7 @@ export default function World() {
           type: "dialogue",
           script: sc.script,
           bg: sc.bg,
+          bgm: sc.bgm ?? undefined,
           onChoice: sc.onChoice,
           onDone: sc.onDone,
         }),
@@ -2239,6 +2263,7 @@ export default function World() {
                 nd.kind === "watch"
                   ? "창가에 작은 별빛이 떠 있다. 손전등을 비춰도 그림자가 생기지 않는다…"
                   : "안개 낀 길 위에 작은 별빛이 둥실 떠 있다. 사수는 못 본 것 같다…",
+              sfx: "sfx_star_twinkle",
             },
             ...lines.map((t) => ({ who: "npc" as const, text: t })),
             { who: "narr", text: "눈을 한 번 깜빡이자, 빛은 사라지고 없었다." },
@@ -2847,7 +2872,7 @@ export default function World() {
       script: {
         custom: { name: "안개 속 목소리", sub: "???", look: null, cap: null },
         lines: [
-          { who: "narr", text: "정문 밖으로 한 발 내디뎠다. 사방이 하얗다…" },
+          { who: "narr", text: "정문 밖으로 한 발 내디뎠다. 사방이 하얗다…", sfx: "sfx_fog_whiteout" },
         ],
       },
       // 🧩 P-05 안개 너머: 어느 길로 가도 초소로 돌아온다. "나갈 수 없다"가 답이다
@@ -2907,8 +2932,8 @@ export default function World() {
         custom: sp,
         lines: first
           ? [
-              { who: "narr", text: "(…뒤통수가 서늘하다. 손전등 불빛이 저절로 흔들린다.)" },
-              { who: "narr", text: "(등 뒤, 세면대 거울 속에서 — 무언가가 나를 보며 웃고 있다.)" },
+              { who: "narr", text: "(…뒤통수가 서늘하다. 손전등 불빛이 저절로 흔들린다.)", sfx: "sfx_heartbeat" },
+              { who: "narr", text: "(등 뒤, 세면대 거울 속에서 — 무언가가 나를 보며 웃고 있다.)", sfx: "jingle_shock" },
               { who: "npc", text: "키히히… 뒤돌아보지 마. 돌아보면 사라져 줄 테니까." },
               { who: "npc", text: "거울엔 네 얼굴이 안 비치지? 여기 오래 있으면 다 그렇게 돼. 그림자부터 없어지거든." },
               { who: "npc", text: "꿈을 먹는 녀석도 있지만… 나는 그림자를 먹어. 네 그림자, 맛있겠다." },
@@ -2916,7 +2941,7 @@ export default function World() {
               { who: "narr", text: "…아무것도 없다. 거울엔 손전등을 든 내 모습뿐이다. 아니, 저게 정말 내 모습인가?" },
             ]
           : [
-              { who: "narr", text: "(또다. 등 뒤 거울 속에서, 그 웃음소리가.)" },
+              { who: "narr", text: "(또다. 등 뒤 거울 속에서, 그 웃음소리가.)", sfx: "sfx_heartbeat" },
               { who: "npc", text: "또 만났네? 이름 정도는 알려 줄게. 팬텀. 곧 친구가 될 테니까." },
               { who: "npc", text: "별 조각 모으는 거 다 봤어. 똑딱거리는 그 녀석한테 빼앗기기 전에… 마지막 밤엔 네 그림자를 나한테 놓고 가." },
               { who: "npc", text: "그럼 하나도 안 아파. 거울 속은 조용하고 따뜻하거든. 키히히…" },
@@ -5065,6 +5090,9 @@ export default function World() {
 
     // 문 전환 페이드: 0 → 1(검정) 사이 맵 교체 → 0
     let fade = 0;
+    // 🔊 마지막으로 부딪힌 소리 · 발소리가 난 때
+    let bumpAt = 0;
+    let stepAt = 0;
     let fading: { door: Door; phase: "out" | "in" } | null = null;
     let doorCooldown = 0;
     // 문을 지나온 직후엔 키를 떼거나 한 칸 이상 벗어나야 다음 문이 동작 (계단 왕복 방지)
@@ -5132,6 +5160,7 @@ export default function World() {
       // 생활관 바로 가기 요청 → 문 이동처럼 페이드
       if (warpReq.current && !fading) {
         fading = { door: warpReq.current, phase: "out" };
+        playSfx("sfx_door", 0.5);
         warpReq.current = null;
       }
 
@@ -5263,6 +5292,10 @@ export default function World() {
               const th = thought.current;
               if (!th || th.text !== why || now > th.until - 900)
                 thought.current = { text: why, until: now + 2600 };
+              if (now - bumpAt > 700) {
+                bumpAt = now;
+                playSfx("sfx_bump", 0.7);
+              }
               break;
             }
             if (d.to === "room2" && rankIdxForDay(st.day) < 2 && !st.nightDuty) {
@@ -5285,6 +5318,7 @@ export default function World() {
                   until: now + 2600,
                 };
                 fading = { door: d, phase: "out" };
+                playSfx("sfx_knock", 0.9);
                 break;
               }
               p.x = px0;
@@ -5293,8 +5327,21 @@ export default function World() {
               break;
             }
             fading = { door: d, phase: "out" };
+            playSfx("sfx_door", 0.8);
             break;
           }
+        }
+      }
+      // 🔊 벽에 막혀 한 발짝도 못 나갈 때 "툭" · 밤 근무 중에는 고요한 막사에 내 발소리가 울린다
+      if ((vx || vy) && !fading && !overlayRef.current && !autopilot.current) {
+        if (p.x === px0 && p.y === py0) {
+          if (now - bumpAt > 520) {
+            bumpAt = now;
+            playSfx("sfx_bump", 0.4);
+          }
+        } else if ((st.nightDuty || st.patrol) && now - stepAt > (dashing ? 230 : 340)) {
+          stepAt = now;
+          playSfx("sfx_footstep", 0.3, 0.92 + Math.random() * 0.16);
         }
       }
 

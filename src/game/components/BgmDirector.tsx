@@ -7,28 +7,35 @@ import { dreamPending } from '../data/story';
 import { TOTAL_DAYS } from '../data/branches';
 import type { MapId } from '../engine/map';
 import {
-  audioState, playBgm, playJingle, playSfx, rewindBgm, setAudioPaused, setBgmVolume, setSfxVolume, unlockAudio,
-  type BgmId, type JingleId,
+  audioLog, audioState, bgmMood, playBgm, playCue, playSfx, queueJingle, rewindBgm, setAudioPaused, setBgmVolume, setSfxVolume, unlockAudio,
+  type BgmId,
 } from '../engine/audio';
+import { toastCue } from '../engine/soundCues';
 
 type GameState = ReturnType<typeof useGame.getState>;
 
 /** 느긋한 곡이 어울리는 곳: 식당·조리실·PX·휴게실 */
 const RELAX_MAPS = new Set<MapId>(['mess', 'kitchen', 'messyard', 'px', 'pxyard', 'lounge']);
-/** 떡밥을 캐는 곳: 도서관 */
-const MYSTERY_MAPS = new Set<MapId>(['library']);
+/** 떡밥을 캐는 곳: 도서관 · 탄약고 안 */
+const MYSTERY_MAPS = new Set<MapId>(['library', 'ammoroom']);
 
 const LUNCH: [number, number] = [12 * 60, 13 * 60 + 30];
 const EVENING: [number, number] = [17 * 60 + 30, 21 * 60 + 30];
 const within = (m: number, [a, b]: [number, number]) => m >= a && m < b;
 
-/** 부대 화면에서 지금 상황에 맞는 곡 */
-function worldBgm(s: GameState): BgmId {
+/** 부대 화면에서 지금 상황에 맞는 곡 (null = 정적) */
+function worldBgm(s: GameState): BgmId | null {
   const ev = s.currentEvent();
   // 점호: 의식이 시작되면 행진곡
   if (s.rollcall || (s.eventBegun && (ev?.kind === 'rollcall_am' || ev?.kind === 'rollcall_pm'))) return 'bgm_05_rollcall_march';
+  // 소등: 모포를 덮고 눈을 감은 동안은 취침 나팔만 들린다
+  if (s.nightDuty?.phase === 'sleep') return null;
   // 밤: 소등 뒤 · 불침번 · 야간 위병소 · 야간 순찰
   if (s.nightDuty || s.patrol || s.minute >= 22 * 60 || s.minute < 6 * 60) return 'bgm_08_night_duty_fog';
+  // 전입 첫날 아침: 눈을 뜨니 포켓몬, 호통, 세수, 늦은 점호까지 허둥지둥
+  if (s.day === 1 && !s.flags.tutorial && s.minute < 8 * 60) return 'bgm_07_training_minigame';
+  // 일과(훈련 · 작업) 장면
+  if (s.work) return 'bgm_07_training_minigame';
   // 전역일: 작별 인사를 다니는 동안은 메인 테마
   if (s.day >= TOTAL_DAYS && ev?.kind === 'farewell') return 'bgm_01_title';
   const map = runtime.player.map;
@@ -38,26 +45,37 @@ function worldBgm(s: GameState): BgmId {
   return 'bgm_04_barracks_day';
 }
 
-/** 게임 상태 → 곡. [곡, 반복 여부] */
-export function pickBgm(s: GameState): [BgmId, boolean] {
+/** 게임 상태 → 곡. [곡(null = 정적), 반복 여부] */
+export function pickBgm(s: GameState): [BgmId | null, boolean] {
+  // 장면(대화 · 퍼즐 · 연출)이 직접 고른 곡이 먼저다
+  const mood = bgmMood();
+  const pick = (base: BgmId | null): BgmId | null => (mood === 'none' ? null : mood ?? base);
   switch (s.scene) {
     case 'title': return ['bgm_01_title', true];
     case 'home':
-    case 'intro': return ['bgm_02_bedroom_night', true];
-    case 'quiz':
-    case 'transform': return ['bgm_03_dream_star_hill', true];
-    case 'world': return [worldBgm(s), true];
-    case 'promotion': return ['bgm_05_rollcall_march', true];
-    case 'dayEnd': return [dreamPending(s) ? 'bgm_03_dream_star_hill' : 'bgm_02_bedroom_night', true];
-    case 'ending': return ['bgm_11_ending_same_star', false];
+    case 'intro': return [pick('bgm_02_bedroom_night'), true];
+    case 'quiz': return [pick('bgm_03_dream_star_hill'), true];
+    // 낯선 천장: 꿈의 곡이 멎고, 눈을 뜬다
+    case 'transform': return [null, true];
+    case 'world': return [pick(worldBgm(s)), true];
+    case 'promotion': return [pick('bgm_05_rollcall_march'), true];
+    case 'dayEnd': return [pick(dreamPending(s) ? 'bgm_03_dream_star_hill' : 'bgm_02_bedroom_night'), true];
+    // 엔딩: 장면마다 곡을 고른다 (Scenes.tsx의 Ending). 한 번만 재생하는 곡은 진 엔딩의 마지막 곡뿐
+    case 'ending': {
+      const id = pick('bgm_11_ending_same_star');
+      return [id, id !== 'bgm_11_ending_same_star'];
+    }
     default: return ['bgm_04_barracks_day', true];
   }
 }
 
+type Prog = { wrong: number; hints: number; solved: boolean };
+const sum = (o: Record<string, Prog>, f: (p: Prog) => number) => Object.values(o).reduce((a, p) => a + f(p), 0);
+
 /**
  * 화면에는 아무것도 그리지 않는다. 게임 상태를 지켜보다가
  * - 상황에 맞는 BGM으로 바꾸고 (0.3초마다 확인: 플레이어가 있는 맵은 React 상태가 아니라서)
- * - 단서·별 조각·퀘스트·진급·취침에 징글을 울린다
+ * - 단서·별 조각·퀘스트·퍼즐·기상·소등·꾸중에 징글을, 알림(토스트)에 효과음을 울린다
  */
 export default function BgmDirector() {
   const bgmVolume = useSettings((s) => s.bgmVolume);
@@ -89,42 +107,66 @@ export default function BgmDirector() {
     const onVis = () => setAudioPaused(document.hidden);
     document.addEventListener('visibilitychange', onVis);
 
-    // 징글이 한꺼번에 겹치면(꿈에서 단서 + 별 조각 등) 가장 중요한 것 하나만 울린다
-    let pending: { id: JingleId; prio: number } | null = null;
-    let pendingTimer = 0;
-    const jingle = (id: JingleId, prio: number) => {
-      if (!pending || prio > pending.prio) pending = { id, prio };
-      if (pendingTimer) return;
-      pendingTimer = window.setTimeout(() => {
-        pendingTimer = 0;
-        if (pending) void playJingle(pending.id);
-        pending = null;
-      }, 80);
-    };
+    let lastToast = useGame.getState().toasts.reduce((m, t) => Math.max(m, t.id), 0);
+    let lastToastCue = 0;
 
     const unsub = useGame.subscribe((s, p) => {
       if (s.scene !== p.scene) {
         // 새 게임을 시작하면 곡들을 처음부터
         if (p.scene === 'title' && s.scene === 'home') rewindBgm();
-        if (s.scene === 'promotion') jingle('jingle_promotion', 6);
-        if (s.scene === 'dayEnd') jingle(dreamPending(s) ? 'jingle_dream_enter' : 'jingle_day_end_sleep', 4);
+        if (s.scene === 'dayEnd') queueJingle(dreamPending(s) ? 'jingle_dream_enter' : 'jingle_day_end_sleep', 4);
         if (s.scene === 'ending') rewindBgm('bgm_11_ending_same_star');
-        sync();
+        // 🎺 아침 6시, 부대의 하루가 시작된다 (전입 첫날은 늦잠을 자서 듣지 못했다)
+        if (s.scene === 'world' && p.scene !== 'title' && s.day >= 2 && s.minute === 6 * 60 && s.eventIdx === 0 && !s.eventBegun)
+          queueJingle('jingle_reveille', 4);
+        // 새 화면이 뜨면서 직접 고르는 곡(정적 포함)이 있을 수 있으니, 한 박자 기다렸다가 곡을 바꾼다
+        window.setTimeout(sync, 80);
       }
+
+      // 🔔 알림(토스트): 글머리를 보고 어울리는 소리를 고른다. 한꺼번에 여러 줄이 뜨면 첫 줄만 울린다
+      const fresh = s.toasts.filter((t) => t.id > lastToast);
+      if (fresh.length) {
+        lastToast = fresh[fresh.length - 1].id;
+        const now = performance.now();
+        for (const t of fresh) {
+          const cue = toastCue(t.text, t.tone);
+          if (!cue || now - lastToastCue < 250) continue;
+          lastToastCue = now;
+          playCue(cue, 0.8);
+          break;
+        }
+      }
+
       // 불러오기·새 게임·날짜가 넘어갈 때 한꺼번에 바뀌는 값에는 반응하지 않는다
       if (p.scene === 'title' || s.scene === 'title' || s.day !== p.day) return;
-      if (s.stars.length > p.stars.length) jingle('jingle_star_fragment', 9);
-      else if (s.clues.length > p.clues.length) jingle('jingle_clue_found', 8);
-      else if (s.doneQuests.length > p.doneQuests.length) jingle('jingle_quest_complete', 5);
+
+      if (s.stars.length > p.stars.length) queueJingle('jingle_star_fragment', 9);
+      else if (s.clues.length > p.clues.length) queueJingle('jingle_clue_found', 8);
+      else if (s.doneQuests.length > p.doneQuests.length) queueJingle('jingle_quest_complete', 5);
+
+      // 🧩 퍼즐: 풀었다 / 틀렸다 / 힌트를 열었다
+      if (s.puzzles !== p.puzzles) {
+        if (sum(s.puzzles, (x) => +x.solved) > sum(p.puzzles, (x) => +x.solved)) queueJingle('jingle_minigame_clear', 4);
+        else if (sum(s.puzzles, (x) => x.wrong) > sum(p.puzzles, (x) => x.wrong)) playSfx('sfx_wrong', 0.8);
+        else if (sum(s.puzzles, (x) => x.hints) > sum(p.puzzles, (x) => x.hints)) playSfx('sfx_item', 0.7);
+      }
+
+      // 📣 집합: 점호가 시작된다 / 일과가 시작된다
+      if ((s.rollcall && !p.rollcall) || (s.work && !p.work)) playSfx('sfx_whistle', 0.7);
+
+      // 🌙 소등: 근무가 있는 밤, 모포를 덮고 눈을 감는다
+      if (s.nightDuty?.phase === 'sleep' && p.nightDuty?.phase !== 'sleep') queueJingle('jingle_lights_out', 4);
+
+      // 😓 꾸중: 지각했거나, 군기가 한 번에 뚝 떨어졌다
+      if (s.lateCount > p.lateCount || s.stats.discipline <= p.stats.discipline - 2) queueJingle('jingle_late_scolded', 2);
     });
 
     if (process.env.NODE_ENV === 'development') {
-      (window as unknown as Record<string, unknown>).__audio = { state: audioState, pick: () => pickBgm(useGame.getState())[0] };
+      (window as unknown as Record<string, unknown>).__audio = { state: audioState, log: audioLog, pick: () => pickBgm(useGame.getState())[0] };
     }
 
     return () => {
       window.clearInterval(timer);
-      window.clearTimeout(pendingTimer);
       window.removeEventListener('pointerdown', unlock, true);
       window.removeEventListener('keydown', unlock, true);
       window.removeEventListener('click', onClick, true);

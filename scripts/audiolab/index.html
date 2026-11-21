@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Poké Army 사운드 팩 v3 — 합성 · 인코딩</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; background: #14161f; color: #e8e6df; }
+  table { border-collapse: collapse; margin-top: 12px; }
+  td, th { border-bottom: 1px solid #2c3040; padding: 4px 10px; text-align: left; }
+  button { font: inherit; padding: 4px 12px; }
+  a { color: #9cc4ff; }
+  .bad { color: #ff9a8a; }
+</style>
+</head>
+<body>
+<h1>Poké Army 사운드 팩 v3 — 합성 · 인코딩</h1>
+<p>synth.js가 만든 소리를 Ogg(Opus)로 인코딩한다. 크로미움 계열 브라우저에서 연다 (WebCodecs 필요).<br>
+▶로 들어 보고, 파일 이름을 눌러 내려받아 <code>public/audio/</code>에 넣는다.</p>
+<button id="all">전부 만들기</button>
+<table id="tbl"><tr><th>파일</th><th>길이</th><th>최대</th><th>평균</th><th>크기</th><th>디코딩 확인</th><th></th></tr></table>
+<script src="synth.js"></script>
+<script>
+const { TRACKS, render, SR } = AudioLab;
+const FRAME = 960; // Opus 20ms
+
+// ───────── Ogg 컨테이너 ─────────
+const CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) { let r = i << 24; for (let j = 0; j < 8; j++) r = (r & 0x80000000) ? ((r << 1) ^ 0x04c11db7) : (r << 1); t[i] = r >>> 0; }
+  return t;
+})();
+function crc(bytes) { let c = 0; for (let i = 0; i < bytes.length; i++) c = ((c << 8) ^ CRC[((c >>> 24) ^ bytes[i]) & 255]) >>> 0; return c; }
+function page(packets, granule, serial, seq, flags) {
+  const segs = [];
+  for (const p of packets) { let l = p.length; while (l >= 255) { segs.push(255); l -= 255; } segs.push(l); }
+  const size = packets.reduce((a, p) => a + p.length, 0);
+  const out = new Uint8Array(27 + segs.length + size);
+  const dv = new DataView(out.buffer);
+  out.set([0x4f, 0x67, 0x67, 0x53], 0); out[4] = 0; out[5] = flags;
+  dv.setUint32(6, granule % 4294967296, true); dv.setUint32(10, Math.floor(granule / 4294967296), true);
+  dv.setUint32(14, serial, true); dv.setUint32(18, seq, true); dv.setUint32(22, 0, true);
+  out[26] = segs.length; out.set(segs, 27);
+  let o = 27 + segs.length;
+  for (const p of packets) { out.set(p, o); o += p.length; }
+  dv.setUint32(22, crc(out), true);
+  return out;
+}
+function ogg(packets, preSkip, endGranule) {
+  const serial = 0x504b4d4e;
+  const head = new Uint8Array(19);
+  head.set(new TextEncoder().encode('OpusHead'), 0);
+  const hv = new DataView(head.buffer);
+  head[8] = 1; head[9] = 2; hv.setUint16(10, preSkip, true); hv.setUint32(12, SR, true); hv.setInt16(16, 0, true); head[18] = 0;
+  const vendor = new TextEncoder().encode('poke-army audiolab');
+  const tags = new Uint8Array(8 + 4 + vendor.length + 4);
+  tags.set(new TextEncoder().encode('OpusTags'), 0);
+  new DataView(tags.buffer).setUint32(8, vendor.length, true);
+  tags.set(vendor, 12);
+  const pages = [page([head], 0, serial, 0, 2), page([tags], 0, serial, 1, 0)];
+  let seq = 2, done = 0;
+  const PER = 40;
+  for (let i = 0; i < packets.length; i += PER) {
+    const group = packets.slice(i, i + PER);
+    done += group.length;
+    const last = i + PER >= packets.length;
+    pages.push(page(group, last ? endGranule : Math.min(done * FRAME, endGranule), serial, seq++, last ? 4 : 0));
+  }
+  const total = pages.reduce((a, p) => a + p.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const p of pages) { out.set(p, o); o += p.length; }
+  return out;
+}
+
+// ───────── Opus 인코딩 ─────────
+async function opusPackets(L, R, bitrate) {
+  const packets = [];
+  let desc = null, err = null;
+  const enc = new AudioEncoder({
+    output: (chunk, meta) => {
+      const b = new Uint8Array(chunk.byteLength); chunk.copyTo(b); packets.push(b);
+      if (!desc && meta && meta.decoderConfig && meta.decoderConfig.description) desc = new Uint8Array(meta.decoderConfig.description.slice ? meta.decoderConfig.description.slice(0) : meta.decoderConfig.description);
+    },
+    error: (e) => { err = e; },
+  });
+  enc.configure({ codec: 'opus', sampleRate: SR, numberOfChannels: 2, bitrate, opus: { frameDuration: 20000, complexity: 10 } });
+  const BLOCK = FRAME * 50;
+  for (let i = 0; i < L.length; i += BLOCK) {
+    const n = Math.min(BLOCK, L.length - i);
+    const data = new Float32Array(n * 2);
+    data.set(L.subarray(i, i + n), 0); data.set(R.subarray(i, i + n), n);
+    const ad = new AudioData({ format: 'f32-planar', sampleRate: SR, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((i / SR) * 1e6), data });
+    enc.encode(ad); ad.close();
+  }
+  await enc.flush(); enc.close();
+  if (err) throw err;
+  return { packets, desc };
+}
+/** 인코더가 앞에 붙이는 지연(샘플). 브라우저가 알려 주지 않으면 libopus 기본값 */
+let ENC_DELAY = null;
+async function encoderDelay() {
+  if (ENC_DELAY != null) return ENC_DELAY;
+  const z = new Float32Array(FRAME * 4);
+  const { desc } = await opusPackets(z, z, 64000);
+  ENC_DELAY = desc && desc.length >= 12 && String.fromCharCode(...desc.subarray(0, 8)) === 'OpusHead' ? new DataView(desc.buffer, desc.byteOffset).getUint16(10, true) : 312;
+  return ENC_DELAY;
+}
+
+/**
+ * 루프 곡: [끝자락 PRE] + [한 바퀴 N] + [앞머리 D] 를 인코딩하고, 앞의 D+PRE 샘플은 pre-skip으로 버리게 한다.
+ * → 디코딩하면 정확히 한 바퀴(N 샘플)가 나오고, 처음과 끝이 서로를 "알고" 인코딩되어 이음매가 튀지 않는다.
+ */
+async function encode(o) {
+  const D = await encoderDelay();
+  const N = o.L.length;
+  let L, R, preSkip, endGranule;
+  if (o.loop) {
+    const PRE = 19200 + ((FRAME - ((19200 + N + D) % FRAME)) % FRAME);
+    const M = PRE + N + D;
+    L = new Float32Array(M); R = new Float32Array(M);
+    for (let i = 0; i < M; i++) { const j = (((i - PRE) % N) + N) % N; L[i] = o.L[j]; R[i] = o.R[j]; }
+    preSkip = D + PRE; endGranule = M;
+  } else {
+    const M = N + D + ((FRAME - ((N + D) % FRAME)) % FRAME);
+    L = new Float32Array(M); R = new Float32Array(M);
+    L.set(o.L); R.set(o.R);
+    preSkip = D; endGranule = D + N;
+  }
+  const { packets } = await opusPackets(L, R, o.bitrate);
+  return ogg(packets, preSkip, endGranule);
+}
+
+/** 디코딩해서 길이와 정렬(몇 샘플 밀렸는지)을 확인한다 */
+async function verify(bytes, o) {
+  const ac = new OfflineAudioContext(2, SR, SR);
+  const buf = await ac.decodeAudioData(bytes.buffer.slice(0));
+  const d = buf.getChannelData(0), N = o.L.length;
+  // 가운데 0.5초 구간으로 정렬 확인
+  const W = Math.min(24000, Math.floor(N / 3)), c0 = Math.floor(N / 2 - W / 2);
+  let best = -1e9, lag = 0;
+  for (let s = -1500; s <= 1500; s++) {
+    let acc = 0;
+    for (let i = 0; i < W; i += 7) { const j = c0 + i + s; if (j >= 0 && j < d.length) acc += o.L[c0 + i] * d[j]; }
+    if (acc > best) { best = acc; lag = s; }
+  }
+  let peak = 0;
+  for (let c = 0; c < buf.numberOfChannels; c++) { const x = buf.getChannelData(c); for (let i = 0; i < x.length; i++) peak = Math.max(peak, Math.abs(x[i])); }
+  // 루프 이음매: 디코딩한 소리의 끝 → 처음 단차
+  let seam = null;
+  if (o.loop) {
+    let avg = 0, cnt = 0;
+    for (let i = 1; i < d.length; i += 97) { avg += Math.abs(d[i] - d[i - 1]); cnt++; }
+    seam = Math.abs(d[0] - d[d.length - 1]) / (avg / cnt || 1);
+  }
+  return { len: buf.length, diff: buf.length - N, lag, peak, sr: buf.sampleRate, seam };
+}
+
+const results = {};
+const tbl = document.getElementById('tbl');
+const SAVE = new URLSearchParams(location.search).get('save');
+async function build(id) {
+  const o = render(id);
+  const bytes = await encode(o);
+  const v = await verify(bytes, o);
+  let saved = '';
+  if (SAVE) {
+    const r = await fetch(SAVE + '?name=' + id + '.ogg', { method: 'POST', body: bytes });
+    saved = r.ok ? 'saved' : 'save failed ' + r.status;
+  }
+  const res = { id, sec: +(o.L.length / SR).toFixed(2), peak: +o.stats.peak.toFixed(2), rmsDb: +o.stats.rmsDb.toFixed(1), bytes: bytes.length, loop: o.loop, verify: v, saved };
+  results[id] = res;
+  const ok = v.lag === 0 && (o.loop ? v.diff === 0 : Math.abs(v.diff) < FRAME);
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/ogg' }));
+  let row = document.getElementById('r-' + id);
+  if (!row) { row = tbl.insertRow(); row.id = 'r-' + id; }
+  row.innerHTML = `<td><a download="${id}.ogg" href="${url}">${id}.ogg</a></td><td>${res.sec}s${o.loop ? ' ↻' : ''}</td><td>${res.peak}</td><td>${res.rmsDb}dB</td>` +
+    `<td>${(bytes.length / 1024).toFixed(0)}KB</td><td class="${ok ? '' : 'bad'}">길이 ${v.diff >= 0 ? '+' : ''}${v.diff} · 밀림 ${v.lag}${v.seam != null ? ' · 이음매 ' + v.seam.toFixed(2) + '×' : ''}</td>` +
+    `<td><audio controls ${o.loop ? 'loop' : ''} src="${url}" style="height:28px"></audio> ${saved}</td>`;
+  return res;
+}
+async function buildAll(ids) {
+  const out = [];
+  for (const id of ids || Object.keys(TRACKS)) out.push(await build(id));
+  return out;
+}
+window.audiolab = { build, buildAll, results };
+document.getElementById('all').onclick = () => buildAll();
+</script>
+</body>
+</html>

@@ -24,11 +24,16 @@ import { memberName } from '../engine/whereabouts';
 import { DUTY_BOARD, ORDERS } from '../data/orders';
 import { npcDisplayName } from '../data/npcs';
 import { MAP_NAMES } from '../engine/map';
+import type { BgmMood } from '../engine/audio';
 import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding, missionReady } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
 export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio';
-export interface StoryScene { script: DialogueScript; bg?: StoryBg; onChoice?: (c: Choice) => void; onDone?: () => void }
+export interface StoryScene {
+  script: DialogueScript; bg?: StoryBg; onChoice?: (c: Choice) => void; onDone?: () => void;
+  /** 🔊 이 장면 동안 흐를 곡. null = 평소 곡 그대로 (tone으로 정한 곡도 쓰지 않는다) */
+  bgm?: BgmMood | null;
+}
 export interface ResistOpts {
   title: string;
   sub: string;
@@ -53,6 +58,8 @@ export interface StoryCtx {
 }
 
 const G = () => useGame.getState();
+/** 🔊 이 이야기의 장면들에 흐를 곡을 정해 둔다 (장면이 직접 고른 곡이 있으면 그쪽이 먼저) */
+const tone = (ctx: StoryCtx, bgm: BgmMood): StoryCtx => ({ ...ctx, play: (sc) => ctx.play({ ...sc, bgm: sc.bgm === undefined ? bgm : sc.bgm }) });
 const storyOn = () => G().clues.length > 0;
 const mission = (id: string) => STORY_MISSIONS.find((m) => m.id === id)!;
 /** 지금 할 수 있는 미션인지 (명령으로 가는 일이면 그 명령을 받은 뒤에만) */
@@ -123,6 +130,7 @@ export function withReport(ctx: StoryCtx, id: string, done?: () => void) {
   ctx.goTo(at.map, at.me[0], at.me[1], at.me[2], () => {
     if (present) ctx.place(o.giver, at.map, at.giver[0], at.giver[1], at.giver[2]);
     ctx.play({
+      bgm: null,
       script: present
         ? { npc: o.giver, lines: o.report }
         : { lines: [{ who: 'narr', text: '보고하러 갔지만, 일을 시킨 사람의 자리는 비어 있다. 당번표에 "완료"라고만 적어 두었다. 아무도 그 이름을 묻지 않는다.' }] },
@@ -789,6 +797,7 @@ export function buddyForgets(ctx: StoryCtx) {
   const s = G();
   if (flag('m13') || !npcPresent('buddy', s.day)) return false;
   ctx.play({
+    bgm: 'bgm_12_unease',
     script: {
       npc: 'buddy',
       lines: [
@@ -1131,33 +1140,33 @@ export function storySpotOptions(spot: SpotId, ctx: StoryCtx): MenuOption[] {
     opts.push({ label, hint: mealPending() ? '🍚 먼저 분대와 식사' : locked ? '점심·개인정비 시간에' : '📖 스토리', disabled: locked, onSelect: run });
   };
   switch (spot) {
-    case 'cyber': add('M-05', '🔍 인터넷 편지함 확인', () => m05(ctx)); break;
-    case 'command': add('M-07', '🔍 근무 일지 살펴보기', () => m07(ctx), false); break;
-    case 'recycle': add('M-08', '🔍 폐지 더미 정리하기', () => m08(ctx), false); break;
-    case 'cairn': add('S-01', '🪨 쐐기돌의 금 들여다보기', () => s01(ctx)); break;
-    case 'ammoledger': add('S-02', '📒 금요일 줄 맞춰 보기', () => s02(ctx)); break;
-    case 'maint': add('M-09', '📻 구석의 라디오 켜기', () => m09(ctx)); break;
+    case 'cyber': add('M-05', '🔍 인터넷 편지함 확인', () => m05(tone(ctx, 'bgm_12_unease'))); break;
+    case 'command': add('M-07', '🔍 근무 일지 살펴보기', () => m07(tone(ctx, 'bgm_12_unease')), false); break;
+    case 'recycle': add('M-08', '🔍 폐지 더미 정리하기', () => m08(tone(ctx, 'bgm_12_unease')), false); break;
+    case 'cairn': add('S-01', '🪨 쐐기돌의 금 들여다보기', () => s01(tone(ctx, 'bgm_12_unease'))); break;
+    case 'ammoledger': add('S-02', '📒 금요일 줄 맞춰 보기', () => s02(tone(ctx, 'bgm_09_mystery_clues'))); break;
+    case 'maint': add('M-09', '📻 구석의 라디오 켜기', () => m09(tone(ctx, 'bgm_12_unease'))); break;
     case 'library': {
       if (isOpen('M-10')) {
         const key = flag('archiveKey');
         opts.push({
           label: key ? '🔑 안쪽 방 문 열기 (기록 보관실)' : '🔒 도서관 안쪽의 잠긴 문',
           hint: !key ? '열쇠가 필요하다 (중대장 / 행정반 루브도)' : !free ? '점심·개인정비 시간에' : '📖 스토리',
-          disabled: !key || !free, onSelect: () => m10(ctx),
+          disabled: !key || !free, onSelect: () => m10(tone(ctx, 'bgm_09_mystery_clues')),
         });
       }
       break;
     }
-    case 'ammo': if (isOpen('M-12') && !flag('trail1')) add('M-12', '🔍 잠긴 상자 주변 살펴보기', () => m12Box(ctx)); break;
-    case 'post': if (isOpen('M-12') && flag('trail1') && !flag('trail2') && !s.nightDuty) add('M-12', '👣 진자 자국 따라가기', () => m12Post(ctx)); break;
+    case 'ammo': if (isOpen('M-12') && !flag('trail1')) add('M-12', '🔍 잠긴 상자 주변 살펴보기', () => m12Box(tone(ctx, 'bgm_09_mystery_clues'))); break;
+    case 'post': if (isOpen('M-12') && flag('trail1') && !flag('trail2') && !s.nightDuty) add('M-12', '👣 진자 자국 따라가기', () => m12Post(tone(ctx, 'bgm_09_mystery_clues'))); break;
     default: break;
   }
-  if (spot === 'recycle' && isOpen('M-12') && flag('trail2')) add('M-12', '👣 자국 끝까지 따라가기', () => m12End(ctx));
+  if (spot === 'recycle' && isOpen('M-12') && flag('trail2')) add('M-12', '👣 자국 끝까지 따라가기', () => m12End(tone(ctx, 'bgm_09_mystery_clues')));
   // 잊혀 가는 이름: 동기와 함께 추억의 장소
   const m13 = M13_SPOT[spot];
   if (m13 && flag('m13') && !flag('buddyBack') && !flag(m13.key)) {
     const near = ctx.near('buddy', 3.5);
-    opts.push({ label: '💭 동기와 추억 떠올리기', hint: !free ? '점심·개인정비 시간에' : !near ? '동기가 곁에 있어야 한다' : '📖 스토리', disabled: !free || !near, onSelect: () => m13Spot(ctx, spot) });
+    opts.push({ label: '💭 동기와 추억 떠올리기', hint: !free ? '점심·개인정비 시간에' : !near ? '동기가 곁에 있어야 한다' : '📖 스토리', disabled: !free || !near, onSelect: () => m13Spot(tone(ctx, 'bgm_13_rooftop_stars'), spot) });
   }
   return opts;
 }
@@ -1172,10 +1181,10 @@ export function storyNpcOptions(id: NpcId, ctx: StoryCtx): MenuOption[] {
     // 📖 동기가 나를 잊은 동안엔, 서로 아는 사이여야 하는 지난 미션을 함께할 수 없다 (기억을 되찾은 뒤에)
     const forgot = flag('m13') && !flag('buddyBack');
     const forgotHint = '동기가 나를 기억하지 못한다';
-    if (isOpen('M-06')) opts.push({ label: '🧺 "같이 빨래하러 가자"', hint: forgot ? forgotHint : free ? '📖 스토리' : '점심·개인정비 시간에', disabled: forgot || !free, onSelect: () => m06(ctx) });
+    if (isOpen('M-06')) opts.push({ label: '🧺 "같이 빨래하러 가자"', hint: forgot ? forgotHint : free ? '📖 스토리' : '점심·개인정비 시간에', disabled: forgot || !free, onSelect: () => m06(tone(ctx, 'bgm_12_unease')) });
     if (isOpen('D-01')) {
       const ev = eveningNow();
-      opts.push({ label: '🗣️ "남아서 같이 정리하자" (추리 정리 1)', hint: forgot ? forgotHint : ev ? '체단실에서' : '19:00~21:20', disabled: forgot || !ev, onSelect: () => ctx.goTo('gymroom', 6.5, 6.5, 'right', () => { ctx.place('buddy', 'gymroom', 7.5, 6.5, 'left'); d01(ctx); }) });
+      opts.push({ label: '🗣️ "남아서 같이 정리하자" (추리 정리 1)', hint: forgot ? forgotHint : ev ? '체단실에서' : '19:00~21:20', disabled: forgot || !ev, onSelect: () => ctx.goTo('gymroom', 6.5, 6.5, 'right', () => { ctx.place('buddy', 'gymroom', 7.5, 6.5, 'left'); d01(tone(ctx, 'bgm_09_mystery_clues')); }) });
     }
   }
   // 7일차 밤 당직 간부: "어젯밤 당직부관?"
@@ -1184,7 +1193,7 @@ export function storyNpcOptions(id: NpcId, ctx: StoryCtx): MenuOption[] {
       label: '🌀 "어젯밤 당직부관님은 누구셨습니까?"', hint: '📖',
       onSelect: () => {
         G().spend(5);
-        ctx.play({ script: { npc: id, lines: [say('npc', '어젯밤 당직부관? 어젯밤 당직은 나 혼자였는데.'), say('npc', '…누굴 봤다고? 근무 서다 졸았구먼. 오늘은 일찍 자라.'), me('(…역시. 그건 사람이 아니었어.)')] }, onDone: () => setFlag('n03ask') });
+        ctx.play({ bgm: 'bgm_12_unease', script: { npc: id, lines: [say('npc', '어젯밤 당직부관? 어젯밤 당직은 나 혼자였는데.'), say('npc', '…누굴 봤다고? 근무 서다 졸았구먼. 오늘은 일찍 자라.'), me('(…역시. 그건 사람이 아니었어.)')] }, onDone: () => setFlag('n03ask') });
       },
     });
   }
@@ -1227,7 +1236,7 @@ export function storyExtraOptions(id: string, ctx: StoryCtx): MenuOption[] {
     } });
   }
   if (id === 'room2a' && isOpen('M-11')) {
-    opts.push({ label: '🖼️ 단체 사진 이야기를 꺼낸다', hint: free ? '📖 스토리' : '점심·개인정비 시간에', disabled: !free, onSelect: () => m11(ctx) });
+    opts.push({ label: '🖼️ 단체 사진 이야기를 꺼낸다', hint: free ? '📖 스토리' : '점심·개인정비 시간에', disabled: !free, onSelect: () => m11(tone(ctx, 'bgm_13_rooftop_stars')) });
   }
   return opts;
 }

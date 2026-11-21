@@ -71,3 +71,13 @@ src.start();
 ```
 
 Safari 일부 버전은 ogg를 못 읽을 수 있어요. 그럴 땐 `wav/`(원본)을 m4a로 변환해 함께 두면 돼요.
+
+## v3 추가분 (코드로 합성 · `scripts/audiolab/`)
+
+사운드폰트 없이 사인파·노이즈·필터로 합성해 Ogg(Opus)로 인코딩했다. `scripts/audiolab/index.html`을 크로미움에서 열면 다시 만들 수 있다.
+
+- BGM: `bgm_12_unease`(쎄한 장면 · 편지 · 팬텀 · 안개) · `bgm_13_rooftop_stars`(옥상 · 동기 · 말 없는 병장) · `bgm_14_bad_ending`(배드 엔딩)
+- 징글: `jingle_reveille`(기상나팔) · `jingle_lights_out`(취침나팔) · `jingle_shock`(깜짝 놀람)
+- 효과음: `sfx_knock` · `sfx_pa_chime` · `sfx_radio_static` · `sfx_switch` · `sfx_water` · `sfx_paper` · `sfx_tray` · `sfx_heartbeat` · `sfx_wrong` · `sfx_item` · `sfx_phone` · `sfx_flash` · `sfx_evo_pulse` · `sfx_suspicion`
+
+어떤 소리가 언제 나는지는 `src/game/components/BgmDirector.tsx`(상황별 곡 · 징글)와 `src/game/engine/soundCues.ts`(대사 · 알림 문구 → 효과음)에 있다.

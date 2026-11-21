@@ -6,6 +6,8 @@ import { TEXT_SPEED, useSettings } from '../state/settings';
 import { fmt } from '../engine/text';
 import { npcSpeaker, playerSpeaker, type SpeakerInfo } from '../engine/speakers';
 import MonsterCanvas from './MonsterCanvas';
+import { playCue, playSfx } from '../engine/audio';
+import { lineCue, useLineSound } from '../engine/soundCues';
 
 export interface DialogueScript {
   npc?: NpcId;
@@ -43,6 +45,9 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
     return () => clearInterval(iv);
   }, [text, idx, phase, typeMs, typeStep]);
 
+  // 🔊 새 줄 · 타자 소리 (선택지를 고르는 동안은 조용히)
+  useLineSound(`${phase}-${idx}`, text, typed, { cue: line?.sfx, silent: phase === 'choices' });
+
   const speaker: SpeakerInfo | null = useMemo(() => {
     if (!line) return null;
     if (line.who === 'narr') return null;
@@ -62,6 +67,10 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
   }, [phase, typed, text.length, idx, lines.length, script.choices, onClose]);
 
   const choose = useCallback((c: Choice) => {
+    // 🔊 고른 말에 어울리는 소리 (노크 등) → 없으면 선택음, 나쁜 대답이면 낮은 소리
+    const cue = lineCue(c.text);
+    if (cue) playCue(cue, 0.9);
+    else playSfx(c.grade === 'bad' ? 'sfx_cancel' : 'sfx_confirm', 0.6);
     setPicked(c);
     onChoice?.(c);
     setLines(c.reply.length ? c.reply : [{ who: 'narr', text: '…' }]);

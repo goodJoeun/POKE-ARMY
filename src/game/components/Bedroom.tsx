@@ -9,6 +9,7 @@ import Menu, { type MenuOption } from './Menu';
 import TouchPad from './TouchPad';
 import type { BranchId, Line } from '../types';
 import { BRANCHES } from '../data/branches';
+import { playSfx } from '../engine/audio';
 
 /**
  * 오프닝: 입대 전날 밤, 주인공의 방 (2D 휴대용 게임기 시절 느낌).
@@ -169,6 +170,7 @@ export default function Bedroom() {
     setOverlay(null);
     sleepingRef.current = true;
     setSleeping(true);
+    playSfx('sfx_switch', 0.9); // 딸깍. 불을 껐다
     setTimeout(() => useGame.getState().go('intro'), 1400);
   }, [setOverlay]);
 

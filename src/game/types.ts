@@ -76,6 +76,8 @@ export type LineWho = 'npc' | 'me' | 'narr' | NpcId;
 export interface Line {
   who: LineWho;
   text: string;
+  /** 이 줄이 나올 때 울릴 소리 (없으면 글을 보고 고른다 · engine/soundCues.ts) */
+  sfx?: import('./engine/audio').CueId;
 }
 
 export interface Choice {

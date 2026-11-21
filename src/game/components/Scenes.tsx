@@ -17,6 +17,8 @@ import { fixJosa, fmt } from '../engine/text';
 const pj = (w: string, p: string) => fixJosa(w + p).slice(w.length);
 import type { Line } from '../types';
 import { RankBadge } from './Hud';
+import { playSfx, queueJingle, setBgmMood, type BgmMood } from '../engine/audio';
+import { useLineSound } from '../engine/soundCues';
 
 // ───────── 타이틀 ─────────
 export function Title() {
@@ -59,6 +61,7 @@ export function Intro() {
   const [i, setI] = useState(0);
   const lines = INTRO_LINES.map((l) => fixJosa(l.replace('{me}', s.name)));
   const next = () => (i < lines.length - 1 ? setI(i + 1) : s.go('quiz'));
+  useLineSound(i, lines[i], lines[i].length);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'e') { e.preventDefault(); next(); } };
     window.addEventListener('keydown', onKey);
@@ -127,6 +130,8 @@ export function Quiz() {
     return () => clearInterval(iv);
   }, [line.text, typeMs, typeStep]);
   const done = typed >= line.text.length;
+  // 🔊 빛의 목소리는 높고 맑은 타자 소리 · 질문이 나올 땐 반짝
+  useLineSound(`${phase}-${idx}-${qi}`, line.text, typed, { voice: line.who === 'voice' ? 1.5 : 1, cue: phase === 'q' ? 'sfx_star_twinkle' : undefined });
 
   const advance = () => {
     if (!done) { setTyped(line.text.length); return; }
@@ -140,6 +145,7 @@ export function Quiz() {
   };
   const pick = (a: Archetype) => {
     if (phase !== 'q' || !done) return;
+    playSfx('sfx_confirm', 0.6);
     setScore({ ...score, [a]: score[a] + 1 });
     const pool = REACTIONS[a];
     setReaction(pool[qi % pool.length]);
@@ -199,6 +205,8 @@ export function Transform() {
   ];
   const [stage, setStage] = useState(0);
   const next = () => (stage < lines.length - 1 ? setStage(stage + 1) : s.startDay());
+  // 🔊 낯선 천장 아래 정적. 그림자가 드리울 때 심장이 뛴다
+  useLineSound(stage, lines[stage], lines[stage].length, { cue: stage === lines.length - 1 ? 'sfx_heartbeat' : undefined });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'e') {
@@ -248,6 +256,13 @@ export function MirrorReveal({ onDone }: { onDone: () => void }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+  // 🔊 거울: 그림자(심장 소리) → 김을 닦는다 → 비명 → "내가… 포켓몬?!"
+  useEffect(() => {
+    if (stage === 0) playSfx('sfx_heartbeat', 0.9);
+    else if (stage === 1) playSfx('sfx_suspicion', 0.9);
+    else if (stage === 2) queueJingle('jingle_shock', 7);
+    else playSfx('sfx_flash', 0.7);
+  }, [stage]);
   const shakeOn = useSettings((st) => st.screenShake);
   return (
     <div className={`scene transform-scene mirror-scene ${stage >= 1 ? 'stage-2' : 'stage-0'} ${stage === 2 && shakeOn ? 'shake' : ''}`} onClick={() => stage < last && next()}>
@@ -292,6 +307,7 @@ export function Promotion() {
   const [keyLines, setKeyLines] = useState<Line[] | null>(null);
   const answer = (ok: boolean) => {
     if (answered !== null) return;
+    playSfx(ok ? 'sfx_confirm' : 'sfx_wrong', 0.8);
     setAnswered(ok);
     const kl = ok ? promotionKeyLines() : null;
     if (kl) {
@@ -360,6 +376,24 @@ function Evolution({ name, look, cap, from, to, onDone }: {
     return () => cancelAnimationFrame(raf);
   }, []);
   const done = t >= EVO_DONE;
+  // 🔊 진화 연출: "…어라!?" → 곡이 멎고, 깜빡일 때마다 점점 높아지는 소리 → 섬광 → 진급 팡파르와 함께 행진곡이 돌아온다
+  const togglesNow = EVO_TOGGLES.filter((x) => x <= t).length;
+  const flashed = t >= EVO_FLASH;
+  const cheered = t >= EVO_DONE - 0.4;
+  useEffect(() => {
+    playSfx('sfx_alert', 0.9);
+    setBgmMood('none');
+    return () => setBgmMood(null);
+  }, []);
+  useEffect(() => {
+    if (togglesNow > 0 && !flashed) playSfx('sfx_evo_pulse', 0.55, 0.8 + (togglesNow / EVO_TOGGLES.length) * 0.9 + (togglesNow % 2 ? 0.12 : 0));
+  }, [togglesNow, flashed]);
+  useEffect(() => { if (flashed) playSfx('sfx_flash', 1); }, [flashed]);
+  useEffect(() => {
+    if (!cheered) return;
+    queueJingle('jingle_promotion', 6);
+    setBgmMood(null);
+  }, [cheered]);
   const advance = useCallback(() => {
     if (done) onDone();
     else if (t < EVO_START) t0.current -= (EVO_START - t) * 1000; // 첫 멘트는 넘길 수 있다
@@ -426,6 +460,7 @@ function StoryEndingView({ end, unanswered, onDone }: { end: StoryEnding; unansw
     return () => window.removeEventListener('keydown', onKey);
   }, [next]);
   const l = lines[i];
+  useLineSound(i, l.text, l.text.length, { cue: l.sfx });
   return (
     <div className={`story-ending end-${end}`} onClick={next}>
       <div className="story-ending-line" key={i}>
@@ -495,6 +530,19 @@ export function Ending() {
   const solvedPuzzles = Object.values(s.puzzles).filter((p) => p.solved).length;
 
   useEffect(() => { s.wipe(); }, [s]);
+
+  // 🔊 엔딩의 곡: 별빛 속 작별(별의 언덕) → 결산(메인 테마) → 훈련소의 아침
+  //    진 엔딩은 「같은 날, 같은 별 아래」, 혼자 돌아온 아침엔 동기와 별을 보던 옥상의 곡. 배드 엔딩은 끝까지 「별이 진 뒤」
+  const endMood: BgmMood | null = storyEnd === 'bad' ? 'bgm_14_bad_ending'
+    : stage === -1 ? 'bgm_03_dream_star_hill'
+      : stage === 0 ? 'bgm_01_title'
+        : storyEnd === 'normal' ? 'bgm_13_rooftop_stars' : null;
+  useEffect(() => {
+    setBgmMood(endMood);
+    return () => setBgmMood(null);
+  }, [endMood]);
+  // 🎺 현실의 아침: 훈련소의 기상나팔
+  useEffect(() => { if (stage === 1 && storyEnd !== 'bad') queueJingle('jingle_reveille', 6); }, [stage, storyEnd]);
 
   if (stage === -1 && storyEnd) return <StoryEndingView end={storyEnd} unanswered={!s.flags.f01} onDone={() => setStage(0)} />;
   // 🌑 배드 엔딩: 부대를 떠나지 못했다 → "전역"이나 현실로 돌아오는 장면 없이, 남은 기록만 보여 주고 끝난다

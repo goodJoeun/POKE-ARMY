@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useGame } from '../state/store';
 import { MAP_ZOOM_MAX, MAP_ZOOM_MIN, clampMapZoom, useSettings, type Settings } from '../state/settings';
+import { playSfx } from '../engine/audio';
 
 interface Option<V> { value: V; label: string }
 
@@ -82,7 +83,7 @@ export default function SettingsMenu() {
   if (!open) return null;
 
   const g = useGame.getState();
-  const save = () => { g.save(); setNotice('💾 저장했습니다. (다음에 불러오면 그날 아침 침상에서 시작합니다)'); };
+  const save = () => { g.save(); playSfx('sfx_save', 0.9); setNotice('💾 저장했습니다. (다음에 불러오면 그날 아침 침상에서 시작합니다)'); };
   const toTitle = () => { if (canSave) g.save(); close(); g.go('title'); };
   const startNew = () => { g.resetAll(); close(); };
   const wipe = () => { g.wipe(); setConfirm(null); setNotice('🗑️ 저장 데이터를 삭제했습니다.'); };

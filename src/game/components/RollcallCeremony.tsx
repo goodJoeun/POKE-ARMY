@@ -7,6 +7,7 @@ import { buildSchedule, hasGuardNight, hasNightDuty } from '../data/schedule';
 import type { SpeakerInfo } from '../engine/speakers';
 import type { CeremonyCtl, CeremonyInfo } from '../engine/ceremony';
 import DialogueBox, { type DialogueScript } from './DialogueBox';
+import { playSfx } from '../engine/audio';
 
 /** 병영생활 행동강령 (제창 순서) */
 const CODE_OF_CONDUCT: { line: string; wrong: string[]; tip: string }[] = [
@@ -102,6 +103,11 @@ function ActBanner({ step, onDone }: { step: Extract<Step, { t: 'act' }>; onDone
   }, [step, finish]);
   const sub = step.subs[Math.min(step.subs.length - 1, Math.floor((el / step.secs) * step.subs.length))];
   const beat = Math.floor(el * 2.4);
+  // 🔊 구령에 맞춘 발 구르는 소리 (하나 · 둘 · 셋 · 넷)
+  const counting = !!step.count;
+  useEffect(() => {
+    if (counting) playSfx('sfx_footstep', beat % 4 === 0 ? 0.7 : 0.45, beat % 4 === 0 ? 0.8 : 1);
+  }, [beat, counting]);
   return (
     <div className="cer-banner" onClick={() => el > 0.8 && finish()}>
       <div className="cer-title">{step.title}</div>
@@ -130,6 +136,8 @@ function ShoutMeter({ ctl, onDone }: { ctl: CeremonyCtl; onDone: (avg: number) =
     if (phase !== 'go') return;
     presses.current++;
     setVol(Math.min(1, presses.current / TARGET));
+    // 🔊 연타할수록 목소리가 높아진다
+    playSfx('sfx_text_blip', 0.6, 0.7 + Math.min(1, presses.current / TARGET) * 0.9);
   }, [phase]);
 
   useEffect(() => {
@@ -154,6 +162,7 @@ function ShoutMeter({ ctl, onDone }: { ctl: CeremonyCtl; onDone: (avg: number) =
       const iv = setInterval(() => { c++; ctl.bubble(COUNT[c % 4]); }, (ROUND_SEC * 1000) / 4);
       const tm = setTimeout(() => {
         scores.current.push(Math.min(1, presses.current / TARGET));
+        playSfx(presses.current / TARGET >= 0.4 ? 'sfx_confirm' : 'sfx_cancel', 0.8);
         setPhase('result');
       }, ROUND_SEC * 1000);
       return () => { clearInterval(iv); clearTimeout(tm); };

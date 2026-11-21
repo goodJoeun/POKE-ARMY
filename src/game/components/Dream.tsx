@@ -5,6 +5,8 @@ import { TEXT_SPEED, useSettings } from '../state/settings';
 import { fmt } from '../engine/text';
 import { DREAMS, DREAM_FADED, type DreamLine } from '../data/story';
 import PuzzleBox from './PuzzleBox';
+import { setBgmMood, type CueId } from '../engine/audio';
+import { useLineSound } from '../engine/soundCues';
 
 /**
  * 꿈: 별의 언덕 — 하루 끝(결산) 전에 보는 짧은 장면.
@@ -32,6 +34,15 @@ export default function Dream() {
     const iv = setInterval(() => setTyped((t) => (t >= text.length ? t : t + typeStep)), typeMs);
     return () => clearInterval(iv);
   }, [text, typeMs, typeStep]);
+
+  // 🔊 꿈의 소리: 엄마 목소리엔 심장 소리, 빛의 목소리는 높고 맑게. 소등한 생활관 장면은 곡 없이 조용하다
+  const lineCueId: CueId | null = line?.who === 'mom' ? 'sfx_heartbeat' : line?.who === 'jirachi' && idx > 0 && lines[idx - 1].who !== 'jirachi' ? 'sfx_star_twinkle' : null;
+  useLineSound(idx, text, typed, { cue: lineCueId, voice: line?.who === 'voice' || line?.who === 'jirachi' ? 1.5 : line?.who === 'mom' ? 0.8 : 1 });
+  const inRoom = line?.scene === 'room';
+  useEffect(() => {
+    setBgmMood(inRoom ? 'none' : null);
+    return () => setBgmMood(null);
+  }, [inRoom]);
 
   // 🧩 P-01 첫 번째 조각: 첫날 밤, 언덕의 창문을 처음 본 직후에 조각을 끼운다
   const [puzzle, setPuzzle] = useState(false);
