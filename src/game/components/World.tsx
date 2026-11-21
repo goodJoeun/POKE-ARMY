@@ -862,7 +862,7 @@ export default function World() {
     for (const m of Object.values(world.maps))
       out[m.id] =
         tileAtlas && supportsTileset(m)
-          ? renderTilesetMap(m, tileAtlas)
+          ? renderTilesetMap(m, tileAtlas, season)
           : renderMapCanvas(m, season);
     mapCanvasRef.current = out;
   }, [world, season, tileAtlas]);

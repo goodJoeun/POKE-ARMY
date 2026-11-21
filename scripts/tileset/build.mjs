@@ -547,6 +547,7 @@ const SLABS = {
   table: { out: '#3a2a1c', top: '#e2c594', topHi: '#f3deb4', topLo: '#c9a873', front: '#a8804c', frontHi: '#ba9260', frontLo: '#876235', wood: true },
   counter: { out: '#2b303a', top: '#cfd6de', topHi: '#eef2f6', topLo: '#aab3be', front: '#8d96a2', frontHi: '#a3acb7', frontLo: '#69727f' },
   sink: { out: '#3a4250', top: '#f1f4f7', topHi: '#ffffff', topLo: '#d6dde5', front: '#c2cad4', frontHi: '#d6dde5', frontLo: '#99a4b1' },
+  stage: { out: '#2a2620', top: '#b8a890', topHi: '#d6c8b2', topLo: '#a09078', front: '#8a7c68', frontHi: '#9c8e7a', frontLo: '#685c4c' },
   stove: { out: '#17191d', top: '#6f757d', topHi: '#8e949c', topLo: '#575d65', front: '#4a5058', frontHi: '#5c626a', frontLo: '#33383f' },
 };
 for (const [name, m] of Object.entries(SLABS)) for (let mask = 0; mask < 16; mask++) {
@@ -809,6 +810,268 @@ add('board_map', withShadow(art([
 ], {
   K: '#262b33', s: '#d6dde5', S: '#939da8', b: '#6fa8d8', g: '#a8c88a', R: '#de4a4a', Y: '#f0c030', B: '#3a5a9c', w: '#f4f6f8', L: '#737d89',
 })), 0, -4);
+
+// ═════════════ 여기부터 야외 (계절별 땅 · 나무 · 울타리 · 훈련장 시설 · 건물 외관) ═════════════
+
+/** 시계 방향으로 90도 돌린다 (위쪽 가장자리 그림 → 오른쪽 가장자리 그림) */
+function rot90(src) {
+  const im = new Img(src.h, src.w);
+  for (let y = 0; y < src.h; y++) for (let x = 0; x < src.w; x++) {
+    const i = (y * src.w + x) * 4;
+    if (src.d[i + 3]) im.px(src.h - 1 - y, x, [src.d[i], src.d[i + 1], src.d[i + 2], src.d[i + 3]]);
+  }
+  return im;
+}
+
+const SEASONS = {
+  spring: { grass: '#8cc46a', dot: '#6aa850', hi: '#aadc8a', leaf: ['#3f9a4a', '#6cc470', '#2a7438', '#143f20'] },
+  summer: { grass: '#6fae54', dot: '#57963f', hi: '#8ec870', leaf: ['#2f8a3e', '#56b85c', '#1f6630', '#123a1c'] },
+  autumn: { grass: '#b8a860', dot: '#9a8844', hi: '#d0c27c', leaf: ['#d0782a', '#eeaa4c', '#a4541c', '#5a2a0c'] },
+  winter: { grass: '#e8f0f4', dot: '#c8d9e5', hi: '#ffffff', leaf: ['#e2ecf1', '#ffffff', '#b2c8d5', '#566f80'] },
+};
+
+for (const [name, s] of Object.entries(SEASONS)) {
+  // 풀밭 (64x64 무늬)
+  const im = new Img(64, 64), rnd = rng(name.length * 97 + 13);
+  const P = (x, y, c) => im.px(((x % 64) + 64) % 64, ((y % 64) + 64) % 64, c);
+  im.rect(0, 0, 64, 64, s.grass);
+  for (let i = 0; i < 16; i++) { const x = Math.floor(rnd() * 64), y = Math.floor(rnd() * 64); for (let a = 0; a < 5; a++) for (let b = 0; b < 3; b++) if ((a + b) % 4) P(x + a, y + b, tone(s.grass, -5)); }
+  for (let i = 0; i < 80; i++) {
+    const x = Math.floor(rnd() * 64), y = Math.floor(rnd() * 64);
+    if (name === 'winter') { P(x, y, s.dot); P(x + 1, y, s.dot); P(x + 2, y, s.dot); P(x + 1, y + 1, tone(s.dot, 14)); }
+    else { P(x, y + 1, s.dot); P(x + 1, y, s.dot); P(x + 2, y + 1, s.dot); P(x + 1, y + 2, s.dot); }
+  }
+  for (let i = 0; i < 46; i++) { const x = Math.floor(rnd() * 64), y = Math.floor(rnd() * 64); P(x, y, s.hi); P(x + 1, y, s.hi); }
+  if (name === 'spring') for (let i = 0; i < 7; i++) { const x = Math.floor(rnd() * 64), y = Math.floor(rnd() * 64); P(x, y, i % 2 ? '#fff6c0' : '#ffffff'); P(x + 1, y + 1, '#f0d060'); }
+  if (name === 'autumn') for (let i = 0; i < 16; i++) { const x = Math.floor(rnd() * 64), y = Math.floor(rnd() * 64); P(x, y, i % 2 ? '#d0782a' : '#a4541c'); P(x + 1, y, '#e09a48'); }
+  add(`grass_${name}`, im);
+
+  // 풀이 길·흙 위로 번지는 가장자리 (위 → 오른쪽 → 아래 → 왼쪽 순으로 돌려 쓴다) + 대각선 모서리
+  const hts = [2, 3, 2, 1, 2, 3, 3, 2, 1, 2, 2, 3, 2, 1, 2, 3];
+  let e = new Img(16, 16);
+  hts.forEach((h, x) => { e.rect(x, 0, 1, h, s.grass); e.px(x, h, s.dot); if (x % 5 === 1) e.px(x, 0, s.hi); });
+  let c = new Img(16, 16);
+  for (const [x, y] of [[13, 0], [14, 0], [15, 0], [14, 1], [15, 1], [15, 2]]) c.px(x, y, s.grass);
+  for (const [x, y] of [[12, 0], [13, 1], [14, 2], [15, 3]]) c.px(x, y, s.dot);
+  for (const d of ['n', 'e', 's', 'w']) { add(`fringe_${name}_${d}`, e); e = rot90(e); }
+  for (const d of ['ne', 'se', 'sw', 'nw']) { add(`fringe_${name}_${d}`, c); c = rot90(c); }
+
+  // 나무: 타일보다 크게 (옆으로 2px, 위로 11px 솟는다)
+  const t = new Img(20, 27), [leaf, lhi, llo, lout] = s.leaf;
+  t.rect(3, 23, 14, 3, '#1e141e30'); t.rect(5, 22, 10, 5, '#1e141e30');
+  t.rect(7, 13, 6, 12, '#3a2412'); t.rect(8, 13, 4, 12, '#7a5230'); t.rect(8, 13, 1, 12, '#9a6c44'); t.rect(11, 13, 1, 12, '#5c3c20'); t.rect(6, 24, 8, 1, '#3a2412'); t.rect(7, 24, 6, 1, '#6a4628');
+  const ws = [8, 12, 16, 18, 20, 20, 20, 20, 20, 20, 18, 18, 16, 12, 8];
+  ws.forEach((w, y) => t.rect(10 - w / 2, y, w, 1, lout));
+  ws.forEach((w, y) => { if (y > 0 && y < ws.length - 1) t.rect(11 - w / 2, y, w - 2, 1, leaf); });
+  for (const [x, y, w, h] of [[5, 2, 5, 2], [3, 4, 6, 3], [4, 7, 3, 2], [10, 3, 3, 1], [11, 6, 4, 2], [7, 9, 2, 1]]) t.rect(x, y, w, h, lhi);
+  for (const [x, y, w, h] of [[11, 10, 6, 3], [8, 12, 7, 1], [14, 7, 4, 3], [4, 11, 3, 2], [9, 5, 2, 1], [6, 6, 1, 1]]) t.rect(x, y, w, h, llo);
+  for (const [x, y] of [[6, 3], [8, 5], [12, 4], [5, 9], [13, 9], [9, 11]]) t.px(x, y, leaf);
+  if (name === 'winter') for (const [x, y] of [[12, 11], [14, 9], [9, 12], [15, 8], [5, 12]]) t.px(x, y, '#3f6a50');
+  add(`tree_${name}`, t, -2, -11);
+}
+
+// 길 · 연병장 모래 · 흙 (겨울에는 눈을 치운 회갈색)
+function groundTex(name, base, seed, pebbles) {
+  const im = new Img(64, 64), rnd = rng(seed);
+  const P = (x, y, c) => im.px(x % 64, y % 64, c);
+  im.rect(0, 0, 64, 64, base);
+  for (let i = 0; i < 22; i++) { const x = Math.floor(rnd() * 64), y = Math.floor(rnd() * 64), w = 3 + Math.floor(rnd() * 4); for (let a = 0; a < w; a++) for (let b = 0; b < 2; b++) P(x + a, y + b, tone(base, rnd() > 0.5 ? -5 : 5)); }
+  for (let i = 0; i < 120; i++) { const x = Math.floor(rnd() * 64), y = Math.floor(rnd() * 64); P(x, y, tone(base, -18)); if (i % 3 === 0) P(x + 1, y, tone(base, -18)); }
+  for (let i = 0; i < 60; i++) P(Math.floor(rnd() * 64), Math.floor(rnd() * 64), tone(base, 14));
+  for (let i = 0; i < pebbles; i++) { const x = Math.floor(rnd() * 62), y = Math.floor(rnd() * 62); P(x, y, tone(base, 24)); P(x + 1, y, tone(base, 24)); P(x, y + 1, tone(base, -30)); P(x + 1, y + 1, tone(base, -30)); }
+  add(name, im);
+}
+groundTex('road', '#c9b38a', 3, 6); groundTex('road_winter', '#a69f94', 4, 6);
+groundTex('sand', '#dcc89c', 5, 0); groundTex('sand_winter', '#ddd6c9', 6, 0);
+groundTex('dirt', '#b89a72', 7, 14); groundTex('dirt_winter', '#c6bcae', 8, 14);
+groundTex('court', '#c8703c', 9, 0);
+groundTex('runway', '#5a5e64', 10, 4);
+
+// 물 + 물가
+{
+  const im = new Img(64, 64), rnd = rng(19);
+  im.rect(0, 0, 64, 64, '#3a7ac0');
+  for (let i = 0; i < 12; i++) { const x = Math.floor(rnd() * 56), y = Math.floor(rnd() * 60); im.rect(x, y, 8, 3, '#3472b8'); }
+  for (let i = 0; i < 40; i++) { const x = Math.floor(rnd() * 58), y = Math.floor(rnd() * 63), w = 3 + Math.floor(rnd() * 3); im.rect(x, y, w, 1, i % 3 ? '#6aa8e0' : '#5a9ad8'); if (i % 5 === 0) im.rect(x + 1, y - 1 < 0 ? 0 : y - 1, 2, 1, '#b4d8f4'); }
+  add('water', im);
+  let e = new Img(16, 16);
+  e.rect(0, 0, 16, 1, '#1e4a80'); e.rect(0, 1, 16, 1, '#2c62a4');
+  for (const x of [1, 2, 3, 7, 8, 12, 13, 14]) e.px(x, 2, '#cfe6f6');
+  for (const d of ['n', 'e', 's', 'w']) { add(`shore_${d}`, e); e = rot90(e); }
+  const p = canvas();
+  p.R(0, 0, 16, 16, '#a07850');
+  for (let i = 0; i < 4; i++) { p.R(0, i * 4, 16, 1, '#bc9064'); p.R(0, i * 4 + 3, 16, 1, '#74522f'); p.R((i * 5 + 3) % 13 + 1, i * 4 + 1, 1, 2, '#74522f'); p.R((i * 7 + 9) % 13 + 1, i * 4 + 1, 3, 1, '#8c6842'); }
+  add('pier', p.im);
+}
+
+// 꽃 (두 가지 배치)
+for (const [k, off] of [['a', 0], ['b', 2]]) {
+  const c = canvas(), cols = ['#f25a7a', '#f2d24a', '#ffffff', '#c47af2'];
+  for (let i = 0; i < 3; i++) {
+    const fx = 2 + i * 5, fy = 3 + ((i * 7 + off * 3) % 8), col = cols[(i + off) % cols.length];
+    c.R(fx + 1, fy + 2, 1, 4, '#2f7a3c'); c.R(fx, fy + 4, 1, 1, '#4da858');
+    c.R(fx, fy, 3, 3, '#2a1c2a'); c.R(fx + 1, fy - 1, 1, 5, '#2a1c2a'); c.R(fx - 1, fy + 1, 5, 1, '#2a1c2a');
+    c.R(fx, fy, 3, 3, col); c.R(fx, fy, 1, 1, tone(col, 40)); c.R(fx + 1, fy + 1, 1, 1, '#f0b030');
+  }
+  add(`flower_${k}`, c.im);
+}
+
+// 울타리: 가로대 · 세로대 · 기둥을 겹쳐 쓴다
+{
+  const m = '#9aa0aa', hi = '#c8ced8', lo = '#5c626c', OUT = '#22262e';
+  let c = canvas();
+  for (const ry of [5, 10]) { c.R(0, ry - 1, 16, 3, OUT); c.R(0, ry, 16, 1, hi); }
+  for (let x = 0; x < 16; x += 2) for (let y = 6; y < 10; y++) if ((x / 2 + y) % 2) c.R(x, y, 1, 1, '#5a606c66');
+  c.R(0, 12, 16, 1, '#1e141e30');
+  add('fence_rails', c.im);
+  c = canvas(); c.R(6, 0, 4, 16, OUT); c.R(7, 0, 2, 16, m); c.R(7, 0, 1, 16, hi);
+  add('fence_vbar', c.im);
+  c = canvas(); c.box(6, 2, 4, 13, m, OUT); c.R(7, 3, 1, 11, hi); c.R(8, 12, 1, 2, lo); c.R(6, 1, 4, 1, OUT); c.R(7, 1, 2, 1, hi);
+  addObj('fence_post', c);
+}
+
+// 사격 표적 · 모래주머니
+{
+  let c = canvas(1);
+  c.R(4, 15, 9, 1, '#1e141e38'); c.box(7, 9, 2, 6, '#7a5230', '#3a2412');
+  c.rows(8, -1, [4, 8, 10, 12, 12, 12, 12, 10, 8, 4], '#22262e'); c.rows(8, 0, [6, 8, 10, 10, 10, 10, 8, 6], '#f4f2ea');
+  c.rows(8, 1, [6, 8, 8, 8, 8, 6], '#d03a3a'); c.rows(8, 2, [4, 4, 4, 4], '#f4f2ea'); c.R(7, 3, 2, 2, '#d03a3a'); c.R(5, 1, 2, 1, '#ffffff');
+  add('target', c.im, 0, -1);
+  c = canvas();
+  c.R(1, 15, 15, 1, '#1e141e38');
+  for (let i = 0; i < 3; i++) for (const k of i % 2 ? [0, 1, 2] : [0, 1]) {
+    const xx = k * 8 - (i % 2 ? 4 : 0), by = 1 + i * 5, cx = Math.max(0, xx), cw = Math.min(16, xx + 8) - cx;
+    c.R(cx, by, cw, 5, '#5c5032');
+    const ix = cx + (xx >= 0 ? 1 : 0), iw = cw - (xx >= 0 ? 1 : 0) - (xx + 8 <= 16 ? 1 : 0);
+    c.R(ix, by + 1, iw, 3, '#c4b47e'); c.R(ix, by + 1, iw, 1, '#dccf9c'); c.R(ix, by + 3, iw, 1, '#a89868');
+    if (iw > 4) c.R(ix + Math.floor(iw / 2), by + 2, 1, 1, '#a89868');
+  }
+  add('sandbag', c.im);
+}
+
+// 초소 · 격납고 (이어 붙는 덩어리, 이름 뒤 숫자는 상판 가구와 같은 규칙)
+for (let mask = 0; mask < 16; mask++) {
+  const L = mask & 1, Rt = mask & 2, U = mask & 4, D = mask & 8, OUT = '#181c14';
+  let c = canvas();
+  c.R(0, 0, 16, 16, '#7a8a6a'); c.R(0, 0, 16, 1, '#8a9a7a');
+  if (U) { c.R(0, 0, 16, 5, '#56684c'); c.R(0, 0, 16, 1, OUT); c.R(0, 1, 16, 1, '#72866a'); c.R(0, 4, 16, 1, '#3e4c36'); c.R(0, 5, 16, 1, OUT); }
+  if (D) { c.R(0, 12, 16, 3, '#5f6f52'); c.R(0, 12, 16, 1, '#4a5840'); c.R(0, 15, 16, 1, OUT); }
+  if (!U || D) { c.box(3, U ? 7 : 2, 10, 5, '#a8c8e8', '#2a3424'); c.R(4, U ? 8 : 3, 4, 1, '#e4f2ff'); c.R(8, U ? 7 : 2, 1, 5, '#2a3424'); }
+  if (L) c.R(0, 0, 1, 16, OUT);
+  if (Rt) c.R(15, 0, 1, 16, OUT);
+  addObj(`booth_${mask}`, c);
+  c = canvas();
+  c.R(0, 0, 16, 16, '#8a929a');
+  for (let i = 0; i < 4; i++) { c.R(0, i * 4, 16, 1, '#aab2ba'); c.R(0, i * 4 + 3, 16, 1, '#6e767e'); }
+  if (U) { c.R(0, 0, 16, 1, OUT); c.R(0, 1, 16, 2, '#c4ccd4'); }
+  if (D) { c.R(0, 12, 16, 3, '#565e66'); c.R(0, 12, 16, 1, '#3e454c'); c.R(0, 15, 16, 1, OUT); }
+  if (L) { c.R(0, 0, 1, 16, OUT); c.R(1, U ? 3 : 0, 1, D ? 9 : 16, '#aab2ba'); }
+  if (Rt) { c.R(15, 0, 1, 16, OUT); c.R(14, U ? 3 : 0, 1, D ? 9 : 16, '#6e767e'); }
+  addObj(`hangar_${mask}`, c);
+  // 흙을 덮은 탄약고 벙커
+  c = canvas();
+  c.R(0, 0, 16, 16, '#6a7a52');
+  c.R(3 + (mask % 4) * 2, 3, 4, 1, '#869a6c'); c.R(5 + (mask % 3) * 2, 8, 3, 1, '#536442'); c.R(1 + (mask % 5) * 2, 6, 2, 1, '#869a6c');
+  if (U) { c.R(0, 0, 16, 1, OUT); c.R(0, 1, 16, 1, '#8ea274'); }
+  if (L) { c.R(0, 0, 1, 16, OUT); c.R(1, 1, 1, 14, '#7c8e62'); }
+  if (Rt) { c.R(15, 0, 1, 16, OUT); c.R(14, 1, 1, 14, '#56664a'); }
+  if (D) { c.R(0, 11, 16, 4, '#8a8e7a'); c.R(0, 11, 16, 1, '#aaae9a'); c.R(0, 14, 16, 1, '#6a6e5c'); c.R(0, 15, 16, 1, OUT); }
+  addObj(`bunker_${mask}`, c);
+}
+{
+  // 벙커 철문 (늘 조금 열려 있다)
+  const c = canvas();
+  c.box(2, 2, 12, 13, '#4a5058', '#14161a'); c.R(3, 3, 10, 1, '#70777f'); c.R(3, 4, 1, 10, '#5c636b'); c.R(7, 3, 1, 11, '#2e3238'); c.R(8, 4, 1, 10, '#0c0c10');
+  c.box(3, 0, 10, 3, '#e8c040', '#5c4a10'); c.R(5, 1, 6, 1, '#5c4a10'); c.R(10, 8, 2, 2, '#c4cad4'); c.R(4, 8, 1, 1, '#8f98a2'); c.R(4, 12, 1, 1, '#8f98a2');
+  add('bunker_door', c.im);
+}
+
+// 농구 골대 · 돌탑 · 분리수거함
+for (const top of [1, 0]) {
+  const c = canvas();
+  c.R(7, top ? 0 : 8, 2, 8, '#5a5a62'); c.R(7, top ? 0 : 8, 1, 8, '#9a9aa2');
+  c.box(2, 4, 12, 8, '#ffffff', '#2a2a34'); c.R(3, 5, 10, 1, '#f4f6fa'); c.box(5, 6, 6, 4, '#ffffff', '#d04a2a');
+  c.R(5, top ? 12 : 3, 6, 1, '#f08838'); c.R(6, top ? 13 : 2, 4, 1, '#e8e8f0'); c.R(7, top ? 14 : 1, 2, 1, '#c8c8d4');
+  addObj(top ? 'hoop_top' : 'hoop_bot', c);
+}
+{
+  const stone = '#8a8a90', dark = '#5e5e66', hi = '#b4b4bc', moss = '#5a7a3e', OUT = '#22222a';
+  let c = canvas();
+  c.box(4, 10, 8, 6, stone, OUT); c.R(5, 11, 3, 1, hi); c.R(9, 13, 2, 1, moss); c.R(10, 11, 1, 4, dark);
+  c.box(5, 5, 6, 5, '#84848a', OUT); c.R(6, 6, 2, 1, hi); c.R(9, 6, 1, 3, dark);
+  c.box(6, 0, 4, 5, '#6e6a78', OUT); c.R(8, 1, 1, 3, '#8a5ab8'); c.R(7, 2, 1, 1, '#b48ae0');
+  add('cairn_top', c.im);
+  c = canvas();
+  c.R(1, 14, 14, 2, '#1e141e38');
+  c.box(1, 7, 14, 8, dark, OUT); c.R(2, 8, 5, 1, stone); c.R(9, 9, 4, 1, stone);
+  c.box(2, 0, 12, 7, stone, OUT); c.R(3, 1, 4, 1, hi); c.R(10, 2, 2, 1, hi); c.R(12, 1, 1, 5, dark);
+  c.R(1, 12, 3, 2, moss); c.R(11, 5, 3, 2, moss); c.R(6, 13, 2, 1, moss); c.R(2, 12, 1, 1, '#7a9a58');
+  c.R(5, 3, 1, 1, dark); c.R(9, 11, 1, 1, '#3e3e46');
+  add('cairn_bot', c.im);
+}
+['#3a8a3a', '#e0b030', '#3a6ac8', '#8a8a8a', '#c87a3a', '#6a4a2a'].forEach((col, i) => {
+  const c = canvas(), OUT = tone(col, -90);
+  c.box(2, 3, 12, 12, col, OUT); c.R(3, 4, 1, 10, tone(col, 34)); c.R(12, 4, 1, 10, tone(col, -34)); c.R(3, 12, 10, 2, tone(col, -34));
+  c.box(1, 1, 14, 4, tone(col, 26), OUT); c.R(2, 2, 12, 1, tone(col, 60)); c.R(6, 0, 4, 1, OUT);
+  c.box(5, 7, 6, 4, '#f4f2ea', tone(col, -60)); c.R(6, 8, 4, 1, tone(col, -20));
+  c.R(3, 14, 2, 1, '#17191d'); c.R(11, 14, 2, 1, '#17191d');
+  addObj(`bin_${i}`, c);
+});
+
+// ───────────── 건물 외관: 지붕(색 셋) · 처마 · 눈 · 정면 벽 · 창 · 현관문 ─────────────
+for (const [k, col] of [['green', '#5a7a4a'], ['red', '#a0503a'], ['orange', '#c08a3a']]) {
+  const r = new Img(16, 16);
+  r.rect(0, 0, 16, 16, col);
+  for (const [y0, xs] of [[0, [3, 11]], [8, [7, 15]]]) {
+    r.rect(0, y0, 16, 1, tone(col, 16)); r.rect(0, y0 + 7, 16, 1, tone(col, -30)); r.rect(0, y0 + 6, 16, 1, tone(col, -10));
+    for (const x of xs) { r.rect(x, y0 + 1, 1, 6, tone(col, -20)); r.px((x + 1) % 16, y0 + 1, tone(col, 26)); }
+  }
+  add(`roof_${k}`, r);
+  const e = new Img(16, 5);
+  e.rect(0, 0, 16, 1, tone(col, -70)); e.rect(0, 1, 16, 2, tone(col, -46)); e.rect(0, 3, 16, 1, tone(col, -60)); e.rect(0, 4, 16, 1, '#181018');
+  add(`eave_${k}`, e);
+}
+{
+  const s = new Img(16, 16);
+  s.rect(0, 0, 16, 16, '#f8fbff');
+  for (const [x, y] of [[3, 4], [9, 2], [12, 9], [5, 11], [1, 13], [14, 5]]) s.rect(x, y, 2, 1, '#e0eaf4');
+  add('roof_snow', s);
+  const d = new Img(16, 4);
+  [3, 2, 1, 2, 3, 4, 3, 2, 1, 1, 2, 3, 4, 3, 2, 2].forEach((h, x) => { d.rect(x, 0, 1, h, '#f8fbff'); d.px(x, h - 1, '#d0deec'); });
+  add('roof_snow_edge', d);
+
+  const wall = (win) => {
+    const f = new Img(16, 32);
+    f.rect(0, 0, 16, 32, '#ece2c8');
+    for (const [x, y] of [[3, 6], [11, 9], [6, 18], [13, 20], [2, 14]]) f.px(x, y, '#ddd2b6');
+    f.rect(0, 2, 16, 2, '#00000022');
+    f.rect(0, 23, 16, 1, '#56684c'); f.rect(0, 24, 16, 5, '#7d9070'); f.rect(0, 24, 16, 1, '#96aa88'); f.rect(0, 28, 16, 1, '#6c8060');
+    f.rect(0, 29, 16, 2, '#5c564e'); f.rect(0, 29, 16, 1, '#7a7268'); f.rect(0, 31, 16, 1, '#181018');
+    if (win) {
+      f.rect(2, 5, 12, 11, '#2a2230'); f.rect(3, 6, 10, 9, '#6a9cc8'); f.rect(3, 6, 10, 3, '#a8d0f0'); f.rect(4, 7, 3, 1, '#e8f6ff'); f.rect(3, 12, 10, 3, '#5a8ab8');
+      f.rect(8, 6, 1, 9, '#f4f2ea'); f.rect(3, 10, 10, 1, '#f4f2ea');
+      f.rect(1, 15, 14, 1, '#d6dde5'); f.rect(1, 16, 14, 1, '#2a2230'); f.rect(2, 17, 12, 1, '#00000022');
+    }
+    return f;
+  };
+  add('facade', wall(false)); add('facade_win', wall(true));
+
+  const leaf = (left) => {
+    const im = new Img(16, 26);
+    im.rect(0, 0, 16, 26, '#2e2018');
+    const x0 = left ? 2 : 0, x1 = left ? 15 : 13;
+    im.rect(left ? 1 : 0, 1, left ? 15 : 15, 24, '#6e4826');
+    im.rect(x0, 2, x1 - x0 + 1, 23, '#a9733f'); im.rect(x0, 2, x1 - x0 + 1, 1, '#cf9a62'); im.rect(x0, 3, 1, 22, '#c08a52'); im.rect(x1, 3, 1, 22, '#8a5a30');
+    im.rect(x0 + 2, 4, x1 - x0 - 3, 8, '#5a3a20'); im.rect(x0 + 3, 5, x1 - x0 - 5, 6, '#86bcd8'); im.rect(x0 + 3, 5, x1 - x0 - 5, 2, '#c6e8f4');
+    im.rect(x0 + 2, 15, x1 - x0 - 3, 8, '#b27c46'); im.rect(x0 + 2, 15, x1 - x0 - 3, 1, '#8a5a30'); im.rect(x0 + 2, 15, 1, 8, '#8a5a30'); im.rect(x0 + 2, 22, x1 - x0 - 3, 1, '#c08a52');
+    const hx = left ? x1 - 1 : x0 + 1;
+    im.rect(hx, 13, 1, 2, '#f6e08a'); im.px(hx, 14, '#a8842c');
+    im.rect(left ? 15 : 0, 2, 1, 23, '#4a301c');
+    im.rect(0, 25, 16, 1, '#8a8478');
+    return im;
+  };
+  add('bdoor_l', leaf(true)); add('bdoor_r', leaf(false));
+}
 
 // ───────────── 아틀라스로 묶기 ─────────────
 const ATLAS_W = 256;

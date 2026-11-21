@@ -1,12 +1,13 @@
 /**
- * 타일셋(그림 파일) 방식 맵 렌더러 — 시제품, 실내 맵 전체를 지원한다 (야외는 기존 방식).
+ * 타일셋(그림 파일) 방식 맵 렌더러 — 시제품, 실내·야외 맵 전체를 지원한다.
  *
  * 맵 데이터(T 격자 · 문 · 스팟 · 충돌)는 map.ts 그대로 두고 "그리는 부분"만 바꾼다.
  * 그림은 public/tiles/barracks.png 한 장(16px 격자 원본 도트)에 모여 있고,
  * 조각 위치는 data/tilesets/barracks.json에 있다 (둘 다 `npm run tiles`로 만든다).
  */
 import manifest from '../data/tilesets/barracks.json';
-import { T, TILE, drawDoorSigns, type GameMap, type MapId } from './map';
+import type { Season } from '../types';
+import { T, TILE, drawDoorSigns, drawOutdoorExtras, type GameMap, type MapId } from './map';
 
 type SpriteName = keyof typeof manifest.sprites;
 const SPR = manifest.sprites as Record<SpriteName, { x: number; y: number; w: number; h: number; ox: number; oy: number }>;
@@ -30,6 +31,27 @@ const SUPPORTED = new Set<T>([
   T.DESK, T.TABLE, T.COUNTER, T.PC, T.SHELF, T.PLANT, T.STAIRS, T.SOFA,
   T.COOLER, T.WASHER, T.TOILET, T.SINK, T.STOVE, T.CRATE, T.FOODCART, T.GYM,
 ]);
+
+/** 야외 맵에 나오는 타일 종류 */
+const OUTDOOR = new Set<T>([
+  T.GRASS, T.ROAD, T.SAND, T.TREE, T.FENCE, T.WATER, T.PIER, T.RUNWAY, T.TARGET, T.SANDBAG, T.SHIP, T.BOOTH, T.STAGE,
+  T.DIRT, T.FLOWER, T.HANGAR, T.ROOF, T.DOOR, T.COURT, T.HOOP, T.BIN, T.AMMO, T.CAIRN, T.GYM,
+]);
+type Ground = 'grass' | 'road' | 'sand' | 'dirt' | 'court' | 'water' | 'pier' | 'runway';
+/** 그 타일 밑에 깔리는 땅 */
+function groundOf(t: T | undefined): Ground {
+  switch (t) {
+    case T.ROAD: case T.BIN: case T.BOOTH: case T.HANGAR: case T.DOOR: case T.ROOF: return 'road';
+    case T.SAND: case T.STAGE: return 'sand';
+    case T.DIRT: case T.TARGET: case T.SANDBAG: case T.AMMO: case T.GYM: return 'dirt';
+    case T.COURT: case T.HOOP: return 'court';
+    case T.WATER: case T.SHIP: return 'water';
+    case T.PIER: return 'pier';
+    case T.RUNWAY: return 'runway';
+    default: return 'grass';
+  }
+}
+const ROOF_KIND: Record<string, string> = { '#5a7a4a': 'green', '#a0503a': 'red', '#c08a3a': 'orange' };
 
 /** 맵별 바닥 무늬와 색조 (같은 무늬도 방마다 살짝 다른 빛깔로) */
 const FLOORS: Partial<Record<MapId, { spr: SpriteName; tint?: string }>> = {
@@ -69,8 +91,9 @@ const isTopDoor = (map: GameMap, x: number, y: number) => at(map, x, y) === T.DO
 
 /** 타일셋으로 그릴 수 있는 맵인가 (모르는 타일이 하나라도 있으면 기존 방식으로 그린다) */
 export function supportsTileset(map: GameMap): boolean {
-  if (!map.indoor || !FLOORS[map.id]) return false;
-  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) if (!SUPPORTED.has(map.tiles[y][x])) return false;
+  if (map.indoor && !FLOORS[map.id]) return false;
+  const ok = map.indoor ? SUPPORTED : OUTDOOR;
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) if (!ok.has(map.tiles[y][x])) return false;
   return true;
 }
 
@@ -80,7 +103,7 @@ function hash(x: number, y: number) {
   return ((h ^ (h >> 16)) >>> 0) / 4294967295;
 }
 
-export function renderTilesetMap(map: GameMap, atlas: HTMLImageElement): HTMLCanvasElement {
+export function renderTilesetMap(map: GameMap, atlas: HTMLImageElement, season: Season): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = map.w * TILE;
   c.height = map.h * TILE;
@@ -100,6 +123,13 @@ export function renderTilesetMap(map: GameMap, atlas: HTMLImageElement): HTMLCan
     g.fillStyle = `rgba(48,28,30,${a})`;
     g.fillRect((tx * CELL + x) * S, (ty * CELL + y) * S, w * S, h * S);
   };
+
+  if (!map.indoor) {
+    renderOutdoor(map, atlas, season, g, put);
+    drawOutdoorExtras(g, map);
+    drawDoorSigns(g, map);
+    return c;
+  }
 
   // ── 1) 바닥 · 벽 · 문 ──
   const fl = FLOORS[map.id] ?? { spr: 'floor' as SpriteName };
@@ -208,4 +238,149 @@ export function renderTilesetMap(map: GameMap, atlas: HTMLImageElement): HTMLCan
 
   drawDoorSigns(g, map);
   return c;
+}
+
+/** 야외: 계절별 땅 → 경계(풀 번짐 · 물가 · 경기장 선) → 나무 · 시설 → 건물 외관 */
+function renderOutdoor(
+  map: GameMap, atlas: HTMLImageElement, season: Season, g: CanvasRenderingContext2D,
+  put: (name: string, tx: number, ty: number) => void,
+) {
+  const S = TILE / CELL;
+  const winter = season === 'winter';
+  /** 원본 픽셀 좌표로 사각형 · 조각을 그린다 */
+  const nr = (x: number, y: number, w: number, h: number, col: string) => { g.fillStyle = col; g.fillRect(x * S, y * S, w * S, h * S); };
+  const blit = (name: string, nx: number, ny: number) => {
+    const s = SPR[name as SpriteName];
+    if (s) g.drawImage(atlas, s.x, s.y, s.w, s.h, nx * S, ny * S, s.w * S, s.h * S);
+  };
+  const gr = (x: number, y: number) => groundOf(at(map, x, y));
+  const inMap = (x: number, y: number) => x >= 0 && y >= 0 && x < map.w && y < map.h;
+  const texOf = (k: Ground): string =>
+    k === 'grass' ? `grass_${season}` : k === 'road' || k === 'sand' || k === 'dirt' ? (winter ? `${k}_winter` : k) : k;
+  /** 같은 땅이 세로로 이어진 범위 */
+  const runOf = (x: number, y: number, k: Ground): [number, number] => {
+    let a = y, b = y;
+    while (inMap(x, a - 1) && gr(x, a - 1) === k) a--;
+    while (inMap(x, b + 1) && gr(x, b + 1) === k) b++;
+    return [a, b];
+  };
+  const DIRS: [string, number, number][] = [['n', 0, -1], ['e', 1, 0], ['s', 0, 1], ['w', -1, 0]];
+  const DIAG: [string, number, number][] = [['ne', 1, -1], ['se', 1, 1], ['sw', -1, 1], ['nw', -1, -1]];
+
+  // ── 1) 땅 ──
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+    const k = gr(x, y);
+    if (k === 'pier') put('pier', x, y);
+    else {
+      const s = SPR[texOf(k) as SpriteName], fw = s.w / CELL, fh = s.h / CELL;
+      g.drawImage(atlas, s.x + (x % fw) * CELL, s.y + (y % fh) * CELL, CELL, CELL, x * TILE, y * TILE, TILE, TILE);
+    }
+    const X = x * CELL, Y = y * CELL;
+    const is = (dx: number, dy: number, want: Ground) => inMap(x + dx, y + dy) && gr(x + dx, y + dy) === want;
+    if (k === 'road' || k === 'sand' || k === 'dirt') {
+      // 풀이 길 위로 번진다
+      for (const [d, dx, dy] of DIRS) if (is(dx, dy, 'grass')) put(`fringe_${season}_${d}`, x, y);
+      for (const [d, dx, dy] of DIAG) if (is(dx, dy, 'grass') && !is(dx, 0, 'grass') && !is(0, dy, 'grass')) put(`fringe_${season}_${d}`, x, y);
+    } else if (k === 'water') {
+      for (const [d, dx, dy] of DIRS) if (inMap(x + dx, y + dy) && gr(x + dx, y + dy) !== 'water' && gr(x + dx, y + dy) !== 'pier') put(`shore_${d}`, x, y);
+    } else if (k === 'pier') {
+      if (is(-1, 0, 'water')) nr(X, Y, 1, CELL, '#3a2412');
+      if (is(1, 0, 'water')) nr(X + 15, Y, 1, CELL, '#3a2412');
+      if (is(0, 1, 'water')) nr(X, Y + 15, CELL, 1, '#3a2412');
+    } else if (k === 'court') {
+      const line = '#f4ece0';
+      if (!is(-1, 0, 'court')) nr(X, Y, 1, CELL, line);
+      if (!is(1, 0, 'court')) nr(X + 15, Y, 1, CELL, line);
+      if (!is(0, -1, 'court')) nr(X, Y, CELL, 1, line);
+      if (!is(0, 1, 'court')) nr(X, Y + 15, CELL, 1, line);
+      const [a, b] = runOf(x, y, 'court');
+      if (y === Math.floor((a + b) / 2)) nr(X, Y + 7, CELL, 1, line);
+    } else if (k === 'runway') {
+      const [a, b] = runOf(x, y, 'runway');
+      if (y === a) nr(X, Y, CELL, 2, '#e8d24a');
+      if (y === b) nr(X, Y + 14, CELL, 2, '#e8d24a');
+      if (y === Math.floor((a + b) / 2) && x % 3 === 0) nr(X + 2, Y + 14, 12, 2, '#f2f2f2');
+    }
+  }
+
+  // ── 2) 건물 외관 (지붕 + 정면 벽 + 현관). 건물 앞에 선 나무가 벽을 가리도록 나무보다 먼저 그린다 ──
+  const OUT = '#181018';
+  for (const b of map.buildings) {
+    const X0 = b.x0 * CELL, Y0 = b.y0 * CELL, W = (b.x1 - b.x0 + 1) * CELL;
+    const facadeTop = (b.y1 - 1) * CELL, bottom = (b.y1 + 1) * CELL, roofBottom = facadeTop + 2;
+    nr(X0 + 3, Y0 + 4, W, bottom - Y0, 'rgba(0,0,0,0.18)');
+    // 정면 벽: 한 칸 건너 창
+    const isDoor = (x: number) => b.door.some(([dx]) => dx === x);
+    for (let x = b.x0; x <= b.x1; x++) blit(!isDoor(x) && x !== b.x0 && x !== b.x1 && (x - b.x0) % 2 === 1 ? 'facade_win' : 'facade', x * CELL, facadeTop);
+    nr(X0, facadeTop, 1, 32, OUT); nr(X0 + W - 1, facadeTop, 1, 32, OUT);
+    const dMin = Math.min(...b.door.map((d) => d[0]));
+    for (const [dx] of b.door) blit(dx === dMin ? 'bdoor_l' : 'bdoor_r', dx * CELL, facadeTop + 6);
+    // 지붕: 기와 무늬를 깔고 테두리 · 처마를 두른다
+    const kind = ROOF_KIND[b.roof] ?? 'green';
+    const rx = X0 - 2, rw = W + 4, rh = roofBottom - Y0;
+    g.save();
+    g.beginPath(); g.rect(rx * S, Y0 * S, rw * S, rh * S); g.clip();
+    for (let yy = Y0; yy < roofBottom; yy += CELL) for (let xx = rx; xx < rx + rw; xx += CELL) blit(`roof_${kind}`, xx, yy);
+    for (let xx = rx; xx < rx + rw; xx += CELL) blit(`eave_${kind}`, xx, roofBottom - 5);
+    if (winter) {
+      const sh = Math.min(13, Math.floor(rh * 0.4));
+      g.save();
+      g.beginPath(); g.rect(rx * S, Y0 * S, rw * S, (sh + 1) * S); g.clip();
+      for (let xx = rx; xx < rx + rw; xx += CELL) blit('roof_snow', xx, Y0);
+      g.restore();
+      for (let xx = rx; xx < rx + rw; xx += CELL) blit('roof_snow_edge', xx, Y0 + 1 + sh);
+    }
+    nr(rx, Y0, rw, 1, OUT); nr(rx, Y0, 1, rh, OUT); nr(rx + rw - 1, Y0, 1, rh, OUT);
+    g.restore();
+    // 현판
+    g.font = 'bold 15px "Galmuri11", sans-serif';
+    g.textAlign = 'center';
+    const tw = Math.ceil((g.measureText(b.name).width + 20) / (2 * S)) * 2;
+    const cx = X0 + W / 2, cy = Math.round((Y0 + roofBottom) / 2);
+    nr(cx - tw / 2, cy - 7, tw, 13, OUT);
+    nr(cx - tw / 2 + 1, cy - 6, tw - 2, 11, '#f8f4e4');
+    nr(cx - tw / 2 + 2, cy - 5, tw - 4, 9, '#3a5a40');
+    g.fillStyle = '#fff6dc'; g.fillText(b.name, cx * S, cy * S + 5);
+  }
+
+  // ── 3) 나무 · 시설 (위에서 아래로) ──
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+    const t = map.tiles[y][x];
+    const same = (dx: number, dy: number) => at(map, x + dx, y + dy) === t;
+    const mask = (same(-1, 0) ? 0 : 1) | (same(1, 0) ? 0 : 2) | (same(0, -1) ? 0 : 4) | (same(0, 1) ? 0 : 8);
+    const bunk = (dx: number, dy: number) => { const v = at(map, x + dx, y + dy); return v === T.AMMO || v === T.DOOR; };
+    switch (t) {
+      case T.TREE: put(`tree_${season}`, x, y); break;
+      case T.FLOWER: if (!winter) put((x + y) % 2 ? 'flower_a' : 'flower_b', x, y); break;
+      case T.FENCE:
+        if (at(map, x - 1, y) === T.FENCE || at(map, x + 1, y) === T.FENCE) put('fence_rails', x, y);
+        if (at(map, x, y - 1) === T.FENCE || at(map, x, y + 1) === T.FENCE) put('fence_vbar', x, y);
+        put('fence_post', x, y);
+        break;
+      case T.TARGET: put('target', x, y); break;
+      case T.SANDBAG: put('sandbag', x, y); break;
+      case T.STAGE: put(`stage_${mask}`, x, y); break;
+      case T.BOOTH: put(`booth_${mask}`, x, y); break;
+      case T.HANGAR: put(`hangar_${mask}`, x, y); break;
+      case T.HOOP: put(y === runOf(x, y, 'court')[0] ? 'hoop_top' : 'hoop_bot', x, y); break;
+      case T.CAIRN: put(same(0, 1) ? 'cairn_top' : 'cairn_bot', x, y); break;
+      case T.BIN: put(`bin_${x % 6}`, x, y); break;
+      case T.GYM: put('gym_bench', x, y); break;
+      case T.AMMO: {
+        const front = !bunk(0, 1);
+        put(`bunker_${(bunk(-1, 0) ? 0 : 1) | (bunk(1, 0) ? 0 : 2) | (same(0, -1) ? 0 : 4) | (front ? 8 : 0)}`, x, y);
+        if (front) {
+          let l = x, r = x;
+          while (bunk(l - x - 1, 0)) l--;
+          while (bunk(r - x + 1, 0)) r++;
+          if (x === Math.floor((l + r) / 2)) put('bunker_door', x, y);
+        }
+        break;
+      }
+      case T.DOOR:
+        // 탄약고 벙커의 철문 (건물 문은 건물 외관이 덮어 그린다)
+        if (at(map, x - 1, y) === T.AMMO || at(map, x + 1, y) === T.AMMO) { put('bunker_8', x, y); put('bunker_door', x, y); }
+        break;
+    }
+  }
 }

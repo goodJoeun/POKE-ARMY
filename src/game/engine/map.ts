@@ -1228,6 +1228,13 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
     g.fillStyle = '#fff6dc'; g.fillText(b.name, cx, cy + 5);
   }
 
+  drawOutdoorExtras(g, map);
+  drawDoorSigns(g, map);
+  return c;
+}
+
+/** 타일 격자에 안 맞는 야외 부속 그림 (함정 · 위병소 지붕 · 분리수거장 차양). 타일셋 렌더러(tileset.ts)도 같이 쓴다 */
+export function drawOutdoorExtras(g: CanvasRenderingContext2D, map: GameMap) {
   // 함정 (해군 부두)
   if (map.id === 'depot' && map.branch === 'navy') {
     const sx = 30 * TILE, sy = 13 * TILE, sw = 8 * TILE, sh = 11 * TILE;
@@ -1253,9 +1260,6 @@ export function renderMapCanvas(map: GameMap, season: Season): HTMLCanvasElement
     const kinds = ['일반', '플라', '캔', '유리', '종이', '음식'];
     for (let x = 4; x <= 15; x++) { g.fillStyle = '#ffffff'; g.fillText(kinds[x % kinds.length], (x + 0.5) * TILE, 5 * TILE + 22); }
   }
-
-  drawDoorSigns(g, map);
-  return c;
 }
 
 /** 문 · 계단 · 길 끝 안내판 ("행정반", "2층 ↑", "병영식당 →" 등). 타일셋 렌더러(tileset.ts)도 같이 쓴다 */

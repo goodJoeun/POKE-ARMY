@@ -115,7 +115,7 @@ export default function SettingsMenu() {
             <h4>화면 · 대사</h4>
             <ZoomRow />
             <div className="set-row">
-              <div><b>🧱 실내 타일셋 (시제품)</b><div className="hud-dim">건물 안을 그림 파일로 그립니다. 끄면 기존 화면</div></div>
+              <div><b>🧱 타일셋 그래픽 (시제품)</b><div className="hud-dim">부대 맵을 그림 파일로 그립니다. 끄면 기존 화면</div></div>
               <Segmented k="tilesetProto" options={ON_OFF} />
             </div>
             <div className="set-row">
