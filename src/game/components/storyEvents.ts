@@ -677,7 +677,8 @@ export function roofOptions(ctx: StoryCtx): MenuOption[] {
   const ev = eveningNow();
   const withBuddy = (then: () => void) => { if (npcPresent('buddy', s.day)) ctx.place('buddy', 'hq2', 21.5, 1.5, 'up'); then(); };
   if (isOpen('D-02')) opts.push({ label: '🌌 동기와 별 보기 (추리 정리 2)', hint: ev ? '' : '19:00~21:20', disabled: !ev, onSelect: () => withBuddy(() => d02(ctx)) });
-  if (flag('m13') && !flag('buddyBack')) {
+  // (별에게 대답한 뒤에는 되돌릴 수 없다: 엔딩이 이미 정해졌다)
+  if (flag('m13') && !flag('buddyBack') && !flag('f01')) {
     const visited = ['m13_laundry', 'm13_cyber', 'm13_court'].filter(flag).length;
     opts.push({
       label: '💭 동기와 옥상에 오르기 (잊혀 가는 이름)', hint: visited < 3 ? `먼저 추억의 장소 ${visited}/3` : !freeNow() ? '점심·개인정비 시간' : '',
@@ -983,10 +984,54 @@ export function finalStar(ctx: StoryCtx) {
   const s = G();
   const sgJoin = sergeantJoins(s);
   const sgName = extrasForDay(s.branch, s.day).find((d) => d.id === 'room2a')?.name ?? '말 없는 병장';
-  const n = s.stars.length;
-  if (npcPresent('buddy', s.day)) ctx.place('buddy', 'outdoor', 19.5, 19.5, 'up');
+  const buddyHere = npcPresent('buddy', s.day);
+  // 🌙 동기가 끝내 이름을 되찾지 못했다면(M-13 미완): 품고 있던 일곱 번째 조각을, 왜 쥐고 있는지도 모른 채 건넨다.
+  //    조각은 일곱 개가 되지만 동기는 함께 돌아가지 못한다 → 노멀 엔딩으로 가는 길
+  const handover = buddyHere && !flag('buddyBack') && !s.stars.includes(7);
+  if (buddyHere) ctx.place('buddy', 'outdoor', 19.5, 19.5, 'up');
   if (sgJoin) ctx.place('x:room2a', 'outdoor', 21.5, 19.5, 'up');
   ctx.flash();
+  const ask = (done: boolean) => {
+    const cur = G();
+    const enough = cur.stars.length >= 7 && cur.memory > 0;
+    ctx.play({
+      bg: 'parade',
+      script: {
+        custom: jirachiSpeaker(true),
+        lines: [
+          narr(done ? '창문 너머로 입대 전날 밤의 내 방이 보인다. 책상 위에는 입영통지서가 그대로 놓여 있다.' : '창문은 끝내 채워지지 않았다. 빈자리 너머는 안개뿐이다.'),
+          say('npc', '소원을 거둘래? 돌아가면 넌 내일 아침, 진짜 훈련소에 가야 해.'),
+          say('npc', '여기 남으면, 다신 아무 데도 안 가도 돼.'),
+        ],
+        choices: [
+          { text: '"소원을 거둘게. …가기 싫었던 거 맞아. 그래도 내 발로 갈래."', grade: 'good', reply: [say('npc', enough ? '…응. 그 말 듣고 싶었어.' : '…미안. 그 마음이면 충분한데, 별빛이 모자라…')] },
+          { text: '"…여기 남을래."', grade: 'bad', reply: [say('npc', '…그래. 그럼 푹 자.')] },
+        ],
+      },
+      onChoice: (c) => {
+        const end: StoryEnding = storyEnding(G(), c.grade === 'good');
+        setFlag(`end_${end}`);
+        setFlag('f01');
+        G().log(end === 'true' ? '🌠 소원을 거뒀다. 함께.' : end === 'normal' ? '🌠 소원을 거뒀다. …혼자서.' : '🌠 별이 졌다.');
+      },
+      onDone: () => G().toast('🎖️ 이제 위병소 정문으로 가자. 전역이다.', 'info'),
+    });
+  };
+  /** 지라치가 조각을 세고, 첫날 밤의 창문을 내민다 (동기가 조각을 건넸다면 그 뒤에) */
+  const count = () => {
+    const n = G().stars.length;
+    ctx.play({
+      bg: 'parade',
+      script: {
+        custom: jirachiSpeaker(true),
+        lines: [
+          say('npc', n < 7 ? `별 조각… ${n}개. 조금 모자라네.` : handover ? '별 조각 일곱 개. …마지막 하나는 친구가 끝까지 쥐고 있었구나.' : '별 조각 일곱 개. 다 모았구나.'),
+          say('npc', '첫날 밤의 창문, 기억해? 가진 조각을 끼워 봐.'),
+        ],
+      },
+      onDone: () => ctx.puzzle('P-21', () => ask(true), () => ask(false)),
+    });
+  };
   ctx.play({
     bg: 'parade',
     script: {
@@ -994,32 +1039,16 @@ export function finalStar(ctx: StoryCtx) {
       lines: [
         narr('대낮인데 별 하나가 천천히 내려와, 구령대 위에 내려앉는다.'),
         narr(`${sgJoin ? josa(flag('buddyBack') ? buddyName() : '동기', '과', '와') + ' ' + sgName : flag('buddyBack') ? buddyName() : '동기'}도 말없이 곁에 섰다.`),
-        say('npc', n >= 7 ? '별 조각 일곱 개. 다 모았구나.' : `별 조각… ${n}개. 조금 모자라네.`),
-        say('npc', '첫날 밤의 창문, 기억해? 가진 조각을 끼워 봐.'),
+        ...(handover ? [
+          narr('동기가 꼭 쥐고 있던 주먹을 편다. 손바닥 위에, 작은 별 조각 하나.'),
+          say('buddy', '…저, 이거요. 왜 쥐고 있는지는 모르겠는데, 놓으면 안 될 것 같아서 계속 쥐고 있었습니다.'),
+          say('buddy', '그쪽 거 같습니다. 이유는 모르겠지만… 가져가십시오.'),
+          me('(…끝내 내 이름은 못 찾았구나.)'),
+          narr('조각을 받아 든다. 동기는 여전히, 처음 보는 사람을 보듯 나를 본다.'),
+        ] : []),
       ],
     },
-    onDone: () => { const ask = (done: boolean) => ctx.play({
-    bg: 'parade',
-    script: {
-      custom: jirachiSpeaker(true),
-      lines: [
-        narr(done ? '창문 너머로 입대 전날 밤의 내 방이 보인다. 책상 위에는 입영통지서가 그대로 놓여 있다.' : '창문은 끝내 채워지지 않았다. 빈자리 너머는 안개뿐이다.'),
-        say('npc', '소원을 거둘래? 돌아가면 넌 내일 아침, 진짜 훈련소에 가야 해.'),
-        say('npc', '여기 남으면, 다신 아무 데도 안 가도 돼.'),
-      ],
-      choices: [
-        { text: '"소원을 거둘게. …가기 싫었던 거 맞아. 그래도 내 발로 갈래."', grade: 'good', reply: [say('npc', n >= 7 && s.memory > 0 ? '…응. 그 말 듣고 싶었어.' : '…미안. 그 마음이면 충분한데, 별빛이 모자라…')] },
-        { text: '"…여기 남을래."', grade: 'bad', reply: [say('npc', '…그래. 그럼 푹 자.')] },
-      ],
-    },
-    onChoice: (c) => {
-      const end: StoryEnding = storyEnding(G(), c.grade === 'good');
-      setFlag(`end_${end}`);
-      setFlag('f01');
-      G().log(end === 'true' ? '🌠 소원을 거뒀다. 함께.' : end === 'normal' ? '🌠 소원을 거뒀다. …혼자서.' : '🌠 별이 졌다.');
-    },
-    onDone: () => G().toast('🎖️ 이제 위병소 정문으로 가자. 전역이다.', 'info'),
-    }); ctx.puzzle('P-21', () => ask(true), () => ask(false)); },
+    onDone: () => { if (handover) G().gainStar(7); count(); },
   });
 }
 
