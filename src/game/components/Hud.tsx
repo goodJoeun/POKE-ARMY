@@ -6,6 +6,7 @@ import { useSettings } from '../state/settings';
 import { BRANCHES, RANKS, SEASON_LABEL, TOTAL_DAYS, fmtTime, rankIdxForDay, seasonForDay, serviceMonth } from '../data/branches';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
 import { errandNow } from '../data/errands';
+import { soloWalk } from '../data/wanders';
 
 export function RankBadge({ rankIdx, size = 22 }: { rankIdx: number; size?: number }) {
   return (
@@ -54,7 +55,7 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome }: { onNoteboo
     else if (ev.kind === 'patrol' && s.patrol) objective = `🔦 야간 순찰 ${s.patrol.done.length}/6 — 막사 1·2층 복도·세탁실·화장실 점검 후 지휘통제실 보고 (23:00까지)`;
     else if (pending && ev.spot && freeTime)
       objective = s.solo
-        ? `🔎 혼자 실마리 찾기 — ${spotLabel(s.branch, s.solo as Parameters<typeof spotLabel>[1])} 살펴보기 (❗ 표시) · 그 뒤 ${fmtTime(ev.start)} ${ev.label}`
+        ? `${soloWalk(s) ? '🚶 혼자 걷기' : '🔎 혼자 실마리 찾기'} — ${spotLabel(s.branch, s.solo as Parameters<typeof spotLabel>[1])} 살펴보기 (❗ 표시) · 그 뒤 ${fmtTime(ev.start)} ${ev.label}`
         : `🕊️ 자유 시간 — 준비되면 ${spotLabel(s.branch, ev.spot)}에서 ${fmtTime(ev.start)} ${ev.label} 시작 (E)`;
     else if (pending && ev.spot)
       objective = `📍 ${ev.label} → ${spotLabel(s.branch, ev.spot)} (도착하면 ${fmtTime(ev.start)} 시작)`;

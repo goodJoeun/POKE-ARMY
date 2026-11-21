@@ -88,6 +88,7 @@ import TouchPad from "./TouchPad";
 import { ResistMeter, StoryBackdrop } from "./StoryBackdrop";
 import PuzzleBox from "./PuzzleBox";
 import { CANDY_SPOTS, PUZZLES, QUICK_LEVELS, QUICK_SPOTS, nextQuickSpot } from "../data/puzzles";
+import { WANDER_MEMORY, WANDER_MINUTES, nextWander, quickOpenAt, wanderAt } from "../data/wanders";
 import { WATCH_EXTRA, nightScene, workScene } from "../data/workScenes";
 import { breakfastTalk, mealTalk } from "../data/mealTalks";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
@@ -909,8 +910,35 @@ export default function World() {
   /** 🔎 혼자만의 탐색: 살펴보러 온 자리에서 눈에 걸리던 것을 들여다본다 → 그 자리의 퍼즐 → 풀면 한 걸음 나아간 느낌 */
   const soloRef = useRef<(spot: string) => void>(() => {});
   soloRef.current = (spot) => {
+    const st0 = useGame.getState();
     const q = QUICK_SPOTS[spot];
     const def = q ? PUZZLES[q.puzzle] : undefined;
+    // 🚶 따져 볼 퍼즐이 없는 자리(다 풀었거나 아직 계급에 막힌 자리)라면: 혼자 걷다 마주치는 짧은 장면
+    if (!quickOpenAt(spot, st0.day, (id) => !!st0.puzzles[id]?.solved)) {
+      const w = wanderAt(spot, st0.day, st0.flags);
+      const done = () => {
+        soloLead.spot = null;
+        useGame.setState({ solo: null });
+      };
+      if (!w) {
+        done();
+        return;
+      }
+      keys.current = {};
+      runtime.player.moving = false;
+      setOverlay({
+        type: "dialogue",
+        script: { lines: w.lines, choices: w.choices },
+        onDone: () => {
+          const s2 = useGame.getState();
+          s2.spend(WANDER_MINUTES);
+          s2.applyEffects({ memory: WANDER_MEMORY, flag: `walk_${w.id}` }, "혼자 걸은 길");
+          s2.log(`🚶 혼자 ${spotLabel(s2.branch, w.spot)}에 들렀다. 눈에 담아 둔 것이 하나 늘었다.`);
+          done();
+        },
+      });
+      return;
+    }
     if (!q || !def) return;
     const lv = QUICK_LEVELS[def.level ?? 1];
     keys.current = {};
@@ -1822,7 +1850,10 @@ export default function World() {
       if (er) return;
       // 🔎 혼자 살펴보러 가던 곳: 자유 시간이 끝났거나 그 퍼즐을 풀었으면 접는다
       const freeNow = orderWindow(st) && !(st.mealCheck && !st.mealCheck.done);
-      if (st.solo && (!freeNow || st.puzzles[QUICK_SPOTS[st.solo]?.puzzle ?? ""]?.solved)) {
+      if (
+        st.solo &&
+        (!freeNow || (st.puzzles[QUICK_SPOTS[st.solo]?.puzzle ?? ""]?.solved && !wanderAt(st.solo, st.day, st.flags)))
+      ) {
         soloLead.spot = null;
         useGame.setState({ solo: null });
       }
@@ -1845,7 +1876,10 @@ export default function World() {
         const win = st.minute < 15 * 60 ? "lunch" : "dinner";
         const sk = `solo_${win}`;
         if (st.daily.includes(sk)) return;
-        const spot = nextQuickSpot(rankIdxForDay(st.day), (id) => !!st.puzzles[id]?.solved);
+        const quickSpot = nextQuickSpot(rankIdxForDay(st.day), (id) => !!st.puzzles[id]?.solved);
+        // 따져 볼 퍼즐이 남지 않았으면(또는 아직 계급에 막혀 있으면) 혼자 부대를 걸으며 눈에 담아 둔다
+        const walk = quickSpot ? null : nextWander(st.day, st.flags);
+        const spot = quickSpot ?? walk?.spot ?? null;
         if (!spot) return;
         st.markDaily(sk);
         soloLead.key = `${st.day}-${win}`;
@@ -1870,15 +1904,32 @@ export default function World() {
                       ? "(…자유 시간이다. 가만히 있으면 오늘도 그냥 지나간다.)"
                       : "(개인정비 시간. 다들 편하게 쉰다. 편한 게 이상하다고 느끼는 건 나뿐인 것 같다.)",
               },
+              walk
+                ? {
+                    who: "me",
+                    text: "(지금 따져 볼 수 있는 건 다 따져 봤다. 그래도 가만히 앉아 있으면 하루가 흐려진다. 걷자. 걸으면서 하나라도 더 눈에 담아 두자.)",
+                  }
+                : {
+                    who: "me",
+                    text: "(누가 알려 주길 기다려서는 안 된다. 혼자서라도 이 부대의 실마리를 찾아봐야겠다. 작은 것부터, 눈에 걸리는 것부터.)",
+                  },
               {
                 who: "me",
-                text: "(누가 알려 주길 기다려서는 안 된다. 혼자서라도 이 부대의 실마리를 찾아봐야겠다. 작은 것부터, 눈에 걸리는 것부터.)",
+                text: walk
+                  ? `(…${place} 쪽으로 가 보자. 지나다니기만 했지, 제대로 본 적은 없다.)`
+                  : `(…${place} 쪽이 아까부터 마음에 걸린다. 가 보자.)`,
               },
-              { who: "me", text: `(…${place} 쪽이 아까부터 마음에 걸린다. 가 보자.)` },
             ],
           },
           onDone: () =>
-            useGame.getState().toast(`🔎 혼자 실마리 찾기 — ${place}에 가 보자. (❗ 표시를 따라가자)`, "info"),
+            useGame
+              .getState()
+              .toast(
+                walk
+                  ? `🚶 혼자 걷기 — ${place}에 가 보자. (❗ 표시를 따라가자)`
+                  : `🔎 혼자 실마리 찾기 — ${place}에 가 보자. (❗ 표시를 따라가자)`,
+                "info",
+              ),
         });
         return;
       }
