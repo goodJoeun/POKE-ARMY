@@ -598,7 +598,8 @@ export const useGame = create<Store>((set, get) => ({
     if (s.work) set({ work: null });
     const minute = Math.max(s.minute, ev.end);
     set({ minute, eventIdx: s.eventIdx + 1, eventBegun: false, rollcall: null, busy: false });
-    if (ev.kind === 'rollcall_am' && s.day < TOTAL_DAYS) get().toast('🍳 아침 식사와 청소를 마쳤다.', 'info');
+    // 내가 분대장인 날은 점호가 끝나면 분대를 인솔해 아침을 먹으러 간다 (World) → 여기서는 건너뛴 것으로 알리지 않는다
+    if (ev.kind === 'rollcall_am' && s.day < TOTAL_DAYS && currentSquadLeader(s.day) !== 'me') get().toast('🍳 아침 식사와 청소를 마쳤다.', 'info');
     const next = get().currentEvent();
     if (!next) {
       set({ scene: 'dayEnd' });
