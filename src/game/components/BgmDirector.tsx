@@ -7,7 +7,7 @@ import { dreamPending } from '../data/story';
 import { TOTAL_DAYS } from '../data/branches';
 import type { MapId } from '../engine/map';
 import {
-  audioLog, audioState, playBgm, playJingle, playSfx, rewindBgm, setAudioPaused, setBgmVolume, setSfxVolume, unlockAudio,
+  audioState, playBgm, playJingle, playSfx, rewindBgm, setAudioPaused, setBgmVolume, setSfxVolume, unlockAudio,
   type BgmId, type JingleId,
 } from '../engine/audio';
 
@@ -119,7 +119,7 @@ export default function BgmDirector() {
     });
 
     if (process.env.NODE_ENV === 'development') {
-      (window as unknown as Record<string, unknown>).__audio = { state: audioState, log: audioLog, pick: () => pickBgm(useGame.getState())[0] };
+      (window as unknown as Record<string, unknown>).__audio = { state: audioState, pick: () => pickBgm(useGame.getState())[0] };
     }
 
     return () => {

@@ -108,7 +108,6 @@ async function startBgm(id: BgmId, loop: boolean) {
   const offset = loop ? (resumeAt[id] ?? 0) % buf.duration : 0;
   src.start(t, offset);
   current = { id, src, gain, startedAt: t, offset, loop };
-  note(id);
   if (!loop) src.onended = () => { if (current?.src === src) current = null; };
 }
 
@@ -137,7 +136,6 @@ async function oneShot(id: string, bus: GainNode | null, vol = 1): Promise<numbe
   g.gain.value = vol;
   src.connect(g).connect(bus);
   src.start();
-  note(id);
   return buf.duration;
 }
 
@@ -173,15 +171,6 @@ export function setAudioPaused(paused: boolean) {
   if (paused && ctx.state === 'running') void ctx.suspend();
   else if (!paused && ctx.state === 'suspended') void ctx.resume();
 }
-
-/** 디버그: 최근에 울린 소리 (개발 모드에서 __audio.log()) */
-const played: { t: number; id: string }[] = [];
-function note(id: string) {
-  if (process.env.NODE_ENV !== 'development') return;
-  played.push({ t: Math.round(performance.now()), id });
-  if (played.length > 400) played.splice(0, played.length - 400);
-}
-export function audioLog() { return played; }
 
 /** 디버그: 지금 무슨 곡이 나오는지 */
 export function audioState() {
