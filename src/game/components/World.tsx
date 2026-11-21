@@ -88,7 +88,7 @@ import MapView from "./MapView";
 import TouchPad from "./TouchPad";
 import { ResistMeter, StoryBackdrop } from "./StoryBackdrop";
 import PuzzleBox from "./PuzzleBox";
-import { CANDY_SPOTS, QUICK_REWARD, QUICK_SPOTS } from "../data/puzzles";
+import { CANDY_SPOTS, PUZZLES, QUICK_LEVELS, QUICK_SPOTS } from "../data/puzzles";
 import { WATCH_EXTRA, nightScene, workScene } from "../data/workScenes";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
 import { SUSPICIONS, suspicionLeads } from "../data/suspicions";
@@ -4236,21 +4236,30 @@ export default function World() {
             });
           },
         });
-      // 🧩 짬짬이 퍼즐: 선택. 풀면 기억과 별사탕을 조금 얻고, 그 장소에서 사라진다
+      // 🧩 짬짬이 퍼즐: 선택. 풀면 기억과 별사탕을 얻고, 그 장소에서 사라진다.
+      // 난이도별로 놓여 있다: 쉬움은 처음부터, 보통은 일병부터, 어려움은 상병부터 (짬이 차야 선임들이 어려운 문제를 내준다)
       const quick = QUICK_SPOTS[id];
-      if (quick && st.clues.length > 0 && !st.puzzles[quick.puzzle]?.solved)
+      if (quick && st.clues.length > 0 && !st.puzzles[quick.puzzle]?.solved) {
+        const lv = QUICK_LEVELS[PUZZLES[quick.puzzle]?.level ?? 1];
+        const ranked = rankIdxForDay(st.day) >= lv.rank;
         opts.push({
           label: `🧩 ${quick.label}`,
-          hint: free ? "짬짬이 퍼즐" : mealFirst ? "🍚 먼저 분대와 식사" : "점심·개인정비 시간에",
-          disabled: !free,
+          hint: !ranked
+            ? `${lv.stars} ${lv.name} · 🔒 ${RANKS[lv.rank]}부터`
+            : free
+              ? `짬짬이 퍼즐 · ${lv.stars} ${lv.name}`
+              : mealFirst
+                ? "🍚 먼저 분대와 식사"
+                : "점심·개인정비 시간에",
+          disabled: !free || !ranked,
           onSelect: () =>
             setOverlay({
               type: "puzzle",
               id: quick.puzzle,
-              onSolved: () =>
-                useGame.getState().applyEffects(QUICK_REWARD, "짬짬이 퍼즐"),
+              onSolved: () => useGame.getState().applyEffects(lv.reward, "짬짬이 퍼즐"),
             }),
         });
+      }
       opts.push({ label: "닫기", onSelect: () => setOverlay(null) });
       setOverlay({ type: "menu", title, options: opts });
     },

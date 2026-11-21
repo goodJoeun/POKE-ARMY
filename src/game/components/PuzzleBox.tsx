@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGame } from '../state/store';
-import { NO_PROGRESS, checkPuzzle, puzzleDef, puzzleReward, type PuzzleAnswer } from '../data/puzzles';
+import { NO_PROGRESS, checkPuzzle, puzzleDef, puzzleReward, type PuzzleAnswer, QUICK_LEVELS } from '../data/puzzles';
 
 interface Props {
   id: string;
@@ -449,7 +449,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
       <div className="menu puzzle" role="dialog" aria-label={`퍼즐: ${def.title}`}>
         <div className="pz-head">
           <span className="menu-title">🧩 {def.title}</span>
-          <span className="pz-meta">{left !== null && !solved && !failed ? `⏳ ${left}초 · ` : ''}{def.id} · 🌟 기억 +{solved ? reward : nextReward}{def.id.startsWith('Q-') ? ' · 🍬 +1' : ''}</span>
+          <span className="pz-meta">{left !== null && !solved && !failed ? `⏳ ${left}초 · ` : ''}{def.level ? `${QUICK_LEVELS[def.level].stars} ${QUICK_LEVELS[def.level].name}` : def.id} · 🌟 기억 +{solved ? reward : nextReward}{def.level ? ` · 🍬 +${QUICK_LEVELS[def.level].reward.candy}` : ''}</span>
         </div>
         <div className="pz-main">
           {def.art === 'mirrorClock' && <MirrorClock />}
