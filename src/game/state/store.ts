@@ -517,7 +517,7 @@ export const useGame = create<Store>((set, get) => ({
     // 전입 첫날: 분대장에게 혼나고 → 화장실에서 세수(거울) → 내 발로 연병장에 뛰어간다 (도착하면 늦게 합류한 점호가 시작된다)
     const s = get();
     get().applyEffects({ discipline: -5, mental: -2, flag: 'wokeUp' }, '전입 첫날 늦잠');
-    get().log('😱 눈을 떠 보니 몸이 이상하다. 게다가 전입 첫날부터 늦잠…');
+    get().log('😱 눈을 떠 보니 눈앞에 포켓몬이 있었다. 게다가 전입하자마자 늦잠…');
     get().markSeen('sgt_first');
     set({ lateCount: s.lateCount + 1, minute: Math.max(s.minute, 6 * 60 + 25) });
   },

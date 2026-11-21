@@ -9,7 +9,6 @@ import { ITEMS } from '../data/items';
 import { buildSchedule } from '../data/schedule';
 import { fmtTime } from '../data/branches';
 import MonsterCanvas from './MonsterCanvas';
-import { selfHidden } from '../data/errands';
 import { npcCap } from '../engine/speakers';
 import { CLUES } from '../data/story';
 import { PUZZLES } from '../data/puzzles';
@@ -45,10 +44,10 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
         <div className="nb-body">
           {tab === 'me' && sp && (
             <div className="nb-me">
-              <MonsterCanvas look={sp.look} size={140} cap={selfHidden(s) ? null : b.cap} silhouette={selfHidden(s) ? '#23232e' : undefined} />
+              <MonsterCanvas look={sp.look} size={140} cap={b.cap} />
               <div>
                 <h3>{RANKS[rankIdxForDay(s.day)]} {s.name}</h3>
-                {selfHidden(s) ? <p><b>???</b> — 아직 내가 어떤 모습인지 모른다. 거울을 봐야겠다.</p> : <p><b>{sp.name}</b> ({sp.type} 타입) — {sp.desc}</p>}
+                <p><b>{sp.name}</b> ({sp.type} 타입) — {sp.desc}</p>
                 <p>성격: <b>{ARCHETYPE_INFO[s.archetype].name}</b> · {ARCHETYPE_INFO[s.archetype].perk}</p>
                 <p>소속: {b.name} {b.unit}</p>
                 <p>전역까지: D-{TOTAL_DAYS - s.day} (게임 내 {TOTAL_DAYS}일 = 실제 {b.months}개월)</p>

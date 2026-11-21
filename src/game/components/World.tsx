@@ -82,7 +82,7 @@ import Menu, { type MenuOption } from "./Menu";
 import Notice, { type NoticeInfo } from "./Notice";
 import Notebook from "./Notebook";
 import RollcallCeremony from "./RollcallCeremony";
-import { NIGHT_STAR_LINES, STORY_MISSIONS, missionState } from "../data/story";
+import { NIGHT_STAR_LINES, STORY_MISSIONS, missionReady, missionState } from "../data/story";
 import { QuestLog, QuestTracker } from "./QuestPanel";
 import MapView from "./MapView";
 import TouchPad from "./TouchPad";
@@ -92,7 +92,7 @@ import { CANDY_SPOTS, PUZZLES, QUICK_LEVELS, QUICK_SPOTS } from "../data/puzzles
 import { WATCH_EXTRA, nightScene, workScene } from "../data/workScenes";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
 import { SUSPICIONS, suspicionLeads } from "../data/suspicions";
-import { errandNow, mirrorPending, orderStage, reportStage, selfHidden } from "../data/errands";
+import { WAKE_TALK_AT, errandNow, mirrorPending, orderStage, reportStage, wakeTalkPending } from "../data/errands";
 import { MirrorReveal } from "./Scenes";
 import {
   SLIPPER_LOOK,
@@ -735,6 +735,9 @@ function hopToMess(
   return true;
 }
 /** 걷기 · 달리기 속도 (달리기는 지치지 않는다) */
+/** 🌅 아침: 내가 생활관을 나섰는지 (나서기 전에는 분대원들도 생활관에서 채비를 한다) */
+const morningOut = { day: 0, out: false };
+const leftRoomToday = (day: number) => morningOut.day === day && morningOut.out;
 /** 🌅 아침 점호 집합 대기 중인지 (점호가 시작되기 전) */
 function rollcallWaiting(st: ReturnType<typeof useGame.getState>): boolean {
   const ev = st.currentEvent();
@@ -819,12 +822,11 @@ export default function World() {
     mapCanvasRef.current = out;
   }, [world, season]);
 
-  // 1일차: 눈을 떠 보니 낯선 생활관, 몸이 이상하다 → 분대장에게 혼나고 "세수하고 와" → 화장실 거울에서 처음 내 모습을 본다 → 연병장으로
+  // 1일차: 눈을 뜨자 눈앞에 포켓몬(분대장)이 있다 → 놀라고 혼난 뒤 "세수하고 와" → 화장실 거울에서 내 모습을 확인 → 생활관으로 돌아와 맞선임의 한마디 → 연병장
   useEffect(() => {
     const st = useGame.getState();
     if (st.day !== 1 || st.flags.wokeUp) return;
     const sgt = "sgt" as NpcId;
-    const glimpse = findSpecies(st.speciesId)?.wake ?? "손이… 내 손이 아니다?!";
     // 대답을 고른 뒤: 넋이 나간 얼굴을 본 분대장이 세수부터 하고 오라고 한다
     const washOrder = () =>
       setOverlay({
@@ -833,8 +835,8 @@ export default function World() {
           npc: sgt,
           lines: [
             { who: "npc", text: "…그런데 너, 얼굴이 왜 그 모양이냐. 귀신이라도 본 얼굴인데." },
-            { who: "npc", text: "1층 화장실 가서 세수하고 정신 차리고 와. 3분 준다. 그리고 곧장 연병장으로 튀어나와!" },
-            { who: "me", text: "(화장실… 그래, 거울. 거울을 봐야겠어. 지금 내가 대체 어떻게 생긴 건지.)" },
+            { who: "npc", text: "1층 화장실 가서 세수하고 정신 차리고 와. 3분 준다. 아침 점호에 늦지 마라!" },
+            { who: "me", text: "(화장실… 그래, 거울. 방금 모포 밖으로 나온 내 손도 이상했다. 내가 지금 어떻게 생긴 건지 봐야겠어.)" },
             { who: "narr", text: "[조작] WASD/방향키로 이동 · 문 쪽으로 걸어가면 방을 나선다 · ❗ 표시를 따라 1층 화장실 세면대 앞에서 E" },
           ],
         },
@@ -845,25 +847,22 @@ export default function World() {
       script: {
         npc: sgt,
         lines: [
-          { who: "narr", text: "쾅! 생활관 문이 벌컥 열렸다. 기상나팔은 이미 끝난 지 오래였다." },
-          { who: "npc", text: "야!!! 신병!!! 지금 몇 시인 줄 알아?!" },
-          { who: "narr", text: "벌떡 일어나 모포를 걷었다. 그런데— 모포 밖으로 나온 것이, 내 몸이 아니다." },
-          { who: "narr", text: glimpse },
-          { who: "me", text: '"으, 으아아아아악?!?! 이게 뭐야!!! 내 손! 내 몸이!!!"' },
-          { who: "npc", text: "…뭐야, 왜 소리를 질러. 가위라도 눌렸나?" },
-          { who: "me", text: "(꿈이 아니야…? 그리고 눈앞의 저건… 포켓몬?! 포켓몬이 모자를 쓰고 나한테 소리를 지르고 있어?!)" },
-          { who: "npc", text: "전입 첫날부터 늦잠이냐? 다들 연병장에 집합해 있다!" },
+          { who: "narr", text: "눈을 떴다. 그리고 바로 눈앞에 — 커다란 얼굴이 나를 내려다보고 있다. 사람의 얼굴이 아니다." },
+          { who: "me", text: '"으, 으아아아아악?!?! 포, 포켓몬?!"' },
+          { who: "npc", text: "야!!! 신병!!! 눈 뜨자마자 선임 얼굴 보고 비명을 질러?! 지금 몇 시인 줄 알아?!" },
+          { who: "me", text: "(말을 한다. 포켓몬이 모자를 쓰고, 나한테 소리를 지르고 있다. 둘러보니… 침상마다 전부 포켓몬이다.)" },
+          { who: "npc", text: "전입 온 지 하루 만에 늦잠이냐? 다들 진작 일어나서 너만 보고 있다!" },
           { who: "me", text: "(…침착하자. 입대 전에 본 군대 유튜브만 수백 편이다. 「전입 신병 생존 가이드」에서 이럴 땐 분명…)" },
           { who: "npc", text: "뭘 멍하니 있어! 관등성명!" },
         ],
         choices: [
           {
-            text: '"{S}! 이병 {me}! 늦어서 죄송합니다! 바로 집합하겠습니다!"',
+            text: '"{S}! 이병 {me}! 늦어서 죄송합니다! 바로 준비하겠습니다!"',
             grade: "good",
             effects: { affinity: { sgt: 6 }, discipline: 2 },
             reply: [
               { who: "npc", text: "…목소리는 합격이다." },
-              { who: "me", text: "(휴… 몸은 이 모양이어도 유튜브에서 본 그대로다. 관등성명, 사과, 그리고 즉시 행동.)" },
+              { who: "me", text: "(휴… 눈앞에 뭐가 있든 유튜브에서 본 그대로다. 관등성명, 사과, 그리고 즉시 행동.)" },
             ],
             tip: '관등성명 = 계급 + 성명. 늦었을 땐 변명보다 "죄송합니다 + 바로 하겠습니다"가 먼저다.',
           },
@@ -897,6 +896,36 @@ export default function World() {
     });
   }, [setOverlay]);
 
+  /** 1일차: 세수하고 생활관으로 돌아오자, 기다리던 맞선임이 정신 차리라고 한마디 한다 → 연병장으로 */
+  const wakeTalkRef = useRef<() => void>(() => {});
+  wakeTalkRef.current = () => {
+    const p = runtime.player;
+    const sn = npcs.current.senior;
+    keys.current = {};
+    p.moving = false;
+    if (sn) {
+      p.dir = Math.abs(sn.x - p.x) > Math.abs(sn.y - p.y) ? (sn.x > p.x ? "right" : "left") : sn.y > p.y ? "down" : "up";
+      sn.dir = Math.abs(p.x - sn.x) > Math.abs(p.y - sn.y) ? (p.x > sn.x ? "right" : "left") : p.y > sn.y ? "down" : "up";
+    }
+    setOverlay({
+      type: "dialogue",
+      script: {
+        npc: "senior" as NpcId,
+        lines: [
+          { who: "npc", text: "어, 신병 왔냐. 세수는 하고 왔고?" },
+          { who: "npc", text: "어제 전입 와서 피곤한 건 알겠는데, 정신 차리자. 첫 점호부터 늦으면 분대 전체가 찍힌다." },
+          { who: "me", text: "(…어제 전입? 나는 어젯밤 내 방 침대에서 잠들었는데. 여기 사람들한테는 내가 어제 온 신병인 거다.)" },
+          { who: "npc", text: "뭘 그렇게 봐. 내 얼굴에 뭐 묻었냐? 분대장님은 먼저 나가셨다. 얼른 연병장으로 뛰어!" },
+        ],
+      },
+      onDone: () => {
+        const s2 = useGame.getState();
+        s2.applyEffects({ flag: "wakeTalk" }, undefined, true);
+        s2.toast("🏃 연병장으로! 아침 점호 집합이다. (화면 위 안내와 붉은 원을 따라가자)", "alert");
+      },
+    });
+  };
+
   /** 🚿 전입 첫날 화장실 세면대: 세수하고 고개를 들어, 거울 속의 내 모습을 처음 본다 */
   const mirrorScene = useCallback(() => {
     keys.current = {};
@@ -918,7 +947,7 @@ export default function World() {
             const s2 = useGame.getState();
             s2.applyEffects({ flag: "sawSelf" }, undefined, true);
             s2.log("🪞 화장실 거울에서 처음으로 내 모습을 봤다. 내가… 포켓몬?!");
-            s2.toast("🏃 분대장이 3분 준다고 했다. 연병장으로 뛰자! (화면 위 안내와 붉은 원을 따라가자)", "alert");
+            s2.toast("🏃 분대장이 3분 준다고 했다. 일단 1생활관으로 돌아가자. (화면 위 안내와 ❗ 표시를 따라가자)", "alert");
             s2.save();
           },
         }),
@@ -1717,12 +1746,14 @@ export default function World() {
         const o = ORDERS[id];
         const present = npcPresent(o.giver, st.day);
         const at = er.kind === "summon" ? orderStage(id, st.day) : reportStage(id, st.day);
-        // 그 사람은 제자리에 가서 기다린다 (내 눈앞에서 사라지지 않게, 나와 다른 곳에 있을 때 옮겨 둔다)
+        // 그 사람은 제자리로 가서 기다린다. 내 눈에 보이는 동안에는 걸어서 가고, 보이지 않을 때만 곧바로 가 있다 (메인 루프)
         const ge = npcs.current[o.giver];
-        if (present && (p.map === at.map || !ge || ge.map !== p.map))
+        if (present)
           waitAt.current = { key: o.giver, map: at.map, x: at.giver[0], y: at.giver[1], dir: at.giver[2] };
         if (p.map !== at.map) return;
         if (Math.hypot(p.x - at.giver[0], p.y - at.giver[1]) > 3.4) return;
+        // 그 사람이 아직 자리에 닿지 못했으면(걸어오는 중) 기다린다
+        if (present && ge && (ge.map !== at.map || Math.hypot(ge.x - at.giver[0], ge.y - at.giver[1]) > 1.2)) return;
         waitAt.current = null;
         keys.current = {};
         p.moving = false;
@@ -2998,6 +3029,14 @@ export default function World() {
       if (ng) return ng;
       // 🌙 소등 뒤 당직 간부는 지휘통제실 책상을 지킨다 (생활관 점호를 마치면 그리로 간다)
       if ((m >= LIGHTS_OUT || m < 6 * 60) && id === dutyOfficerNow(st.day)) return DUTY_DESK;
+      // 🌅 기상 직후: 내가 생활관을 나서기 전에는 분대원들도 자기 침상 앞에서 채비를 한다 (1일차 늦잠 장면은 분대장이 내 침상 옆)
+      if (!officer && rollcallWaiting(st) && !leftRoomToday(st.day)) {
+        if (st.day === 1 && !st.flags.wokeUp && WAKE_POS[id]) return WAKE_POS[id]!;
+        if (NIGHT_POS[id]) return NIGHT_POS[id]!;
+      }
+      // 1일차: 세수하고 돌아올 나를 맞선임이 생활관에서 기다린다
+      if (id === "senior" && st.day === 1 && !!st.flags.wokeUp && !st.flags.wakeTalk && !st.flags.tutorial)
+        return ["room1", Math.floor(WAKE_TALK_AT[0]), Math.floor(WAKE_TALK_AT[1])];
       if (ev && !st.eventBegun && !ev.auto && ev.start - m <= ARRIVE_AUTO_GAP && ev.spot) {
         const sp = world.spots[ev.spot];
         if (!officer) {
@@ -3854,6 +3893,7 @@ export default function World() {
           if (
             st.clues.length > 0 &&
             st.day >= 2 &&
+            !!st.flags["order_M-02"] &&
             !st.clues.includes("C-02")
           ) {
             opts.push({
@@ -3984,6 +4024,7 @@ export default function World() {
               if (
                 st.clues.length > 0 &&
                 st.day >= 3 &&
+                !!st.flags["order_M-03"] &&
                 !st.clues.includes("C-03")
               ) {
                 useGame.getState().spend(3);
@@ -4338,7 +4379,7 @@ export default function World() {
           look: extraLook(def),
           cap: BRANCHES[st.branch].cap as CapType,
         };
-        if (storyOn && !st.clues.includes("C-08")) {
+        if (storyOn && !!st.flags["order_M-04"] && !st.clues.includes("C-08")) {
           useGame.getState().spend(10);
           setOverlay({
             type: "dialogue",
@@ -4402,7 +4443,7 @@ export default function World() {
         }
         // 하루 한 번 수수께끼 힌트
         const nextM = storyOn
-          ? STORY_MISSIONS.find((m) => missionState(m, st) === "open")
+          ? STORY_MISSIONS.find((m) => missionReady(m, st))
           : null;
         const riddle = !nextM
           ? "…다음 장은 아직 쓰이지 않았다. 해가 몇 번 더 떠야 한다."
@@ -5132,6 +5173,18 @@ export default function World() {
         }
       }
 
+      // 🌅 내가 생활관을 나서면, 분대원들도 아침 점호 집합에 나선다
+      if (morningOut.day !== st.day) {
+        morningOut.day = st.day;
+        morningOut.out = !rollcallWaiting(st) || p.map !== "room1";
+      } else if (!morningOut.out && p.map !== "room1" && !(st.day === 1 && !st.flags.wokeUp)) morningOut.out = true;
+      // 1일차: 세수하고 생활관으로 돌아오면 맞선임이 한마디 한다
+      if (wakeTalkPending(st) && !blocked && !fading && p.map === "room1") {
+        const sn = npcs.current.senior;
+        if (sn && sn.map === "room1" && Math.hypot(sn.x - p.x, sn.y - p.y) < 3 && Math.hypot(sn.x - WAKE_TALK_AT[0], sn.y - WAKE_TALK_AT[1]) < 1.2)
+          wakeTalkRef.current();
+      }
+
       // 👣 내 발자취 기록 → 동행하는 사람이 내 바로 뒤를 따라온다
       trackMyTrail(p, world.maps[p.map]);
       /** 동행: 가까이 오면 내 뒤에 붙어서, 내가 걸어온 길 그대로 한 칸 뒤를 따라온다. (아직 멀면 false → 길을 찾아 다가온다) */
@@ -5378,16 +5431,24 @@ export default function World() {
         // 📢 호출 · 보고를 기다리는 사람은 제자리(책상 뒤 · 생활관 통로)에서 나를 기다린다
         const wa = waitAt.current;
         if (wa && wa.key === id) {
-          n.map = wa.map;
-          n.x = wa.x;
-          n.y = wa.y;
-          n.dir = wa.dir;
-          n.path = [];
-          n.viaDoor = null;
-          n.moving = false;
           n.att = false;
-          n.targetKey = "";
-          continue;
+          const there = n.map === wa.map && Math.hypot(n.x - wa.x, n.y - wa.y) < 0.4;
+          // 나와 다른 곳에 있고 그 자리도 내가 없는 방이면, 보이지 않는 사이에 가 있다
+          const unseen = n.map !== p.map && wa.map !== p.map;
+          if (there || unseen) {
+            n.map = wa.map;
+            n.x = wa.x;
+            n.y = wa.y;
+            n.dir = wa.dir;
+            n.path = [];
+            n.viaDoor = null;
+            n.moving = false;
+            n.targetKey = "";
+            continue;
+          }
+          // 내 눈에 보이는 곳에 있으면(또는 내가 그 방에 먼저 와 있으면) 걸어서 온다: 갑자기 사라지거나 나타나지 않는다
+          const wk = `${wa.map}:${Math.floor(wa.x)},${Math.floor(wa.y)}`;
+          if (n.targetKey !== wk) route(n, [wa.map, Math.floor(wa.x), Math.floor(wa.y)]);
         }
         // 🌙 야간 근무 중: 근무와 상관없는 1분대원은 이미 자기 침상에서 자고 있다 (걸어가는 중이었어도)
         const bxN = BED_X[id];
@@ -5513,7 +5574,7 @@ export default function World() {
           continue;
         }
         // 🌅 아침 점호 집합: 다른 생활관·부대 인원도 미리 연병장에 오와 열을 맞춰 서 있다 (점호 의식이 세우는 자리 그대로)
-        if (!cer.current && rollcallWaiting(st)) {
+        if (!cer.current && rollcallWaiting(st) && leftRoomToday(st.day)) {
           const slot = rollcallSlots(st)[`x:${def.id}`];
           if (slot !== undefined) {
             const sp = world.spots.parade;
@@ -6065,7 +6126,7 @@ export default function World() {
       const storyTargets: { x: number; y: number }[] = [];
       if (st.clues.length > 0) {
         for (const m of STORY_MISSIONS) {
-          if (!m.spot || missionState(m, st) !== "open") continue;
+          if (!m.spot || !missionReady(m, st)) continue;
           const lib = m.id === "M-04" ? extras.current.librarian : null;
           const sp = world.spots[m.spot];
           const gd = lib
@@ -6406,9 +6467,7 @@ export default function World() {
               p.x * TILE,
               p.y * TILE + 12 + fx.dy - fx.hop,
               36,
-              selfHidden(st)
-                ? { dir: fx.dir, t, walking: p.moving, cap: null, silhouette: "#23232e" }
-                : { dir: fx.dir, t, walking: p.moving, cap: b.cap },
+              { dir: fx.dir, t, walking: p.moving, cap: b.cap },
             );
             if (myMeal.tray && !myMeal.eating)
               drawTray(
@@ -6746,7 +6805,7 @@ export default function World() {
         onMap={() => setOverlay({ type: "map" })}
         onHome={goHome}
       />
-      {!overlay && !cerShow && !selfHidden(state) && (
+      {!overlay && !cerShow && !(state.day === 1 && !state.flags.tutorial) && (
         <QuestTracker onOpen={() => setOverlay({ type: "quests" })} />
       )}
       <div className="location-badge">📍 {world.maps[location].name}</div>

@@ -7,7 +7,7 @@ import { NPC_SKINS, npcDisplayName } from '../data/npcs';
 import { QUESTS } from '../data/quests';
 import { getWorld, type MapId } from '../engine/map';
 import { runtime } from '../engine/runtime';
-import { STORY_MISSIONS, missionState } from '../data/story';
+import { STORY_MISSIONS, missionReady } from '../data/story';
 
 /** 지도(M): 야외 구역과 막사 층별 방을 도식으로 보여 주고, 내 위치·퀘스트 목적지·일정 장소·NPC 위치를 표시 */
 export default function MapView({ onClose }: { onClose: () => void }) {
@@ -40,7 +40,7 @@ export default function MapView({ onClose }: { onClose: () => void }) {
   }
   if (s.clues.length > 0) {
     for (const m of STORY_MISSIONS) {
-      if (!m.spot || missionState(m, s) !== 'open') continue;
+      if (!m.spot || !missionReady(m, s)) continue;
       addQ(m.id === 'M-04' ? 'library' : world.spots[m.spot].map, `📖 ${m.title}`);
     }
   }

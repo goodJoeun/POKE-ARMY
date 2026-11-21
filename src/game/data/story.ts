@@ -1,3 +1,4 @@
+import { ORDERS } from './orders';
 import type { SpotId } from '../types';
 
 /**
@@ -134,7 +135,14 @@ export function missionState(m: StoryMission, s: StoryProgress): MissionState {
   return 'open';
 }
 /** 안내 문구 (밤 미션을 놓쳤으면 대체 경로) */
-export const missionHint = (m: StoryMission, s: { day: number }) => (m.hintLate && m.nightFrom && s.day > m.nightFrom ? m.hintLate : m.hint);
+export const missionHint = (m: StoryMission, s: { day: number; flags?: Record<string, boolean> }) =>
+  s.flags && needsOrder(m, { flags: s.flags })
+    ? '점심·저녁 자유 시간에 임무를 맡길 사람의 호출을 기다리자'
+    : m.hintLate && m.nightFrom && s.day > m.nightFrom ? m.hintLate : m.hint;
+/** 누군가의 명령으로 가는 임무인데, 아직 그 명령을 받지 못했다 (받기 전에는 그 자리에 가도 문제를 풀 수 없다) */
+export const needsOrder = (m: StoryMission, s: { flags: Record<string, boolean> }) => !!ORDERS[m.id] && !s.flags[`order_${m.id}`];
+/** 지금 실제로 할 수 있는 미션: 열려 있고, 명령이 필요한 일이면 그 명령을 받았다 */
+export const missionReady = (m: StoryMission, s: StoryProgress) => missionState(m, s) === 'open' && !needsOrder(m, s);
 /** 지금 할 수 있는 다음 스토리 미션 (트래커용) */
 export function nextStoryMission(s: StoryProgress): StoryMission | null {
   // 서브(낮에 아무 때나 할 수 있는 선택 미션)는 메인 미션이 없을 때만 트래커에 올린다

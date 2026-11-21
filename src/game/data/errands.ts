@@ -36,12 +36,14 @@ interface Progress {
   mealCheck: { done: boolean } | null;
 }
 
-/** 전입 첫날, 화장실 거울을 보기 전: 아직 내가 어떤 모습인지 모른다 (내 모습은 그림자로만 보인다) */
-export const selfHidden = (s: { day: number; flags: Record<string, boolean> }) =>
-  s.day === 1 && !s.flags.sawSelf && !s.flags.tutorial;
-/** 전입 첫날: 분대장이 세수하고 오라고 했다 → 1층 화장실 세면대 거울 앞으로 */
+/** 전입 다음 날 아침(1일차): 분대장이 세수하고 오라고 했다 → 1층 화장실 세면대 거울에서 내 모습을 확인한다 */
 export const mirrorPending = (s: { day: number; flags: Record<string, boolean> }) =>
-  selfHidden(s) && !!s.flags.wokeUp;
+  s.day === 1 && !!s.flags.wokeUp && !s.flags.sawSelf && !s.flags.tutorial;
+/** 거울을 본 뒤: 생활관으로 돌아가면 맞선임이 정신 차리라고 한마디 한다 */
+export const wakeTalkPending = (s: { day: number; flags: Record<string, boolean> }) =>
+  s.day === 1 && !!s.flags.sawSelf && !s.flags.wakeTalk && !s.flags.tutorial;
+/** 생활관에서 맞선임이 기다리는 자리 */
+export const WAKE_TALK_AT: [number, number] = [8.5, 4.5];
 
 /** 명령을 받는 자리 (시킨 사람이 전역해 없으면 생활관 당번표 앞) */
 export const orderStage = (id: string, day: number): Stage => (npcPresent(ORDERS[id].giver, day) ? ORDERS[id].orderAt : DUTY_BOARD);
@@ -57,6 +59,13 @@ export function errandNow(s: Progress): Errand | null {
       kind: 'mirror', map: sp.map, x: sp.x + 0.5, y: sp.y + 0.5,
       why: '(…일단 화장실부터. 세수하고 정신 좀 차리자.)',
       hud: '🚿 1층 화장실 세면대에서 세수하고 정신 차리기 (1생활관 → 복도 → 화장실)',
+    };
+  }
+  if (wakeTalkPending(s)) {
+    return {
+      kind: 'mirror', map: 'room1', x: WAKE_TALK_AT[0], y: WAKE_TALK_AT[1],
+      why: '(분대장님이 3분 준다고 했다. 일단 생활관으로 돌아가자.)',
+      hud: '🏃 세수 끝 — 1생활관으로 돌아가기',
     };
   }
   if (s.clues.length === 0) return null;

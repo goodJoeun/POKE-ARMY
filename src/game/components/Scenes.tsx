@@ -186,7 +186,7 @@ export function Quiz() {
   );
 }
 
-// ───────── 잠에서 깨는 장면: 아직 내 모습은 보이지 않는다 (화장실 거울에서 처음 본다 → MirrorReveal) ─────────
+// ───────── 잠에서 깨는 장면: 눈을 뜨면 눈앞에 포켓몬이 있다. 내 모습은 화장실 거울에서 확인한다 (→ MirrorReveal) ─────────
 export function Transform() {
   const s = useGame();
   const lines = [
@@ -195,7 +195,7 @@ export function Transform() {
     '눈을 떴다. 낯선 천장. 꿉꿉한 모포 냄새. 여긴… 내 방이 아니다.',
     '기지개를 켜려고 팔을 쭉 뻗었는데… 이상하다. 팔이 평소만큼 뻗어지지 않는다.',
     '(…뭐지? 몸이 내 몸 같지 않아. 아직 꿈인가?)',
-    '그 순간, 문이 벌컥 열리며 누군가 소리쳤다—',
+    '눈을 떴다. 그리고 바로 눈앞에— 누군가의 얼굴이 있다.',
   ];
   const [stage, setStage] = useState(0);
   const next = () => (stage < lines.length - 1 ? setStage(stage + 1) : s.startDay());
@@ -268,8 +268,8 @@ export function MirrorReveal({ onDone }: { onDone: () => void }) {
           <p>{sp.desc}</p>
           <p>성격 분석 결과: <b>{ARCHETYPE_INFO[s.archetype].name}</b> — {ARCHETYPE_INFO[s.archetype].desc}<br />
             <span className="perk">✨ {ARCHETYPE_INFO[s.archetype].perk}</span></p>
-          <p className="hud-dim">꿈이 아니다. 머리 위에는 {b.name} 모자까지 얹혀 있다. …분대장이 3분 준다고 했다. 일단 연병장으로 뛰자!</p>
-          <button className="primary big" onClick={onDone}>▶ 연병장으로 (Enter)</button>
+          <p className="hud-dim">꿈이 아니다. 머리 위에는 {b.name} 모자까지 얹혀 있다. …분대장이 3분 준다고 했다. 일단 생활관으로 돌아가자!</p>
+          <button className="primary big" onClick={onDone}>▶ 생활관으로 (Enter)</button>
         </div>
       )}
     </div>

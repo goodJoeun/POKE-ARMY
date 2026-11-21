@@ -24,7 +24,7 @@ import { memberName } from '../engine/whereabouts';
 import { DUTY_BOARD, ORDERS } from '../data/orders';
 import { npcDisplayName } from '../data/npcs';
 import { MAP_NAMES } from '../engine/map';
-import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding } from '../data/story';
+import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding, missionReady } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
 export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio';
@@ -55,7 +55,8 @@ export interface StoryCtx {
 const G = () => useGame.getState();
 const storyOn = () => G().clues.length > 0;
 const mission = (id: string) => STORY_MISSIONS.find((m) => m.id === id)!;
-const isOpen = (id: string) => storyOn() && missionState(mission(id), G()) === 'open';
+/** 지금 할 수 있는 미션인지 (명령으로 가는 일이면 그 명령을 받은 뒤에만) */
+const isOpen = (id: string) => storyOn() && missionReady(mission(id), G());
 const flag = (k: string) => !!G().flags[k];
 /** 분대와 아직 밥을 먹지 않았다 (식사 시간엔 생활관부터 들러야 스토리가 진행된다) */
 const mealPending = () => { const mc = G().mealCheck; return !!mc && !mc.done; };
