@@ -1,0 +1,11 @@
+# `vercel --prod`로 올릴 때 제외할 것.
+# 이 파일이 있으면 Vercel CLI는 .gitignore를 보지 않는다 → public/sprites(저장소에는 없는 포켓몬 그림)가 함께 올라간다.
+node_modules
+.next
+out
+.git
+.claude
+docs
+scripts
+next-env.d.ts
+*.tsbuildinfo
