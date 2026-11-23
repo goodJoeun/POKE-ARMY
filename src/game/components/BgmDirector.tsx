@@ -7,7 +7,7 @@ import { dreamPending } from '../data/story';
 import { TOTAL_DAYS } from '../data/branches';
 import type { MapId } from '../engine/map';
 import {
-  audioLog, audioState, bgmMood, playBgm, playCue, playSfx, queueJingle, rewindBgm, setAudioPaused, setBgmVolume, setSfxVolume, unlockAudio,
+  audioLog, audioState, bgmMood, fadeJingle, limiterCurve, playBgm, playClickSound, playCue, playSfx, queueJingle, rewindBgm, setAudioPaused, setBgmVolume, setSfxVolume, shotChain, unlockAudio,
   type BgmId,
 } from '../engine/audio';
 import { toastCue } from '../engine/soundCues';
@@ -100,7 +100,7 @@ export default function BgmDirector() {
     // 버튼 누르는 소리
     const onClick = (e: MouseEvent) => {
       const el = e.target as HTMLElement | null;
-      if (el?.closest?.('button')) playSfx('sfx_confirm', 0.6);
+      if (el?.closest?.('button')) playClickSound();
     };
     window.addEventListener('click', onClick, true);
 
@@ -156,13 +156,15 @@ export default function BgmDirector() {
 
       // 🌙 소등: 근무가 있는 밤, 모포를 덮고 눈을 감는다
       if (s.nightDuty?.phase === 'sleep' && p.nightDuty?.phase !== 'sleep') queueJingle('jingle_lights_out', 4);
+      // 누가 깨우러 오면 취침나팔은 잦아든다 (긴 나팔이 깨우는 장면 위로 겹치지 않게)
+      if (p.nightDuty?.phase === 'sleep' && s.nightDuty?.phase !== 'sleep') fadeJingle('jingle_lights_out');
 
       // 😓 꾸중: 지각했거나, 군기가 한 번에 뚝 떨어졌다
       if (s.lateCount > p.lateCount || s.stats.discipline <= p.stats.discipline - 2) queueJingle('jingle_late_scolded', 2);
     });
 
     if (process.env.NODE_ENV === 'development') {
-      (window as unknown as Record<string, unknown>).__audio = { state: audioState, log: audioLog, pick: () => pickBgm(useGame.getState())[0] };
+      (window as unknown as Record<string, unknown>).__audio = { state: audioState, log: audioLog, pick: () => pickBgm(useGame.getState())[0], shotChain, limiterCurve };
     }
 
     return () => {

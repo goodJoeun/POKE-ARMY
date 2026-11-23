@@ -76,6 +76,13 @@ export function extraOverdue(def: ExtraDef, day: number): boolean {
   return day >= sgtDay + DAYS_PER_RANK;
 }
 
+/** 내가 전입 온 날(1일차)부터 이미 병장이던 사람인지 (그 뒤에 병장을 단 사람은 해당하지 않는다) */
+export function sergeantSinceArrival(branch: BranchId, id: string): boolean {
+  const d = EXTRAS[branch].find((e) => e.id === id);
+  if (!d || d.officer || (d.from ?? 1) > 1) return false;
+  return extraTitleOnDay(d, 1).split(' ').pop() === RANKS[RANKS.length - 1];
+}
+
 const dayCache = new Map<string, ExtraDef[]>();
 /** 그날 부대에 있는 엑스트라 (직책의 계급은 그날 계급으로) */
 export function extrasForDay(branch: BranchId, day: number): ExtraDef[] {

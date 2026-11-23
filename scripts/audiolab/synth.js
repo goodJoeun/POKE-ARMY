@@ -610,6 +610,37 @@
     return master(T, { peak: 0.6, wet: 0.8, room: 0.75, damp: 0.5, fade: 0.5 });
   } };
 
+  /** sfx_door_wood — 나무문: 손잡이가 딸깍 → 경첩이 짧게 삐걱 → 문이 멈추며 나무가 살짝 울린다 */
+  TRACKS.sfx_door_wood = { kind: 'sfx', bitrate: 64000, make() {
+    const T = new Track(0.72, false);
+    // 손잡이
+    [[0, 1], [0.032, 0.65]].forEach(([t0, g], i) => {
+      noise(T, t0, 0.025, -0.1, g * 0.55, 0.2, 201 + i, biquad('bp', 2300 - i * 500, 1.8), (t) => Math.exp(-t / 0.0035));
+      T.voice(t0, 0.05, -0.1, g * 0.35, 0.2, (t) => Math.min(1, t / 0.0006) * (Math.sin(TAU * 310 * t) * Math.exp(-t / 0.012) + 0.5 * Math.sin(TAU * 760 * t) * Math.exp(-t / 0.007)));
+    });
+    // 경첩: 마찰이 붙었다 미끄러지기를 반복하는 짧은 맥박들이 삐걱 소리가 된다
+    const r = rng(207);
+    const start = 0.075, span = 0.37;
+    for (let at = start; at < start + span;) {
+      const u = (at - start) / span;
+      const rate = 34 + 78 * Math.sin(Math.PI * Math.min(1, u * 1.05));
+      const amp = Math.pow(Math.sin(Math.PI * u), 0.7) * (0.75 + 0.25 * r());
+      const pitch = 1 + 0.18 * Math.sin(Math.PI * u);
+      T.voice(at, 0.035, 0.12, amp * 0.2, 0.25, (x) => Math.min(1, x / 0.0008) * (
+        Math.sin(TAU * 640 * pitch * x) * Math.exp(-x / 0.008)
+        + 0.55 * Math.sin(TAU * 1130 * pitch * x) * Math.exp(-x / 0.006)
+        + 0.3 * Math.sin(TAU * 1980 * pitch * x) * Math.exp(-x / 0.0035)));
+      at += (1 / rate) * (0.88 + 0.24 * r());
+    }
+    // 문이 멈추는 둔탁한 나무 울림
+    T.voice(0.47, 0.16, 0.05, 0.42, 0.35, (x) => Math.min(1, x / 0.002) * (
+      Math.sin(TAU * 142 * x) * Math.exp(-x / 0.04)
+      + 0.55 * Math.sin(TAU * 318 * x) * Math.exp(-x / 0.024)
+      + 0.25 * Math.sin(TAU * 690 * x) * Math.exp(-x / 0.012)));
+    noise(T, 0.47, 0.04, 0.05, 0.18, 0.3, 209, biquad('bp', 900, 1), (x) => Math.exp(-x / 0.008));
+    return master(T, { peak: 0.7, wet: 0.35, room: 0.28, damp: 0.65, fade: 0.08 });
+  } };
+
   function render(id) {
     const tr = TRACKS[id];
     if (!tr) throw new Error('unknown track ' + id);

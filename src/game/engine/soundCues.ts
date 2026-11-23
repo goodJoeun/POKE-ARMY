@@ -15,11 +15,11 @@ const LINE_CUES: [RegExp, CueId][] = [
   // 포켓몬센터풍 회복
   [/띠리리링|건강해졌습니다/, 'jingle_heal'],
   // 노크
-  [/똑똑/, 'sfx_knock'],
+  [/똑똑(?![하한히])/, 'sfx_knock'],
   // 방송 · 스피커
   [/^📢|스피커에서|방송이 (울|나온|흘러)|전파합니다/, 'sfx_pa_chime'],
   // 라디오 · TV 잡음
-  [/지직|치직|잡음|^📺|^📻/, 'sfx_radio_static'],
+  [/지직|치직|(?<![붙손])잡음|^📺|^📻/, 'sfx_radio_static'],
   [/^📱|진동이 울|휴대폰이 울/, 'sfx_phone'],
   [/^🎮/, 'sfx_save'],
   // 스위치 · 손전등
@@ -35,21 +35,36 @@ const LINE_CUES: [RegExp, CueId][] = [
   // 호루라기 · 집합
   [/호루라기|삐익|집합!|기상!/, 'sfx_whistle'],
   // 심장 · 긴장
-  [/심장이|두근|숨이 멎|소름이|등골이|오싹|서늘하다/, 'sfx_heartbeat'],
+  [/심장이|가슴이 두근|숨이 멎|소름이|등골이|오싹|뒤통수가 서늘/, 'sfx_heartbeat'],
   // 식판 · 수저
   [/식판을 (받|들|내려|반납|앞에)|식판 반납|배식병이|수저를 (내려|놓)|숟가락을 (내려|놓)/, 'sfx_tray'],
   // 물건을 받음
   [/을 받았다!|를 받았다!|손에 넣었다|을 건넨다|를 건넨다|올려놓는다|주머니에 넣/, 'sfx_item'],
   // 문
-  [/문을 (벌컥|열었|닫았)|문이 (열|닫)|철문/, 'sfx_door'],
+  // (지금 실제로 여닫힐 때만: "잠겨 있다" · "곧 열릴 거야" · 창문 · 질문은 제외. 철문은 묵직한 소리, 나머지는 실내 문)
+  [/철문이 (열린다|열렸다|열리고|닫힌다|닫혔다)/, 'sfx_door_iron'],
+  [/(?<![창질소주])문을 (벌컥|열었|닫았)|(?<![창질소주])문이 (열린다|열렸다|열리고|닫힌다|닫혔다)/, 'sfx_door'],
   // 쎄한 깨달음 · 거울 속의 무언가
   [/거울 속에[…,]|눈은 웃지 않는다|말문이 막혔다/, 'sfx_suspicion'],
   [/\(……!\)|\(…!\)|\(……\?\)|^\(…[^)]{1,16}\?\)$|❓/, 'sfx_suspicion'],
 ];
 
-/** 대사·지문 한 줄에 어울리는 소리 (없으면 null) */
-export function lineCue(text: string): CueId | null {
-  for (const [re, id] of LINE_CUES) if (re.test(text)) return id;
+/** 말소리 그 자체인 소리: 인물의 대사 속에서도 울린다 */
+const SPOKEN_CUES = new Set<CueId>(['jingle_shock', 'jingle_heal']);
+
+/**
+ * 대사·지문 한 줄에 어울리는 소리 (없으면 null).
+ * spoken = 인물이 하는 말: "똑딱 소리 말입니까?"처럼 소리를 입에 올린 것뿐이면 울리지 않고,
+ * 괄호 속 행동 묘사 "(똑똑)"만 실제로 일어난 일로 본다.
+ */
+export function lineCue(text: string, spoken = false): CueId | null {
+  if (!spoken) {
+    for (const [re, id] of LINE_CUES) if (re.test(text)) return id;
+    return null;
+  }
+  for (const [re, id] of LINE_CUES) if (SPOKEN_CUES.has(id) && re.test(text)) return id;
+  const acts = text.match(/\([^)]*\)/g);
+  if (acts) for (const a of acts) for (const [re, id] of LINE_CUES) if (re.test(a)) return id;
   return null;
 }
 
@@ -130,14 +145,15 @@ export function sceneMood(h: SceneHint | null): BgmMood | null {
  * - 글자가 찍히는 동안: 타자 소리 (너무 촘촘하지 않게)
  * key 는 줄이 바뀔 때마다 달라지는 값(줄 번호 등), cue 는 줄에 직접 적어 둔 소리.
  */
-export function useLineSound(key: string | number, text: string, typed: number, opts?: { cue?: CueId | null; voice?: number; silent?: boolean }) {
+export function useLineSound(key: string | number, text: string, typed: number, opts?: { cue?: CueId | null; voice?: number; silent?: boolean; spoken?: boolean }) {
   const first = useRef(true);
   const cue = opts?.cue;
   const silent = opts?.silent;
+  const spoken = opts?.spoken;
   const voice = opts?.voice ?? 1;
   useEffect(() => {
     if (silent || !text) return;
-    const c = cue ?? lineCue(text);
+    const c = cue ?? lineCue(text, spoken);
     if (c) playCue(c, 0.9);
     else if (!first.current) playSfx('sfx_cursor', 0.35);
     first.current = false;

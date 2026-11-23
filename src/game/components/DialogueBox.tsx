@@ -46,7 +46,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
   }, [text, idx, phase, typeMs, typeStep]);
 
   // 🔊 새 줄 · 타자 소리 (선택지를 고르는 동안은 조용히)
-  useLineSound(`${phase}-${idx}`, text, typed, { cue: line?.sfx, silent: phase === 'choices' });
+  useLineSound(`${phase}-${idx}`, text, typed, { cue: line?.sfx, silent: phase === 'choices', spoken: !!line && line.who !== 'narr' });
 
   const speaker: SpeakerInfo | null = useMemo(() => {
     if (!line) return null;
@@ -68,7 +68,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
 
   const choose = useCallback((c: Choice) => {
     // 🔊 고른 말에 어울리는 소리 (노크 등) → 없으면 선택음, 나쁜 대답이면 낮은 소리
-    const cue = lineCue(c.text);
+    const cue = lineCue(c.text, true);
     if (cue) playCue(cue, 0.9);
     else playSfx(c.grade === 'bad' ? 'sfx_cancel' : 'sfx_confirm', 0.6);
     setPicked(c);

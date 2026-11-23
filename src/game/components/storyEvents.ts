@@ -65,6 +65,8 @@ const mission = (id: string) => STORY_MISSIONS.find((m) => m.id === id)!;
 /** 지금 할 수 있는 미션인지 (명령으로 가는 일이면 그 명령을 받은 뒤에만) */
 const isOpen = (id: string) => storyOn() && missionReady(mission(id), G());
 const flag = (k: string) => !!G().flags[k];
+/** 명령으로 가는 일인데 아직 그 명령(호출 → 지시)을 받지 못했다: 그 자리에 가도 아무 일도 일어나지 않는다 */
+const awaitingOrder = (id: string) => !!ORDERS[id] && !flag(`order_${id}`);
 /** 분대와 아직 밥을 먹지 않았다 (식사 시간엔 생활관부터 들러야 스토리가 진행된다) */
 const mealPending = () => { const mc = G().mealCheck; return !!mc && !mc.done; };
 const freeNow = () => { const m = G().minute; return !mealPending() && (isFreeTimeEvening(m) || isMealTime(m)); };
@@ -686,7 +688,7 @@ export function roofOptions(ctx: StoryCtx): MenuOption[] {
   const withBuddy = (then: () => void) => { if (npcPresent('buddy', s.day)) ctx.place('buddy', 'hq2', 21.5, 1.5, 'up'); then(); };
   if (isOpen('D-02')) opts.push({ label: '🌌 동기와 별 보기 (추리 정리 2)', hint: ev ? '' : '19:00~21:20', disabled: !ev, onSelect: () => withBuddy(() => d02(ctx)) });
   // (별에게 대답한 뒤에는 되돌릴 수 없다: 엔딩이 이미 정해졌다)
-  if (flag('m13') && !flag('buddyBack') && !flag('f01')) {
+  if (flag('m13') && !awaitingOrder('M-13') && !flag('buddyBack') && !flag('f01')) {
     const visited = ['m13_laundry', 'm13_cyber', 'm13_court'].filter(flag).length;
     opts.push({
       label: '💭 동기와 옥상에 오르기 (잊혀 가는 이름)', hint: visited < 3 ? `먼저 추억의 장소 ${visited}/3` : !freeNow() ? '점심·개인정비 시간' : '',
@@ -806,7 +808,7 @@ export function buddyForgets(ctx: StoryCtx) {
         say('buddy', '어… 죄송합니다. 분명 아는 얼굴 같은데, 이름이…'),
         narr('달력이 한 장 거꾸로 넘어가 있다. 동기의 눈이 낯선 사람을 보듯 흔들린다.'),
         me('(기억이 먼저 사라진다더니… 이렇게 빨리.)'),
-        narr('[동기와 함께 되짚어 보자: 행정반 분실물함 → 싸지방 → 농구장 → 막사 옥상. 동기가 뒤따라온다.]'),
+        narr('[동기가 뒤따라온다. 잊힌 기억은 함께한 자리에서 되살아날지도 모른다. 어디부터 되짚을지는, 자유 시간에 올 호출을 기다려 보자.]'),
       ],
     },
     onDone: () => { setFlag('m13'); G().addTip('잊힌 기억은 함께한 장소에서 되살아나기도 한다. "추억이 약이야." — 의무병'); },
@@ -840,6 +842,7 @@ function m13Spot(ctx: StoryCtx, spot: SpotId) {
     onDone: () => { setFlag(def.key); G().applyEffects({ memory: Math.max(bonus ? 5 : 2, reward), affinity: { buddy: 2 } }, '잊혀 가는 이름'); },
   });
   if (spot !== 'admin') { scene(); return; }
+  const sceneAdmin = scene;
   // 🧩 P-19: 그날의 명찰을 이번엔 동기와 나눠 맞춘다
   ctx.play({
     script: { npc: 'buddy', lines: [
@@ -847,7 +850,7 @@ function m13Spot(ctx: StoryCtx, spot: SpotId) {
       narr('명찰의 실밥이 다시 풀려 있다. 동기가 조각 몇 개를 집어 들고 한참 들여다본다.'),
       say('buddy', '…이거, 전에 같이 맞췄던 것 같은데. 절반은 제가 해 볼게요.'),
     ] },
-    onDone: () => ctx.puzzle('P-19', (reward) => scene(reward)),
+    onDone: () => ctx.puzzle('P-19', (reward) => { sceneAdmin(reward); G().toast('💭 동기와 함께했던 곳을 마저 되짚어 보자: 싸지방 → 농구장 → 막사 옥상', 'info'); }),
   });
 }
 function m13Roof(ctx: StoryCtx) {
@@ -1164,7 +1167,8 @@ export function storySpotOptions(spot: SpotId, ctx: StoryCtx): MenuOption[] {
   if (spot === 'recycle' && isOpen('M-12') && flag('trail2')) add('M-12', '👣 자국 끝까지 따라가기', () => m12End(tone(ctx, 'bgm_09_mystery_clues')));
   // 잊혀 가는 이름: 동기와 함께 추억의 장소
   const m13 = M13_SPOT[spot];
-  if (m13 && flag('m13') && !flag('buddyBack') && !flag(m13.key)) {
+  // (행정보급관에게 분실물함 정리를 지시받은 뒤부터: 호출 전에 그 자리에 가도 장면이 시작되지 않는다)
+  if (m13 && flag('m13') && !awaitingOrder('M-13') && !flag('buddyBack') && !flag(m13.key)) {
     const near = ctx.near('buddy', 3.5);
     opts.push({ label: '💭 동기와 추억 떠올리기', hint: !free ? '점심·개인정비 시간에' : !near ? '동기가 곁에 있어야 한다' : '📖 스토리', disabled: !free || !near, onSelect: () => m13Spot(tone(ctx, 'bgm_13_rooftop_stars'), spot) });
   }
@@ -1216,7 +1220,8 @@ export function storyExtraOptions(id: string, ctx: StoryCtx): MenuOption[] {
       } });
     }
   }
-  if (id === 'clerk' && s.day >= 7 && !flag('archiveKey') && s.clues.includes('C-09')) {
+  // 기록 보관실 열쇠: 중대장에게 보관실 정리를 지시받은 뒤에만 부탁할 수 있다
+  if (id === 'clerk' && isOpen('M-10') && !flag('archiveKey')) {
     opts.push({ label: '🎨 "기록 보관실 열쇠 좀…" (그림 모델)', hint: '가만히 서 있기', onSelect: () => {
       ctx.play({
         script: { custom: extraSpeaker('clerk'), lines: [

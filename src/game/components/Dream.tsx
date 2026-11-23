@@ -37,7 +37,7 @@ export default function Dream() {
 
   // 🔊 꿈의 소리: 엄마 목소리엔 심장 소리, 빛의 목소리는 높고 맑게. 소등한 생활관 장면은 곡 없이 조용하다
   const lineCueId: CueId | null = line?.who === 'mom' ? 'sfx_heartbeat' : line?.who === 'jirachi' && idx > 0 && lines[idx - 1].who !== 'jirachi' ? 'sfx_star_twinkle' : null;
-  useLineSound(idx, text, typed, { cue: lineCueId, voice: line?.who === 'voice' || line?.who === 'jirachi' ? 1.5 : line?.who === 'mom' ? 0.8 : 1 });
+  useLineSound(idx, text, typed, { cue: lineCueId, spoken: !!line && line.who !== 'narr', voice: line?.who === 'voice' || line?.who === 'jirachi' ? 1.5 : line?.who === 'mom' ? 0.8 : 1 });
   const inRoom = line?.scene === 'room';
   useEffect(() => {
     setBgmMood(inRoom ? 'none' : null);

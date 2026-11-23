@@ -18,7 +18,7 @@ export type JingleId =
   | 'jingle_reveille' | 'jingle_lights_out' | 'jingle_shock';
 export type SfxId =
   | 'sfx_cursor' | 'sfx_confirm' | 'sfx_cancel' | 'sfx_text_blip' | 'sfx_save' | 'sfx_alert' | 'sfx_bump' | 'sfx_footstep'
-  | 'sfx_door' | 'sfx_whistle' | 'sfx_purchase' | 'sfx_pendulum_ticktock' | 'sfx_fog_whiteout' | 'sfx_star_twinkle' | 'sfx_stamina_empty'
+  | 'sfx_door' | 'sfx_door_iron' | 'sfx_whistle' | 'sfx_purchase' | 'sfx_pendulum_ticktock' | 'sfx_fog_whiteout' | 'sfx_star_twinkle' | 'sfx_stamina_empty'
   | 'sfx_knock' | 'sfx_pa_chime' | 'sfx_radio_static' | 'sfx_switch' | 'sfx_water' | 'sfx_paper' | 'sfx_tray'
   | 'sfx_heartbeat' | 'sfx_wrong' | 'sfx_item' | 'sfx_phone' | 'sfx_flash' | 'sfx_evo_pulse' | 'sfx_suspicion';
 /** 대사·알림에 붙는 소리: 효과음이거나 징글 */
@@ -29,6 +29,106 @@ export type BgmMood = BgmId | 'none';
 const BASE = '/audio/';
 const FADE = 0.7; // 곡 전환 크로스페이드(초)
 const DUCK = 0.22; // 징글이 울리는 동안 BGM 음량 배율
+/** 디코딩해 둘 BGM 수 (한 곡에 수십 MB라 오래 안 들은 곡은 메모리에서 내린다) */
+const KEEP_BGM = 4;
+
+/**
+ * 소리별 믹스: 음원 파일은 그대로 두고 재생할 때 다듬는다.
+ * - db: 음량 (자주 듣는 소리일수록 작게 · 도트 RPG처럼 BGM 위에 살짝 얹히는 정도)
+ * - lp: 이 주파수 위를 깎아 날카로운 소리를 둥글게 (Hz)
+ * - hp: 이 주파수 아래를 깎아 파형 치우침(직류)을 없앤다 (Hz, 기본 45)
+ * - gap: 같은 소리를 다시 울리기까지 최소 간격 (ms, 기본 45)
+ */
+interface Mix { db: number; lp?: number; hp?: number; gap?: number }
+const MIX: Record<CueId, Mix> = {
+  // 메뉴 · 대사
+  sfx_text_blip: { db: -4, lp: 3000, hp: 120 },
+  sfx_cursor: { db: -9, lp: 4000, hp: 120 },
+  sfx_confirm: { db: -8, lp: 4000, hp: 120 },
+  sfx_cancel: { db: -8, lp: 3000, hp: 120 },
+  sfx_save: { db: -8, lp: 4000, hp: 120 },
+  sfx_alert: { db: -10, lp: 3500, hp: 150 },
+  sfx_wrong: { db: -8, lp: 1500, hp: 60 },
+  sfx_purchase: { db: -7, lp: 4500, hp: 120 },
+  sfx_item: { db: -4, lp: 6000 },
+  sfx_stamina_empty: { db: -8, lp: 2500, hp: 120 },
+  // 이동 · 생활
+  sfx_door: { db: -11, lp: 9000, hp: 60, gap: 700 },
+  sfx_door_iron: { db: -10, lp: 1000, hp: 60, gap: 700 },
+  sfx_footstep: { db: -4, lp: 2500, hp: 80 },
+  sfx_bump: { db: -8, lp: 1800, hp: 60, gap: 180 },
+  sfx_whistle: { db: -10, lp: 3200, hp: 300, gap: 1200 },
+  sfx_knock: { db: -4, lp: 2500, hp: 60 },
+  sfx_switch: { db: -6, lp: 5000, hp: 120 },
+  sfx_paper: { db: -2, lp: 7000, hp: 200 },
+  sfx_tray: { db: -4, lp: 5000, hp: 120 },
+  sfx_water: { db: -2, lp: 7000, hp: 120 },
+  sfx_phone: { db: -5, lp: 3000 },
+  sfx_pa_chime: { db: -5, lp: 5000 },
+  sfx_radio_static: { db: -7, lp: 5000, hp: 200, gap: 600 },
+  // 연출
+  sfx_heartbeat: { db: -2, gap: 500 },
+  sfx_suspicion: { db: -2, gap: 500 },
+  sfx_pendulum_ticktock: { db: -2, lp: 6000, gap: 500 },
+  sfx_star_twinkle: { db: -5, lp: 7000, hp: 200 },
+  sfx_fog_whiteout: { db: -5, lp: 7000 },
+  sfx_flash: { db: -6, lp: 7000, hp: 120 },
+  sfx_evo_pulse: { db: -3, lp: 5000 },
+  // 징글
+  jingle_clue_found: { db: -4, hp: 30 },
+  jingle_star_fragment: { db: -4, hp: 30 },
+  jingle_quest_complete: { db: -4, hp: 30 },
+  jingle_promotion: { db: -4, hp: 30 },
+  jingle_heal: { db: -6, hp: 30 },
+  jingle_day_end_sleep: { db: -4, hp: 30 },
+  jingle_dream_enter: { db: -4, hp: 30 },
+  jingle_late_scolded: { db: -4, hp: 30 },
+  jingle_minigame_clear: { db: -4, hp: 30 },
+  jingle_minigame_fail: { db: -4, hp: 30 },
+  jingle_reveille: { db: -2, hp: 30 },
+  jingle_lights_out: { db: 0, hp: 30 },
+  jingle_shock: { db: -2, hp: 30 },
+};
+
+/** 소리 이름과 파일 이름이 다른 경우: 평소 문은 실내 문 여는 소리, 원래의 묵직한 소리는 철문에 쓴다 */
+const CUE_FILE: Partial<Record<CueId, string>> = { sfx_door: 'sfx_door_open', sfx_door_iron: 'sfx_door' };
+
+/** 소리 하나의 재생 경로: 소스 → 저역 정리 → 고역 정리 → 음량. 끝의 음량 노드를 돌려준다 */
+export function shotChain(c: BaseAudioContext, src: AudioNode, id: CueId, vol = 1): GainNode {
+  const m = MIX[id];
+  const hp = c.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = m.hp ?? 45;
+  hp.Q.value = 0.707;
+  let tail: AudioNode = src.connect(hp);
+  if (m.lp) {
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = m.lp;
+    lp.Q.value = 0.707;
+    tail = tail.connect(lp);
+  }
+  const g = c.createGain();
+  g.gain.value = vol * 10 ** (m.db / 20);
+  tail.connect(g);
+  return g;
+}
+
+/**
+ * 마스터 리미터 곡선: ±0.8까지는 그대로, 넘치는 부분만 부드럽게 눌러 1.0을 넘지 않게 한다.
+ * 앞단에서 절반으로 줄여 넣으므로 입력 ±2.0까지 받는다.
+ */
+export function limiterCurve(size = 4097): Float32Array<ArrayBuffer> {
+  const knee = 0.8;
+  const curve = new Float32Array(size);
+  for (let i = 0; i < size; i++) {
+    const r = ((i / (size - 1)) * 2 - 1) * 2;
+    const a = Math.abs(r);
+    const out = a <= knee ? a : knee + (1 - knee) * Math.tanh((a - knee) / (1 - knee));
+    curve[i] = Math.sign(r) * out;
+  }
+  return curve;
+}
 
 interface Playing { id: BgmId; src: AudioBufferSourceNode; gain: GainNode; startedAt: number; offset: number; loop: boolean }
 
@@ -45,13 +145,39 @@ const buffers = new Map<string, Promise<AudioBuffer>>();
 /** 곡마다 멈춘 위치 — 다시 틀 때 이어서 재생 (장소를 오갈 때 매번 처음부터 나오지 않게) */
 const resumeAt: Partial<Record<BgmId, number>> = {};
 
+/** OGG를 못 읽는 브라우저는 같은 이름의 .m4a를 먼저 찾는다 (한쪽이 실패하면 다른 쪽으로) */
+function audioExts(): string[] {
+  const canOgg = typeof Audio !== 'undefined' && !!new Audio().canPlayType('audio/ogg; codecs="opus"');
+  return canOgg ? ['ogg', 'm4a'] : ['m4a', 'ogg'];
+}
+async function fetchDecoded(id: string): Promise<AudioBuffer> {
+  let last: unknown = new Error(`audio ${id}: not found`);
+  for (const ext of audioExts()) {
+    try {
+      const r = await fetch(`${BASE}${id}.${ext}`);
+      if (!r.ok) throw new Error(`audio ${id}.${ext}: ${r.status}`);
+      return await ctx!.decodeAudioData(await r.arrayBuffer());
+    } catch (e) { last = e; }
+  }
+  throw last;
+}
+
+/** 최근에 튼 BGM만 디코딩해 두고, 그 밖의 곡은 내린다 (다시 틀면 브라우저 캐시에서 금방 읽는다) */
+const recentBgm: BgmId[] = [];
+function rememberBgm(id: BgmId) {
+  const i = recentBgm.indexOf(id);
+  if (i >= 0) recentBgm.splice(i, 1);
+  recentBgm.push(id);
+  while (recentBgm.length > KEEP_BGM) {
+    const old = recentBgm.shift()!;
+    if (old !== wanted?.id && old !== current?.id) buffers.delete(old);
+  }
+}
+
 function load(id: string): Promise<AudioBuffer> {
   let p = buffers.get(id);
   if (!p) {
-    p = fetch(`${BASE}${id}.ogg`).then((r) => {
-      if (!r.ok) throw new Error(`audio ${id}: ${r.status}`);
-      return r.arrayBuffer();
-    }).then((a) => ctx!.decodeAudioData(a));
+    p = fetchDecoded(id);
     // 실패하면 5초 뒤에야 다시 시도한다 (파일이 없을 때 계속 요청하지 않게)
     p.catch(() => { window.setTimeout(() => { if (buffers.get(id) === p) buffers.delete(id); }, 5000); });
     buffers.set(id, p);
@@ -70,8 +196,14 @@ function ensure(): AudioContext | null {
     sfxBus = ctx.createGain();
     bgmBus.gain.value = bgmVol;
     sfxBus.gain.value = sfxVol;
-    duckBus.connect(bgmBus).connect(ctx.destination);
-    sfxBus.connect(ctx.destination);
+    // BGM과 효과음이 겹쳐도 깨지지 않게 마지막에 리미터를 지난다
+    const limitIn = ctx.createGain();
+    limitIn.gain.value = 0.5;
+    const limiter = ctx.createWaveShaper();
+    limiter.curve = limiterCurve();
+    limitIn.connect(limiter).connect(ctx.destination);
+    duckBus.connect(bgmBus).connect(limitIn);
+    sfxBus.connect(limitIn);
   }
   return ctx;
 }
@@ -85,7 +217,7 @@ export function unlockAudio() {
   const c = ensure();
   if (!c) return;
   const go = () => {
-    if (!preloaded) { preloaded = true; for (const id of PRELOAD) void load(id).catch(() => undefined); }
+    if (!preloaded) { preloaded = true; for (const id of PRELOAD) void load(CUE_FILE[id] ?? id).catch(() => undefined); }
     if (wanted) void startBgm(wanted.id, wanted.loop);
   };
   if (c.state === 'suspended') void c.resume().then(go).catch(() => undefined);
@@ -125,6 +257,7 @@ async function startBgm(id: BgmId, loop: boolean) {
   const offset = loop ? (resumeAt[id] ?? 0) % buf.duration : 0;
   src.start(t, offset);
   current = { id, src, gain, startedAt: t, offset, loop };
+  rememberBgm(id);
   note(id);
   if (!loop) src.onended = () => { if (current?.src === src) current = null; };
 }
@@ -164,21 +297,31 @@ export function bgmMood(): BgmMood | null {
   return mood;
 }
 
-interface Shot { dur: number; src: AudioBufferSourceNode; gain: GainNode }
-async function oneShot(id: string, bus: GainNode | null, vol = 1, rate = 1): Promise<Shot | null> {
+interface Shot { id: CueId; dur: number; src: AudioBufferSourceNode; gain: GainNode }
+async function oneShot(id: CueId, bus: GainNode | null, vol = 1, rate = 1): Promise<Shot | null> {
   const c = ensure();
   if (!c || c.state !== 'running' || !bus) return null;
   let buf: AudioBuffer;
-  try { buf = await load(id); } catch { return null; }
+  try { buf = await load(CUE_FILE[id] ?? id); } catch { return null; }
   const src = c.createBufferSource();
   src.buffer = buf;
   if (rate !== 1) src.playbackRate.value = rate;
-  const g = c.createGain();
-  g.gain.value = vol;
-  src.connect(g).connect(bus);
-  src.start();
+  const g = shotChain(c, src, id, vol);
+  g.connect(bus);
+  const dur = buf.duration / rate;
+  // 효과음은 앞뒤를 아주 짧게 다듬어 '틱' 하는 잡음을 없앤다
+  if (id.startsWith('sfx_') && dur > 0.012) {
+    const t = c.currentTime, v = g.gain.value;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(v, t + 0.0015);
+    g.gain.setValueAtTime(v, t + dur - 0.004);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    src.start(t);
+  } else {
+    src.start();
+  }
   note(id);
-  return { dur: buf.duration / rate, src, gain: g };
+  return { id, dur, src, gain: g };
 }
 
 /** 지금 울리는 징글 (새 징글이 시작되면 앞의 것은 빠르게 줄인다 → 여러 징글이 겹쳐 뭉개지지 않게) */
@@ -208,6 +351,24 @@ export async function playJingle(id: JingleId) {
   g.linearRampToValueAtTime(1, duckUntil + 0.9);
 }
 
+/** 지금 울리는 징글이 id면 부드럽게 끝내고 BGM을 되돌린다 (다음 장면이 먼저 시작될 때) */
+export function fadeJingle(id: JingleId, sec = 1.2) {
+  if (!ctx || !duckBus || jingleNow?.id !== id) return;
+  const shot = jingleNow;
+  jingleNow = null;
+  const t = ctx.currentTime;
+  const g = shot.gain.gain;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(0, t + sec);
+  try { shot.src.stop(t + sec + 0.02); } catch { /* 이미 끝남 */ }
+  duckUntil = t;
+  const d = duckBus.gain;
+  d.cancelScheduledValues(t);
+  d.setValueAtTime(d.value, t);
+  d.linearRampToValueAtTime(1, t + sec);
+}
+
 /**
  * 징글 예약: 한꺼번에 겹치면(꿈에서 단서 + 별 조각 등) 가장 중요한 것 하나만 울린다.
  * 앞의 징글이 아직 울리는 중이면, 그보다 덜 중요한 것은 건너뛴다.
@@ -217,6 +378,7 @@ let pendingTimer = 0;
 let ringing = { until: 0, prio: 0 };
 export function queueJingle(id: JingleId, prio = 5) {
   if (typeof window === 'undefined') return;
+  shotCount++;
   if (!pending || prio > pending.prio) pending = { id, prio };
   if (pendingTimer) return;
   pendingTimer = window.setTimeout(() => {
@@ -237,9 +399,21 @@ const lastSfx: Partial<Record<SfxId, number>> = {};
 export function playSfx(id: SfxId, vol = 1, rate = 1) {
   if (typeof performance === 'undefined') return;
   const now = performance.now();
-  if (now - (lastSfx[id] ?? -1e9) < 45) return;
+  if (now - (lastSfx[id] ?? -1e9) < (MIX[id].gap ?? 45)) return;
   lastSfx[id] = now;
+  shotCount++;
   void oneShot(id, sfxBus, vol, rate);
+}
+
+/** 이번 입력에서 울린 소리 수 */
+let shotCount = 0;
+/**
+ * 버튼을 눌렀을 때의 기본 소리. 그 버튼이 자기 소리(오답 · 취소 · 징글 등)를 냈다면 양보해서
+ * 두 소리가 겹쳐 뭉개지지 않게 한다.
+ */
+export function playClickSound() {
+  const before = shotCount;
+  window.setTimeout(() => { if (shotCount === before) playSfx('sfx_confirm', 0.6); }, 0);
 }
 
 /** 효과음이든 징글이든 이름으로 울린다 (대사·알림에 붙는 소리) */

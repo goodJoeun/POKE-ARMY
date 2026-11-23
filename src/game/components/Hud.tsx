@@ -1,12 +1,13 @@
 'use client';
 import { useGame, spotLabel, type NightDuty } from '../state/store';
-import { memberName } from '../engine/whereabouts';
+import { memberFullName, memberName } from '../engine/whereabouts';
 import { fixJosa } from '../engine/text';
 import { useSettings } from '../state/settings';
 import { BRANCHES, RANKS, SEASON_LABEL, TOTAL_DAYS, fmtTime, rankIdxForDay, seasonForDay, serviceMonth } from '../data/branches';
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
 import { errandNow } from '../data/errands';
 import { soloWalk } from '../data/wanders';
+import { sleepySenior } from '../data/reveille';
 
 export function RankBadge({ rankIdx, size = 22 }: { rankIdx: number; size?: number }) {
   return (
@@ -71,6 +72,9 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome }: { onNoteboo
   // 🧭 호출 · 심부름 · 보고 · 첫날 세면: 가야 할 곳이 정해져 있으면 그 안내가 먼저다
   const errand = errandNow(s);
   if (errand) objective = errand.hud;
+  // 😴 아침에 못 일어난 선임이 있으면, 깨워 드리는 게 점호 집합보다 먼저다
+  const sleepy = sleepySenior(s);
+  if (sleepy) objective = `😴 ${memberFullName(s.branch, sleepy, s.day)} 깨우기 — 침상 옆에서 E (깨워 드려야 분대가 점호에 나간다)`;
   let period = '이동 시간';
   if (isMealTime(s.minute)) period = '식사 시간';
   if (isFreeTimeEvening(s.minute)) period = '개인정비 시간';

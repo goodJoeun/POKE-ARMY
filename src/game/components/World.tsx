@@ -9,7 +9,7 @@ import type {
   NpcId,
   SpotId,
 } from "../types";
-import { extraLook, extrasForDay, extraOverdue } from "../data/extras";
+import { extraLook, extrasForDay, extraOverdue, sergeantSinceArrival } from "../data/extras";
 import {
   useGame,
   presentNpcs,
@@ -83,7 +83,7 @@ import type {
   CeremonyRt,
 } from "../engine/ceremony";
 import { fmt, fixJosa } from "../engine/text";
-import { memberName } from "../engine/whereabouts";
+import { memberFullName, memberName } from "../engine/whereabouts";
 import Hud from "./Hud";
 import DialogueBox, { type DialogueScript } from "./DialogueBox";
 import Menu, { type MenuOption } from "./Menu";
@@ -105,6 +105,7 @@ import { breakfastTalk, mealTalk } from "../data/mealTalks";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
 import { SUSPICIONS, suspicionLeads } from "../data/suspicions";
 import { WAKE_TALK_AT, errandNow, mirrorPending, orderStage, reportStage, wakeTalkPending } from "../data/errands";
+import { SLEEPY_SEEN, WOKE_SENIOR, sleepySenior } from "../data/reveille";
 import { MirrorReveal } from "./Scenes";
 import {
   SLIPPER_LOOK,
@@ -192,7 +193,7 @@ function overlayHint(o: Overlay): SceneHint | null {
 interface Interactable {
   key: string;
   label: string;
-  kind: "event" | "npc" | "spot" | "extra" | "seat" | "duty" | "story";
+  kind: "event" | "npc" | "spot" | "extra" | "seat" | "duty" | "story" | "wake";
   extra?: string;
   npc?: NpcId;
   spot?: SpotId;
@@ -322,15 +323,25 @@ function juniorToMe(key: string, day: number): boolean {
   const idx = (RANKS as readonly string[]).indexOf(word);
   return idx >= 0 && idx < mine;
 }
-/** 💭 전역했어야 할 사람을 찾아가 말을 걸다가: 계급장이 아직도 그대로인 것이 눈에 걸린다 */
+/**
+ * 💭 전역했어야 할 사람을 찾아가 말을 걸다가: 계급장이 아직도 그대로인 것이 눈에 걸린다.
+ * - "내가 진급하는 동안에도 그대로"라는 생각은 내가 실제로 진급한 뒤에, 내가 전입 왔을 때부터 병장이던 사람에게만 든다
+ * - "분대장님도, 맞선임도 다 떠났는데"는 두 사람이 정말 전역한 뒤에만
+ */
 function overdueThought(id: string, name: string, day: number): string {
-  if (id === "room2a")
-    return "(…2분대의 말 없는 병장님. 내가 이병으로 처음 왔을 때도 병장이었다. 나는 그동안 계급장을 몇 번 바꿔 달았는데, 저 계급장은 그대로다.)";
+  const st = useGame.getState();
+  const mine = rankIdxForDay(day);
+  const sinceArrival = mine >= 1 && sergeantSinceArrival(st.branch, id);
+  const times = mine >= 2 ? "몇 번" : "한 번";
+  if (id === "room2a" && sinceArrival)
+    return `(…2분대의 말 없는 병장님. 내가 이병으로 처음 왔을 때도 병장이었다. 나는 그동안 계급장을 ${times} 바꿔 달았는데, 저 계급장은 그대로다.)`;
   const pool = [
     `(…가만. ${name} 병장님 계급장이 아직도 그대로네. 병장을 단 지가 언제인데. 전역 날짜가 한참 지났을 텐데…)`,
-    `(${name} 병장님. 내가 진급하는 동안에도 저 계급장은 한 번도 바뀌지 않았다. 전역 신고를 하는 것도 본 적이 없다.)`,
-    `(왜 ${name} 병장님은 아직도 병장이지? 분대장님도, 맞선임도 다 떠났는데.)`,
   ];
+  if (sinceArrival)
+    pool.push(`(${name} 병장님. 내가 진급하는 동안에도 저 계급장은 한 번도 바뀌지 않았다. 전역 신고를 하는 것도 본 적이 없다.)`);
+  if (!npcPresent("sgt", day) && !npcPresent("senior", day))
+    pool.push(`(왜 ${name} 병장님은 아직도 병장이지? 분대장님도, 맞선임도 다 떠났는데.)`);
   let h = day;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return pool[h % pool.length];
@@ -676,8 +687,10 @@ function visibleNpcs(day: number, minute: number): NpcId[] {
   return ps.filter((id) => !NPC_ROLES[id].officer || id === duty);
 }
 /** 주요 NPC가 침상에 누워 있는지 */
+/** 😴 아침 기상 뒤에도 아직 침상에서 자고 있는 선임인지 (내가 깨워야 한다 · data/reveille.ts) */
+const morningAsleep = (key: string) => sleepySenior(useGame.getState()) === key;
 const npcAsleep = (id: NpcId, n: { map: MapId; y: number }, minute: number) =>
-  minute >= LIGHTS_OUT &&
+  (minute >= LIGHTS_OUT || morningAsleep(id)) &&
   BED_X[id] !== undefined &&
   n.map === "room1" &&
   Math.abs(n.y - bedY("top")) < 0.05;
@@ -706,7 +719,7 @@ const extraAsleep = (
   minute: number,
 ) => {
   if (snorlaxCookAsleep(id, minute)) return true;
-  if (minute < LIGHTS_OUT) return false;
+  if (minute < LIGHTS_OUT && !morningAsleep(`x:${id}`)) return false;
   if (id === "dog") return true;
   const bed = EXTRA_BED[id];
   return !!bed && e.map === bed[0] && Math.abs(e.y - bedY(bed[2])) < 0.05;
@@ -856,22 +869,6 @@ export default function World() {
   }, []);
 
 
-  // 정적 맵 렌더 (야외 + 모든 건물 내부)
-  useEffect(() => {
-    const out: Partial<Record<MapId, HTMLCanvasElement>> = {};
-    for (const m of Object.values(world.maps))
-      out[m.id] =
-        tileAtlas && supportsTileset(m)
-          ? renderTilesetMap(m, tileAtlas, season)
-          : renderMapCanvas(m, season);
-    mapCanvasRef.current = out;
-  }, [world, season, tileAtlas]);
-
-  // 1일차: 눈을 뜨자 눈앞에 포켓몬(분대장)이 있다 → 놀라고 혼난 뒤 "세수하고 와" → 화장실 거울에서 내 모습을 확인 → 생활관으로 돌아와 맞선임의 한마디 → 연병장
-  useEffect(() => {
-    const st = useGame.getState();
-    if (st.day !== 1 || st.flags.wokeUp) return;
-    const sgt = "sgt" as NpcId;
   // 시제품: 타일셋(그림 파일) 아틀라스. 설정에서 켜져 있고 다 불러왔을 때만 값이 있다
   const tilesetOn = useSettings((s) => s.tilesetProto);
   const [tileAtlas, setTileAtlas] = useState<HTMLImageElement | null>(null);
@@ -889,6 +886,22 @@ export default function World() {
     };
   }, [tilesetOn]);
 
+  // 정적 맵 렌더 (야외 + 모든 건물 내부)
+  useEffect(() => {
+    const out: Partial<Record<MapId, HTMLCanvasElement>> = {};
+    for (const m of Object.values(world.maps))
+      out[m.id] =
+        tileAtlas && supportsTileset(m)
+          ? renderTilesetMap(m, tileAtlas, season)
+          : renderMapCanvas(m, season);
+    mapCanvasRef.current = out;
+  }, [world, season, tileAtlas]);
+
+  // 1일차: 눈을 뜨자 눈앞에 포켓몬(분대장)이 있다 → 놀라고 혼난 뒤 "세수하고 와" → 화장실 거울에서 내 모습을 확인 → 생활관으로 돌아와 맞선임의 한마디 → 연병장
+  useEffect(() => {
+    const st = useGame.getState();
+    if (st.day !== 1 || st.flags.wokeUp) return;
+    const sgt = "sgt" as NpcId;
     // 대답을 고른 뒤: 넋이 나간 얼굴을 본 분대장이 세수부터 하고 오라고 한다
     const washOrder = () =>
       setOverlay({
@@ -1024,6 +1037,122 @@ export default function World() {
         }),
     });
   };
+
+  /**
+   * 😴 아침에 못 일어난 선임 깨우기 (data/reveille.ts).
+   * 기상 방송이 나오면 분대 전원이 생활관에서 일어나는데, 짬이 찬 선임은 가끔 그대로 잔다 → 침상 옆에서 깨워 드려야 다 같이 점호에 나간다
+   */
+  const wakeSeniorRef = useRef<() => void>(() => {});
+  wakeSeniorRef.current = () => {
+    const st = useGame.getState();
+    const key = sleepySenior(st);
+    if (!key) return;
+    const p = runtime.player;
+    keys.current = {};
+    p.moving = false;
+    const who = memberFullName(st.branch, key, st.day);
+    const isNpc = !key.startsWith("x:");
+    // 침상 쪽을 보고 선다 · 깨어난 선임이 일어나 설 자리(침상 앞 통로)
+    const bedRow = isNpc ? "top" : (EXTRA_BED[key.slice(2)]?.[2] ?? "top");
+    const bedX = (isNpc ? BED_X[key as NpcId] : EXTRA_BED[key.slice(2)]?.[1]) ?? 1;
+    p.dir = bedRow === "top" ? "up" : "down";
+    const def = isNpc ? undefined : extraDefs.find((d) => `x:${d.id}` === key);
+    const words = def?.title.split(" ") ?? [];
+    const custom: SpeakerInfo | undefined = def
+      ? { name: `${def.name} ${words[words.length - 1]}`, sub: words.slice(0, -1).join(" "), look: extraLook(def), cap: BRANCHES[st.branch].cap as CapType }
+      : undefined;
+    const aff = (n: number) => (isNpc ? { affinity: { [key]: n } as Partial<Record<NpcId, number>> } : {});
+    const tip =
+      '선임을 깨울 땐 침상 옆에서 낮고 또렷하게 "○○ 병장님, 기상 시간입니다." 모포를 걷거나 소리를 지르는 건 금물. 한 번에 안 일어나면 잠시 뒤 한 번 더.';
+    setOverlay({
+      type: "dialogue",
+      script: {
+        npc: isNpc ? (key as NpcId) : undefined,
+        custom,
+        lines: [
+          { who: "narr", text: `${who}의 침상. 기상 방송이 지나갔는데도 모포가 규칙적으로 오르내린다.` },
+          { who: "me", text: "(…깨워 드려야 한다. 선임 한 명이 점호에 늦으면 분대 전체가 혼난다. 그런데 어떻게 깨우지?)" },
+        ],
+        choices: [
+          {
+            text: `(침상 옆에 서서, 낮고 또렷하게) "${who}님, 기상 시간입니다."`,
+            grade: "good",
+            effects: { discipline: 1, ...aff(2) },
+            reply: [
+              { who: "npc", text: "…으음. 벌써 여섯 시냐." },
+              { who: "npc", text: "…알았다, 일어난다. 깨워 줘서 고맙다. 점호 늦을 뻔했네." },
+            ],
+            tip,
+          },
+          {
+            text: '(어깨를 살짝 흔든다) "…저, 일어나셔야 합니다."',
+            grade: "ok",
+            reply: [
+              { who: "npc", text: "…5분만… (한쪽 눈을 뜬다) …아, 알았다. 알았어. 일어난다." },
+              { who: "me", text: "(휴. 다음부턴 몸에 손대지 말고 말로 깨워 드리자.)" },
+            ],
+            tip,
+          },
+          {
+            text: '(모포를 확 걷으며) "기상!!! 기상입니다!!!"',
+            grade: "bad",
+            effects: { discipline: -1, ...aff(-3) },
+            reply: [
+              { who: "npc", text: "으악?! …야. 너 지금, 나한테 한 거냐?" },
+              { who: "narr", text: "생활관이 조용해졌다. 다들 못 본 척 모포만 갠다. …깨우긴 깨웠다." },
+            ],
+            tip,
+          },
+        ],
+      },
+      onChoice: (c) => {
+        const s2 = useGame.getState();
+        if (c.effects) s2.applyEffects(c.effects, "선임 깨우기");
+        if (c.tip) s2.addTip(c.tip);
+      },
+      onDone: () => {
+        const s2 = useGame.getState();
+        // 선임이 침상 앞 통로로 내려선다: 내가 바로 그 자리에 서 있으면 한 칸 옆으로 비켜서서 마주 본다
+        const ax = bedX + 0.5,
+          ay = aisleY(bedRow) + 0.5;
+        if (Math.hypot(p.x - ax, p.y - ay) < 0.9) {
+          const side = [ax + 1, ax - 1].find((x) => !collides(world.maps.room1, x, ay));
+          if (side !== undefined) {
+            p.x = side;
+            p.y = ay;
+            p.dir = side > ax ? "left" : "right";
+          }
+        }
+        s2.markDaily(WOKE_SENIOR);
+        s2.log(fixJosa(`🛏️ 기상 시간에 못 일어난 ${who}을(를) 깨워 드렸다.`));
+        s2.toast("🏃 이제 다 같이 연병장으로! 아침 점호 집합이다.", "alert");
+      },
+    });
+  };
+  // 😴 눈을 뜬 아침, 선임 한 명이 아직 자고 있는 날: 무엇을 해야 하는지 짧게 보여 준다 (그날 한 번)
+  useEffect(() => {
+    const tm = setTimeout(() => {
+      const st = useGame.getState();
+      const key = sleepySenior(st);
+      if (!key || st.daily.includes(SLEEPY_SEEN) || overlayRef.current || st.scene !== "world") return;
+      st.markDaily(SLEEPY_SEEN);
+      const who = memberFullName(st.branch, key, st.day);
+      keys.current = {};
+      runtime.player.moving = false;
+      setOverlay({
+        type: "dialogue",
+        script: {
+          lines: [
+            { who: "narr", text: "기상 방송이 울리고 생활관에 불이 켜졌다. 다들 벌떡 일어나 모포를 갠다." },
+            { who: "narr", text: `…그런데 ${who}의 침상만 조용하다. 모포가 머리끝까지 덮여 있다.` },
+            { who: "me", text: "(아직 주무신다. 이대로 나가면 분대 전체가 점호에 늦는다. 침상 옆에 가서 깨워 드리자.)" },
+          ],
+        },
+        onDone: () => useGame.getState().toast(`😴 ${who}의 침상 옆에서 E — 깨워 드리고 점호에 나가자.`, "alert"),
+      });
+    }, 700);
+    return () => clearTimeout(tm);
+  }, [setOverlay]);
 
   /** 1일차: 세수하고 생활관으로 돌아오자, 기다리던 맞선임이 정신 차리라고 한마디 한다 → 연병장으로 */
   const wakeTalkRef = useRef<() => void>(() => {});
@@ -1917,13 +2046,11 @@ export default function World() {
       // 한 번 부르고 나면 한동안은 다시 부르지 않는다
       const lo = lastOrder.current;
       const recent = !!lo && lo.day === st.day && st.minute - lo.minute < 40;
-      const m =
-        st.clues.length > 0 && !recent
-          ? STORY_MISSIONS.find(
-              (x) =>
-                ORDERS[x.id] && !st.flags[`order_${x.id}`] && !st.flags[`summon_${x.id}`] && missionState(x, st) === "open",
-            )
-          : undefined;
+      const callable = (x: (typeof STORY_MISSIONS)[number]) =>
+        !!ORDERS[x.id] && !st.flags[`order_${x.id}`] && !st.flags[`summon_${x.id}`] && missionState(x, st) === "open";
+      // 📖 동기가 나를 잊은 날에는 분실물함 정리(잊혀 가는 이름)부터 부른다: 그 지시를 받아야 함께 되짚는 길이 열린다
+      const urgent = st.flags.m13 ? STORY_MISSIONS.find((x) => x.id === "M-13" && callable(x)) : undefined;
+      const m = st.clues.length > 0 && !recent ? (urgent ?? STORY_MISSIONS.find(callable)) : undefined;
       if (!m) {
         // 🔎 부르는 사람이 없는 자유 시간: 가만히 있지 않고, 혼자서라도 실마리를 찾아 나선다 (자유 시간마다 한 번)
         const win = st.minute < 15 * 60 ? "lunch" : "dinner";
@@ -3093,14 +3220,25 @@ export default function World() {
   const stamina = useRef({ dashing: false });
 
   // 🚪 다른 생활관(2생활관) 입실: 상병 미만은 "(계급) (이름)입니다. 들어가도 되겠습니까?"
+  // 안에서 대답하는 건 지금 실제로 그 방에 있는(깨어 있는) 사람뿐이다. 식사 · 점호 · 일과로 방이 비어 있으면 아무도 대답하지 않는다
   const askEnterRef = useRef<(d: Door) => void>(() => {});
   askEnterRef.current = (d: Door) => {
     const p = runtime.player;
     // 문 앞에 멈춰 선 그 자리에서 묻는다
     p.moving = false;
     keys.current = {};
-    const inside = extraDefs.find((e) => e.id === "room2a");
     const st = useGame.getState();
+    const inRoom = extraDefs.filter((def) => {
+      const e = extras.current[def.id];
+      return !!e && e.map === d.to && !extraHiddenAtNight(def.id, st.minute);
+    });
+    const awake = inRoom.filter((def) => !extraAsleep(def.id, extras.current[def.id], st.minute));
+    // 대답하는 사람: 방 안에 깨어 있는 사람 가운데 가장 선임
+    const rankOf = (def: (typeof extraDefs)[number]) => (RANKS as readonly string[]).indexOf(def.title.split(" ").pop() ?? "");
+    const inside = [...awake].sort((x, y) => rankOf(y) - rankOf(x))[0];
+    const asleepOnly = !inside && inRoom.length > 0;
+    // 안에 있는 사람이 나보다 선임이거나 동급이면 편하게 말하고, 후임이면 존댓말을 쓴다
+    const senior = !!inside && !juniorToMe(`x:${inside.id}`, st.day);
     const speaker = inside
       ? {
           name: `${inside.name} ${inside.title.split(" ").pop()}`,
@@ -3123,18 +3261,31 @@ export default function World() {
             text: '(똑똑) "{myrank} {me}입니다! 들어가도 되겠습니까?"',
             grade: "good",
             effects: { discipline: 1 },
-            reply: [{ who: "npc", text: "어, 들어와~ 무슨 일이냐?" }],
+            reply: [
+              inside
+                ? { who: "npc", text: senior ? "어, 들어와~ 무슨 일이냐?" : "네! 들어오십쇼!" }
+                : asleepOnly
+                  ? { who: "narr", text: "…대답이 없다. 불 꺼진 생활관 안에서 고른 숨소리만 들린다. 조용히 문을 열었다." }
+                  : { who: "narr", text: "…대답이 없다. 안에는 아무도 없는 것 같다. 조용히 문을 열었다." },
+            ],
             tip: '다른 생활관에 들어갈 땐 노크하고 "계급 성명입니다. 들어가도 되겠습니까?"라고 묻는 게 예의. 상병쯤 되면 편하게 드나든다.',
           },
           {
             text: "(그냥 문을 열고 들어간다)",
             grade: "bad",
-            effects: { discipline: -2, mental: -1 },
+            // 혼낼 사람이 안에 있을 때만 잔소리를 듣는다
+            effects: inside ? { discipline: -2, mental: -1 } : undefined,
             reply: [
-              {
-                who: "npc",
-                text: "야, 노크 안 하냐? …다음부턴 물어보고 들어와라.",
-              },
+              inside
+                ? {
+                    who: "npc",
+                    text: senior
+                      ? "야, 노크 안 하냐? …다음부턴 물어보고 들어와라."
+                      : "어…? {myrank}님, 노크는 하고 들어오셔야 합니다…",
+                  }
+                : asleepOnly
+                  ? { who: "narr", text: "문을 열었다. 다들 자고 있다. 발소리를 죽였다." }
+                  : { who: "narr", text: "문을 열었다. 생활관은 텅 비어 있다. 다들 어디 나간 모양이다." },
             ],
           },
           {
@@ -3187,6 +3338,10 @@ export default function World() {
             ? "(순찰 중이다. 2층 2생활관부터 돌아보자.)"
             : "(순찰 중이다. 1생활관으로 돌아가자.)";
     }
+    // 😴 아직 침상에서 자고 있는 선임이 있으면, 깨워 드리기 전에는 생활관을 나서지 않는다
+    const sl = sleepySenior(st);
+    if (sl && p.map === "room1")
+      return `(…${memberFullName(st.branch, sl, st.day)}님이 아직 주무신다. 이대로 나가면 분대 전체가 점호에 늦는다. 깨워 드리고 가자.)`;
     // 🧭 호출 · 심부름 · 보고 · 첫날 세면: 가야 할 곳으로 가는 문만 열려 있다
     const er = errandNow(st);
     if (er && doorToward(world, p.map, er.map)?.to !== d.to) return er.why;
@@ -3204,13 +3359,16 @@ export default function World() {
     const room = KNOCK_ROOMS[d.to] ?? "사무실";
     // 안에 있는 사람: 간부(중대장 · 소대장 · 행보관) → 당직부사관 → 행정병
     const inside = (() => {
+      // 지금 실제로 그 방에 있고, 눈에 보이는(퇴근하거나 자기 막사로 돌아가지 않은) 사람만 센다
+      const here = visibleNpcs(st.day, st.minute);
       for (const id of ["cpt", "lt", "sgm"] as NpcId[]) {
         const n = npcs.current[id];
-        if (n && n.map === d.to && npcPresent(id, st.day)) return id as string;
+        if (n && n.map === d.to && here.includes(id)) return id as string;
       }
       for (const def of extraDefs) {
         const e = extras.current[def.id];
-        if (e && e.map === d.to) return `x:${def.id}`;
+        if (e && e.map === d.to && !extraHiddenAtNight(def.id, st.minute) && !extraAsleep(def.id, e, st.minute))
+          return `x:${def.id}`;
       }
       return null;
     })();
@@ -3326,6 +3484,8 @@ export default function World() {
       }
       const ng = nightGoal(id, st);
       if (ng) return ng;
+      // 1일차 늦잠 장면: 눈을 뜨는 순간에는 분대원 모두가 생활관에서 나를 보고 있다 (다른 어떤 규칙보다 먼저)
+      if (!officer && st.day === 1 && !st.flags.wokeUp && WAKE_POS[id]) return WAKE_POS[id]!;
       // 🌙 소등 뒤 당직 간부는 지휘통제실 책상을 지킨다 (생활관 점호를 마치면 그리로 간다)
       if ((m >= LIGHTS_OUT || m < 6 * 60) && id === dutyOfficerNow(st.day)) return DUTY_DESK;
       // 🌅 기상 직후: 내가 생활관을 나서기 전에는 분대원들도 자기 침상 앞에서 채비를 한다 (1일차 늦잠 장면은 분대장이 내 침상 옆)
@@ -3490,6 +3650,13 @@ export default function World() {
       )
         return { key: "spot_mess", kind: "spot", spot: "mess", label: "밥차 (배식)" };
     }
+    // 😴 아침에 못 일어난 선임의 침상 곁: 깨워 드린다 (곁에 서 있는 다른 분대원보다 먼저)
+    {
+      const sl = sleepySenior(st);
+      const se = sl ? (sl.startsWith("x:") ? extras.current[sl.slice(2)] : npcs.current[sl as NpcId]) : null;
+      if (sl && se && se.map === p.map && dist(se.x, se.y) < 2.1)
+        return { key: "wake_senior", kind: "wake", label: `🛏️ ${memberFullName(st.branch, sl, st.day)} 깨우기` };
+    }
     let best: Interactable | null = null;
     let bd = 1.5;
     // 동행 중인 사람은 내가 그쪽을 바라볼 때만 말을 건다 (뒤에 붙어 있어도 다른 사람·장소와 상호작용할 수 있게)
@@ -3589,6 +3756,11 @@ export default function World() {
     (id: NpcId) => {
       const st = useGame.getState();
       const sleeper = npcs.current[id];
+      // 😴 아침에 못 일어난 선임이면 깨워 드린다
+      if (sleepySenior(st) === id) {
+        wakeSeniorRef.current();
+        return;
+      }
       if (sleeper && npcAsleep(id, sleeper, st.minute)) {
         setOverlay({
           type: "dialogue",
@@ -4254,6 +4426,14 @@ export default function World() {
                 });
               },
             });
+          } else if (st.day >= 2 && !st.clues.includes("C-02") && !st.flags["order_M-02"]) {
+            // 🚿 분대장이 세면하고 오라고 지시하기 전에는 세면대에서 아무 일도 일어나지 않는다 (거울은 그 지시를 받고 와서 본다)
+            opts.push({
+              label: "세면하기",
+              hint: "지금은 씻을 일이 없다",
+              disabled: true,
+              onSelect: () => {},
+            });
           } else {
             act(
               "세면하기",
@@ -4621,10 +4801,17 @@ export default function World() {
       if (!def) return;
       const st = useGame.getState();
       const ex = extras.current[id];
+      // 😴 아침에 못 일어난 선임이면 깨워 드린다
+      if (sleepySenior(st) === `x:${id}`) {
+        wakeSeniorRef.current();
+        return;
+      }
       const storyOn = st.clues.length > 0;
       // 💭 전역했어야 할 사람을 찾아가 말을 걸다가: 계급이 왜 아직도 그대로인지 의아해진다 (하루에 한 사람당 한 번)
       if (
         storyOn && !st.nightDuty && extraOverdue(def, st.day) && !st.daily.includes(`overdue_${def.id}`) &&
+        // 아직 이병이면(한 번도 진급하지 않았으면) 남의 계급장이 그대로인 게 이상하다고 느낄 수 없다
+        rankIdxForDay(st.day) >= 1 &&
         !(ex && extraAsleep(id, ex, st.minute))
       ) {
         st.markDaily(`overdue_${def.id}`);
@@ -4959,6 +5146,10 @@ export default function World() {
       nightActRef.current(it.key);
       return;
     }
+    if (it.kind === "wake") {
+      wakeSeniorRef.current();
+      return;
+    }
     if (it.kind === "extra" && it.extra) {
       openExtra(it.extra);
       return;
@@ -5100,6 +5291,13 @@ export default function World() {
       n.path = findPath(map, Math.floor(n.x), Math.floor(n.y), dx, dy).slice(1);
     };
 
+    // 🌅 부대 화면이 새로 뜰 때마다(새 하루 · 불러오기 · 다시 시작) "생활관을 나섰는지"를 지금 상태로 다시 따진다.
+    // 지난 판의 기록이 남아 있으면, 침상에서 눈을 떴는데 분대원들이 이미 연병장에 나가 있어 생활관이 텅 비어 버린다
+    {
+      const st0 = useGame.getState();
+      morningOut.day = st0.day;
+      morningOut.out = !rollcallWaiting(st0) || runtime.player.map !== "room1";
+    }
     // NPC 초기 배치 (목표 위치에 바로)
     for (const id of presentNpcs(useGame.getState().day)) {
       const [tm, tx, ty] = npcTarget(id);
@@ -5130,6 +5328,8 @@ export default function World() {
 
     let npcRetarget = 0;
     let offerT = 0;
+    /** 😴 침상에 눕혀 둔 늦잠 선임 (깨우면 침상 앞 통로에 일으켜 세운다) */
+    let pinnedSleeper: string | null = null;
     let offerGivers = new Set<string>();
     // 💭 전역했어야 할 사람을 볼 때의 독백 (한 사람당 하루 한 번, 한동안은 다시 안 함)
     const loop = (now: number) => {
@@ -5619,7 +5819,7 @@ export default function World() {
       if (npcRetarget <= 0 && !cer.current) {
         npcRetarget = 0.5;
         for (const id of present) {
-          if (staged.current.has(id) || waitAt.current?.key === id) continue;
+          if (staged.current.has(id) || waitAt.current?.key === id || (pinnedSleeper === id && npcs.current[id])) continue;
           let n = npcs.current[id];
           const target = npcTarget(id);
           const key = `${target[0]}:${target[1]},${target[2]}`;
@@ -5658,6 +5858,37 @@ export default function World() {
       // 🎬 대화가 끝났으면 세워 둔 사람들을 풀어 준다
       if (staged.current.size && !overlayRef.current && !holdRef.current)
         staged.current.clear();
+      // 😴 아침에 못 일어난 선임: 내가 깨울 때까지 자기 침상에 누워 있다. 깨우면(또는 점호가 시작되면) 침상 앞 통로에 일어나 선다
+      const sleeper = sleepySenior(st);
+      if (pinnedSleeper && pinnedSleeper !== sleeper) {
+        const up = pinnedSleeper.startsWith("x:") ? extras.current[pinnedSleeper.slice(2)] : npcs.current[pinnedSleeper as NpcId];
+        const bedUp = pinnedSleeper.startsWith("x:") ? EXTRA_BED[pinnedSleeper.slice(2)] : undefined;
+        if (up && up.map === "room1" && (Math.abs(up.y - bedY("top")) < 0.05 || Math.abs(up.y - bedY("bottom")) < 0.05)) {
+          up.y = (bedUp ? aisleY(bedUp[2]) : 4) + 0.5;
+          up.dir = "down";
+          up.path = [];
+          up.viaDoor = null;
+          up.moving = false;
+          up.targetKey = "";
+        }
+        pinnedSleeper = null;
+      }
+      if (sleeper) {
+        const xb = sleeper.startsWith("x:") ? EXTRA_BED[sleeper.slice(2)] : undefined;
+        const bxS = sleeper.startsWith("x:") ? xb?.[1] : BED_X[sleeper as NpcId];
+        const lie = sleeper.startsWith("x:") ? extras.current[sleeper.slice(2)] : npcs.current[sleeper as NpcId];
+        if (lie && bxS !== undefined) {
+          lie.map = "room1";
+          lie.x = bxS + 0.5;
+          lie.y = bedY(xb ? xb[2] : "top");
+          lie.dir = "down";
+          lie.path = [];
+          lie.viaDoor = null;
+          lie.moving = false;
+          lie.att = false;
+          pinnedSleeper = sleeper;
+        }
+      }
       for (const id of present) {
         const n = npcs.current[id];
         if (!n) continue;
@@ -5666,6 +5897,7 @@ export default function World() {
           n.path = [];
           continue;
         }
+        if (pinnedSleeper === id) continue;
         // 📢 호출 · 보고를 기다리는 사람은 제자리(책상 뒤 · 생활관 통로)에서 나를 기다린다
         const wa = waitAt.current;
         if (wa && wa.key === id) {
@@ -5817,6 +6049,7 @@ export default function World() {
           e.path = [];
           continue;
         }
+        if (pinnedSleeper === `x:${def.id}`) continue;
         // 🌅 아침 점호 집합: 다른 생활관·부대 인원도 미리 연병장에 오와 열을 맞춰 서 있다 (점호 의식이 세우는 자리 그대로)
         if (!cer.current && rollcallWaiting(st) && leftRoomToday(st.day)) {
           const slot = rollcallSlots(st)[`x:${def.id}`];
@@ -6233,6 +6466,7 @@ export default function World() {
         shownZoom === 0
           ? targetZoom
           : shownZoom + (targetZoom - shownZoom) * Math.min(1, dt * 12);
+      if (Math.abs(targetZoom - shownZoom) < 0.004) shownZoom = targetZoom;
       const zoom = shownZoom;
       g.imageSmoothingEnabled = false; // 확대해도 도트 느낌 유지
       const vw = w / zoom,
@@ -6468,7 +6702,6 @@ export default function World() {
         if (cerC.kind === "am" && p.map === "outdoor") {
           // 구령대 옆 국기 게양대
           const fx0 = 24.2 * TILE,
-      if (Math.abs(targetZoom - shownZoom) < 0.004) shownZoom = targetZoom;
             fy0 = 17.9 * TILE;
           g.fillStyle = "#d8d8d8";
           g.fillRect(fx0 - 1, fy0 - 70, 3, 70);

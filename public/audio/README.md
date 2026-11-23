@@ -78,6 +78,8 @@ Safari 일부 버전은 ogg를 못 읽을 수 있어요. 그럴 땐 `wav/`(원�
 
 - BGM: `bgm_12_unease`(쎄한 장면 · 편지 · 팬텀 · 안개) · `bgm_13_rooftop_stars`(옥상 · 동기 · 말 없는 병장) · `bgm_14_bad_ending`(배드 엔딩)
 - 징글: `jingle_reveille`(기상나팔) · `jingle_lights_out`(취침나팔) · `jingle_shock`(깜짝 놀람)
-- 효과음: `sfx_knock` · `sfx_pa_chime` · `sfx_radio_static` · `sfx_switch` · `sfx_water` · `sfx_paper` · `sfx_tray` · `sfx_heartbeat` · `sfx_wrong` · `sfx_item` · `sfx_phone` · `sfx_flash` · `sfx_evo_pulse` · `sfx_suspicion`
+- 효과음: `sfx_knock` · `sfx_pa_chime` · `sfx_radio_static` · `sfx_switch` · `sfx_water` · `sfx_paper` · `sfx_tray` · `sfx_heartbeat` · `sfx_wrong` · `sfx_item` · `sfx_phone` · `sfx_flash` · `sfx_evo_pulse` · `sfx_suspicion` · `sfx_door_wood`(합성한 나무문 · 현재 미사용)
+
+`sfx_door_open`: 평소 문을 오갈 때 쓰는 소리. ElevenLabs로 생성한 음원을 0.85초로 다듬어 Ogg(Opus)로 변환했다. 원래의 `sfx_door`는 철문에 쓴다.
 
 어떤 소리가 언제 나는지는 `src/game/components/BgmDirector.tsx`(상황별 곡 · 징글)와 `src/game/engine/soundCues.ts`(대사 · 알림 문구 → 효과음)에 있다.

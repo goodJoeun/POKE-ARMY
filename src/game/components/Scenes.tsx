@@ -131,7 +131,7 @@ export function Quiz() {
   }, [line.text, typeMs, typeStep]);
   const done = typed >= line.text.length;
   // 🔊 빛의 목소리는 높고 맑은 타자 소리 · 질문이 나올 땐 반짝
-  useLineSound(`${phase}-${idx}-${qi}`, line.text, typed, { voice: line.who === 'voice' ? 1.5 : 1, cue: phase === 'q' ? 'sfx_star_twinkle' : undefined });
+  useLineSound(`${phase}-${idx}-${qi}`, line.text, typed, { spoken: line.who !== 'narr', voice: line.who === 'voice' ? 1.5 : 1, cue: phase === 'q' ? 'sfx_star_twinkle' : undefined });
 
   const advance = () => {
     if (!done) { setTyped(line.text.length); return; }
