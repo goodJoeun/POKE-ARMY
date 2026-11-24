@@ -752,3 +752,27 @@ canvas { image-rendering: pixelated; }
   .gear-btn { top: 8px; right: 8px; }
   .bedroom .hud-top { right: 58px; }
 }
+
+/* ───── 수첩 ─────
+   관계 카드는 화면보다 넓어지지 않게 (최소 320px이라 좁은 폰에서 옆으로 삐져나왔다) */
+.nb-people { grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
+.nb-body { overflow-x: hidden; }
+/* 넓은 화면: 탭 여덟 개 + ✕가 한 줄에 들어가게 (14px이면 22px 모자라 ✕만 둘째 줄로 떨어졌다) */
+.nb-tabs button { padding: 9px 12px; }
+@media (max-width: 900px) {
+  /* 탭은 여러 줄로 쌓지 않고 한 줄로 옆으로 밀어 본다. ✕는 오른쪽 끝에 붙어 있는다 */
+  .nb-tabs {
+    flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain;
+    scrollbar-width: none; scroll-padding-inline-end: 52px; flex-shrink: 0;
+  }
+  .nb-tabs::-webkit-scrollbar { display: none; }
+  .nb-tabs button { flex: none; white-space: nowrap; font-size: 14px; padding: 9px 11px; }
+  .nb-tabs .nb-close {
+    position: sticky; right: 0; z-index: 1; margin-left: auto; padding: 9px 13px;
+    background: var(--win-frame); color: #fff; box-shadow: -8px 0 8px -2px var(--win-frame);
+  }
+}
+@media (max-width: 760px) {
+  .nb-body { padding: 12px 14px; }
+  .nb-me { flex-wrap: wrap; }
+}

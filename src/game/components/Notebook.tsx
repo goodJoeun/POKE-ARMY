@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGame, presentNpcs, spotLabel } from '../state/store';
 import { BRANCHES, RANKS, TOTAL_DAYS, rankIdxForDay } from '../data/branches';
 import { ARCHETYPE_INFO, findSpecies } from '../data/monsters';
@@ -21,6 +21,11 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('me');
   const sp = findSpecies(s.speciesId);
   const b = BRANCHES[s.branch];
+  // 좁은 화면에선 탭이 한 줄로 옆으로 밀린다 → 고른 탭이 가려지지 않게 보이는 자리로 당겨 온다
+  const tabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    tabsRef.current?.querySelector<HTMLElement>('button.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [tab]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -35,7 +40,7 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="notebook" onClick={(e) => e.stopPropagation()}>
-        <div className="nb-tabs">
+        <div className="nb-tabs" ref={tabsRef}>
           {tabs.map(([id, label]) => (
             <button key={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{label}</button>
           ))}
