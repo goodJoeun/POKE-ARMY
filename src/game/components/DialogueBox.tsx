@@ -15,6 +15,8 @@ export interface DialogueScript {
   custom?: SpeakerInfo;
   lines: Line[];
   choices?: Choice[];
+  /** 정답이 하나뿐인 문답 (점호 문제 · 추리 정리 등): grade 'good'이 정답. 테스터 모드에서는 E로 정답을 고른다 */
+  quiz?: boolean;
 }
 
 interface Props {
@@ -41,6 +43,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
 
   const [typeMs, typeStep] = TEXT_SPEED[useSettings((st) => st.textSpeed)];
   const showTips = useSettings((st) => st.showTips);
+  const tester = useSettings((st) => st.testerMode);
   useEffect(() => {
     if (!text) { setTyped(0); return; }
     if (typeMs === 0) { setTyped(text.length); return; } // 즉시 표시
@@ -93,7 +96,11 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
         // 대사를 넘기던 손이 그대로 첫 선택지를 골라 버리지 않게, 선택지가 뜬 직후엔 잠깐 받지 않는다
         if ((e.key === ' ' || e.key === 'Enter' || e.key === 'e' || e.key === 'E') && !e.repeat && performance.now() - choicesAt.current > 400) {
           e.preventDefault();
-          const c = script.choices[sel];
+          // 🧪 테스터 모드: 정답이 있는 문답이면 E는 커서와 상관없이 정답을 고른다
+          const right = (e.key === 'e' || e.key === 'E') && script.quiz && useSettings.getState().testerMode
+            ? script.choices.find((x) => x.grade === 'good')
+            : undefined;
+          const c = right ?? script.choices[sel];
           if (c) choose(c);
         }
         return;
@@ -102,7 +109,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase, script.choices, choose, advance, sel]);
+  }, [phase, script.choices, script.quiz, choose, advance, sel]);
 
   return (
     <div className="dialogue-wrap" onClick={advance}>
@@ -129,6 +136,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
           {phase === 'choices' && script.choices ? (
             <div className="choices" onClick={(e) => e.stopPropagation()}>
               <div className="choice-prompt">{fmt(lines[lines.length - 1]?.text ?? '', ctx)}</div>
+              {script.quiz && tester && <div className="tester-hint">🧪 테스터 모드: E를 누르면 정답</div>}
               {script.choices.map((c, i) => (
                 <button key={i} className={`choice ${i === sel ? 'sel' : ''}`} onMouseEnter={() => setSel(i)} onClick={() => choose(c)}>
                   <span className="choice-num">{i + 1}</span> {fmt(c.text, ctx)}

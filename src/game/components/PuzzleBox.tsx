@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGame } from '../state/store';
+import { useSettings } from '../state/settings';
 import { NO_PROGRESS, checkPuzzle, puzzleDef, puzzleReward, type PuzzleAnswer, QUICK_LEVELS } from '../data/puzzles';
 
 interface Props {
@@ -180,6 +181,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
   const [minute, setMinute] = useState('');
   const [pick, setPick] = useState<number | null>(null);
   const mustSolve = mustSolveProp || !!onFail;
+  const tester = useSettings((st) => st.testerMode);
   // 순서 배열: 아직 찾지 못한 단서의 카드는 빼고 시작한다
   const [order, setOrder] = useState<string[]>(() => {
     if (input?.type !== 'order') return [];
@@ -419,6 +421,14 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
       e.stopPropagation();
       // 한글 조합 중의 Enter는 글자 확정이다
       if (e.isComposing) return;
+      // 🧪 테스터 모드: E(터치 확인 버튼 포함)를 누르면 어떤 퍼즐이든 바로 정답 처리, 한 번 더 누르면 닫는다
+      if ((e.key === 'e' || e.key === 'E') && useSettings.getState().testerMode) {
+        e.preventDefault();
+        if (e.repeat) return;
+        if (solved) finish();
+        else { setFailed(false); win(); }
+        return;
+      }
       if (e.key === 'Escape') { e.preventDefault(); if (solved) finish(); else if (failed) onFail?.(); else if (!mustSolve) onClose(); return; }
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -462,7 +472,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [solved, finish, onClose, submit, input, choose, tapSlot, walk, fit, rotate, mustSolve, ringMove, ringReset, failed, onFail, sIdx, stroopAnswer, pathStep, pathUndo, pathReset, textSubmit, tanRotate, tanCycle, tanPlace, jugOp]);
+  }, [solved, finish, win, onClose, submit, input, choose, tapSlot, walk, fit, rotate, mustSolve, ringMove, ringReset, failed, onFail, sIdx, stroopAnswer, pathStep, pathUndo, pathReset, textSubmit, tanRotate, tanCycle, tanPlace, jugOp]);
 
   if (!def || !input) return null;
   const nextReward = puzzleReward(def, prog.wrong);
@@ -797,7 +807,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
         {!solved && (
           <div className="pz-foot">
             {mustSolve ? <span /> : <button className="link-btn" onClick={onClose}>나중에 풀기 (Esc)</button>}
-            <span className="menu-foot">퍼즐을 푸는 동안 시간은 흐르지 않는다</span>
+            <span className="menu-foot">{tester ? '🧪 테스터 모드: E를 누르면 정답 처리' : '퍼즐을 푸는 동안 시간은 흐르지 않는다'}</span>
           </div>
         )}
       </div>

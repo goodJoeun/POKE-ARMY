@@ -929,6 +929,7 @@ function d03(ctx: StoryCtx, q = 1) {
           back ? say('buddy', '이제 다 모인 것 같아. 정리해 보자.') : say('buddy', '…저는 잘 모르겠지만, 같이 생각해 볼게요.'),
           me('"돌아가려면 무엇이 필요할까."'),
         ],
+        quiz: true,
         choices: [
           { text: '정문 밖 안개를 뚫고 나가면 된다', grade: 'bad', reply: [narr('(정문 밖으로 나가도 초소 앞이었다. 그 길은 아니다.)')] },
           { text: '별 조각 일곱 개, 그리고 소원을 스스로 거두는 것', grade: 'good', reply: [say('buddy', back ? '병장님은 조각은 다 모았는데, 거두지 못했지. …마지막은 우리 마음이구나.' : '그 병장님은 조각을 다 모으고도 거두지 못했다고요? …그럼 마지막은 마음이군요.')] },
@@ -945,6 +946,7 @@ function d03(ctx: StoryCtx, q = 1) {
     script: {
       npc: 'buddy',
       lines: [me('"그럼… 별 조각을 숨기고, 진자 자국을 남긴 건 누굴까."')],
+      quiz: true,
       choices: [
         { text: '말 없는 병장', grade: 'bad', reply: [narr('(병장님은 오히려 단서를 남겼다. 숨길 이유가 없다.)')] },
         { text: '밤마다 나타난 가짜 당직부관', grade: 'good', reply: [

@@ -321,6 +321,7 @@ function build(info: CeremonyInfo, ctl: CeremonyCtl, aide: SpeakerInfo | null, s
         script: {
           npc: D,
           lines: [{ who: D, text: `병영생활 행동강령 ${NUM[i]}!` }, { who: 'narr', text: `"${NUM[i]}! ……" 다음 구절은?` }],
+          quiz: true,
           choices: opts.map((o) => o === c.line
             ? { text: `"${o}!"`, grade: 'good' as const, effects: { discipline: 1 }, reply: [{ who: 'narr' as LineWho, text: `"${o}!" 장병들의 목소리가 연병장에 울려 퍼졌다.` }], tip: c.tip }
             : { text: `"${o}!"`, grade: 'bad' as const, effects: { discipline: -1, mental: -1 }, reply: [{ who: D, text: `거기 누구야! "${c.line}"! 정신 차리고 다시!` }], tip: c.tip }),
@@ -415,6 +416,7 @@ function build(info: CeremonyInfo, ctl: CeremonyCtl, aide: SpeakerInfo | null, s
       script: {
         npc: D,
         lines: [{ who: D, text: '좋아. 자기 전에 하나 물어보지. {me}!' }, { who: 'me', text: '네! {myrank} {me}!' }, { who: D, text: `${q.q}` }],
+        quiz: true,
         choices: q.options.map((o, i) => i === q.answer
           ? { text: o, grade: 'good' as const, reply: [{ who: D, text: '정확하다. 잘 알고 있네.' }], tip: q.tip }
           : { text: o, grade: 'bad' as const, reply: [{ who: D, text: `틀렸다. 정답은 "${q.options[q.answer]}". 내일까지 확실히 외워 둬.` }], tip: q.tip }),
