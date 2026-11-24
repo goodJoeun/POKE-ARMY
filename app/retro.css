@@ -742,3 +742,13 @@ canvas { image-rendering: pixelated; }
   .choices { margin-top: 2px; }
   .tip-card { font-size: 13px; padding: 6px 10px; margin-bottom: 6px; }
 }
+
+/* ───── 설정 버튼: 오른쪽 위 구석 ─────
+   아래 구석은 대화창 · 진화 문구 · 터치 확인 버튼 자리라 겹친다. 위로 올리고,
+   위에 상태창이 있는 집 화면은 상태창이 버튼 자리만큼 비켜 준다 */
+.gear-btn { top: 12px; bottom: auto; }
+.bedroom .hud-top { right: 64px; }
+@media (max-width: 760px) {
+  .gear-btn { top: 8px; right: 8px; }
+  .bedroom .hud-top { right: 58px; }
+}
