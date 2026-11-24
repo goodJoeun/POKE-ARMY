@@ -35,6 +35,8 @@ export interface ExtraDef {
   from?: number;
   /** 1분대 선임 */
   squad1Senior?: boolean;
+  /** 1일차의 직책 + 계급 (extrasForDay가 title을 그날 계급으로 바꾸면서 원래 것을 여기에 남긴다) */
+  baseTitle?: string;
 }
 
 /** 엑스트라 외형: 포켓몬 스프라이트, 없으면 단색 몬스터 */
@@ -65,9 +67,12 @@ export function extraTitleOnDay(def: ExtraDef, day: number): string {
  */
 export function extraOverdue(def: ExtraDef, day: number): boolean {
   if (def.officer) return false;
-  const words = def.title.split(' ');
+  // 병장을 단 날은 1일차 계급에서 센다 (그날 계급으로 바뀐 title에서 세면, 아직 상병인 사람도 전역이 지난 것으로 잘못 나온다)
+  const words = (def.baseTitle ?? def.title).split(' ');
   const r0 = (RANKS as readonly string[]).indexOf(words[words.length - 1]);
   if (r0 < 0) return false;
+  // 지금 실제로 병장이어야 한다
+  if (extraTitleOnDay({ ...def, title: def.baseTitle ?? def.title }, day).split(' ').pop() !== RANKS[RANKS.length - 1]) return false;
   let h = 0;
   for (const ch of def.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const phase = h % DAYS_PER_RANK;
@@ -91,7 +96,7 @@ export function extrasForDay(branch: BranchId, day: number): ExtraDef[] {
   if (hit) return hit;
   const list = EXTRAS[branch]
     .filter((d) => (!d.until || day < d.until) && (!d.from || day >= d.from))
-    .map((d) => ({ ...d, title: extraTitleOnDay(d, day) }));
+    .map((d) => ({ ...d, baseTitle: d.title, title: extraTitleOnDay(d, day) }));
   dayCache.set(key, list);
   return list;
 }

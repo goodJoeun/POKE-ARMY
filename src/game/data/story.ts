@@ -53,7 +53,7 @@ export const clueDef = (id: string) => CLUES.find((c) => c.id === id);
 export const CHAPTERS: { n: number; title: string; days: [number, number] }[] = [
   { n: 1, title: '눈을 떠 보니', days: [1, 3] },
   { n: 2, title: '이상한 부대', days: [4, 6] },
-  { n: 3, title: '떡밥을 따라서', days: [7, 9] },
+  { n: 3, title: '별빛을 따라서', days: [7, 9] },
   { n: 4, title: '별이 지기 전에', days: [10, 12] },
 ];
 
@@ -99,7 +99,7 @@ export const STORY_MISSIONS: StoryMission[] = [
   { id: 'M-09', chapter: 2, title: '잡음 속의 목소리', hint: '막사 1층 정비실 구석의 라디오 켜기', from: 6, clue: 'C-10', spot: 'maint' },
   // 서브: 분리수거장 구석의 돌탑과 화강돌 (부치지 못한 편지를 읽은 뒤부터 · 놓쳐도 장 완료에 지장 없음)
   { id: 'S-01', chapter: 2, title: '백여덟 개의 돌', hint: '분리수거장 구석의 이끼 낀 돌탑 살펴보기 (점심·개인정비 시간)', from: 6, clue: 'C-16', needClues: ['C-09'], spot: 'cairn', optional: true },
-  // ── 3장 「떡밥을 따라서」 (7~9일차)
+  // ── 3장 「별빛을 따라서」 (7~9일차)
   { id: 'M-10', chapter: 3, title: '서고의 열쇠', hint: '기록 보관실 열쇠로 도서관 안쪽 방 열기 (열쇠: 진급 신고 때 중대장 / 행정반 루브도)', from: 7, clue: 'C-12', needClues: ['C-09'], spot: 'library' },
   { id: 'N-03', chapter: 3, title: '똑딱, 똑딱', hint: '7일차 밤 위병소 근무 가는 길, 막사 1층 복도', from: 7, nightFrom: 7, flag: 'n03', optional: true },
   { id: 'M-11', chapter: 3, title: '말 없는 병장', hint: '2생활관의 말 없는 병장에게 단체 사진 보여 드리기', from: 8, clue: 'C-13', needClues: ['C-12'] },

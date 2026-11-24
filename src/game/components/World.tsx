@@ -98,7 +98,7 @@ import { ResistMeter, StoryBackdrop } from "./StoryBackdrop";
 import PuzzleBox from "./PuzzleBox";
 import { playSfx, setBgmMood, type BgmMood } from "../engine/audio";
 import { sceneMood, type SceneHint } from "../engine/soundCues";
-import { CANDY_SPOTS, PUZZLES, QUICK_LEVELS, QUICK_SPOTS, nextQuickSpot } from "../data/puzzles";
+import { CANDY_SPOTS, NIGHT_PUZZLES, PUZZLES, QUICK_LEVELS, QUICK_SPOTS, nextQuickSpot } from "../data/puzzles";
 import { WANDER_MEMORY, WANDER_MINUTES, nextWander, quickOpenAt, wanderAt } from "../data/wanders";
 import { WATCH_EXTRA, nightScene, workScene } from "../data/workScenes";
 import { breakfastTalk, mealTalk } from "../data/mealTalks";
@@ -170,6 +170,8 @@ type Overlay =
       id: string;
       onSolved: (reward: number) => void;
       onFail?: () => void;
+      /** "나중에 풀기"로 닫았을 때 (없으면 그냥 닫힌다) */
+      onClose?: () => void;
     }
   | { type: "menu"; title: string; subtitle?: string; options: MenuOption[] }
   | { type: "notice"; info: NoticeInfo; onDone?: () => void }
@@ -681,7 +683,7 @@ function dutyOfficerNow(day: number): NpcId {
 }
 /** 지금 보이는 주요 NPC: 소등 후엔 당직 간부만 남고 다른 간부는 퇴근 */
 function visibleNpcs(day: number, minute: number): NpcId[] {
-  const ps = presentNpcs(day);
+  const ps = presentNpcs(day).filter((id) => !sceneAlone.hideNpc.has(id));
   if (minute < LIGHTS_OUT) return ps;
   const duty = dutyOfficerNow(day);
   return ps.filter((id) => !NPC_ROLES[id].officer || id === duty);
@@ -696,6 +698,8 @@ const npcAsleep = (id: NpcId, n: { map: MapId; y: number }, minute: number) =>
   Math.abs(n.y - bedY("top")) < 0.05;
 /** 엑스트라: 밤에 안 보임(자기 부대 막사로) / 침상에 누움 */
 const extraHiddenAtNight = (id: string, minute: number) => {
+  // 🎬 둘만 남는 장면 동안 자리를 비운 사람
+  if (sceneAlone.hide.has(id)) return true;
   if (minute < LIGHTS_OUT) return false;
   // 위병소 교대 후: 이전 근무자(위병)는 막사로 돌아갔다
   const nd = useGame.getState().nightDuty;
@@ -865,6 +869,11 @@ const NIGHT_CLERK_ODD = [
   "(작게) …자정에 벽시계 봤어? 난 그때마다 눈을 깜빡이나 봐. 늘 1분이 비어.",
   "(작게) 아까 복도에서 누가 따라오지 않았냐고? 순찰은 너 혼자잖아. …혼자 맞지?",
 ];
+/**
+ * 🎬 둘만 남는 장면: 그 방에 있던 다른 사람들은 내가 그 방을 나설 때까지 보이지 않는다 (다들 먼저 나갔다)
+ * hide = 숨긴 엑스트라 id · hideNpc = 숨긴 주요 인물
+ */
+const sceneAlone: { map: MapId | null; hide: Set<string>; hideNpc: Set<string> } = { map: null, hide: new Set(), hideNpc: new Set() };
 const WALK_SPEED = 6;
 const DASH_SPEED = 10.5;
 
@@ -961,6 +970,9 @@ export default function World() {
     mealRt.me = null;
     myMeal.tray = "";
     myMeal.eating = null;
+    sceneAlone.map = null;
+    sceneAlone.hide = new Set();
+    sceneAlone.hideNpc = new Set();
   }, []);
 
   // 정적 맵 렌더 (야외 + 모든 건물 내부)
@@ -1230,6 +1242,36 @@ export default function World() {
     }, 700);
     return () => clearTimeout(tm);
   }, [setOverlay]);
+
+  /**
+   * 🧩 야간 근무 퍼즐 (data/puzzles.ts NIGHT_PUZZLES): 그 근무에서 아직 풀지 않은 문제가 있으면 짧은 지문 뒤에 띄운다.
+   * 풀든, 나중으로 미루든 근무는 그대로 이어진다 (then). 풀 문제가 없으면 곧바로 then
+   */
+  const nightPuzzleRef = useRef<(kind: "watch" | "guard", then: () => void) => void>(() => {});
+  nightPuzzleRef.current = (kind, then) => {
+    const st = useGame.getState();
+    const next = NIGHT_PUZZLES[kind].find((n) => !st.puzzles[n.id]?.solved);
+    const def = next ? PUZZLES[next.id] : undefined;
+    if (!next || !def) {
+      then();
+      return;
+    }
+    const lv = QUICK_LEVELS[def.level ?? 1];
+    setOverlay({
+      type: "dialogue",
+      script: { lines: next.intro },
+      onDone: () =>
+        setOverlay({
+          type: "puzzle",
+          id: next.id,
+          onSolved: () => {
+            useGame.getState().applyEffects(lv.reward, "야간 근무 퍼즐");
+            then();
+          },
+          onClose: then,
+        }),
+    });
+  };
 
   /** 1일차: 세수하고 생활관으로 돌아오자, 기다리던 맞선임이 정신 차리라고 한마디 한다 → 연병장으로 */
   const wakeTalkRef = useRef<() => void>(() => {});
@@ -1698,6 +1740,8 @@ export default function World() {
   const staged = useRef<Set<string>>(new Set());
   /** 📢 호출 · 보고를 기다리는 사람이 서 있는 자리: 내가 그 방에 들어서면 거기 서서 나를 기다린다 */
   const waitAt = useRef<{ key: string; map: MapId; x: number; y: number; dir: Dir } | null>(null);
+  /** 🚶 장면 속에서 걸어가는 중인 사람들 ('me' 포함): 길(칸)을 따라 걷고, 도착하면 dir을 보고 선 뒤 then */
+  const sceneWalk = useRef<Record<string, { path: [number, number][]; dir: Dir; then?: () => void; done: boolean }>>({});
   const placeAt = useCallback(
     (key: string, map: MapId, x: number, y: number, dir: Dir) => {
       const e = entityOf(key);
@@ -1872,6 +1916,39 @@ export default function World() {
         }, 2500);
       },
       place: (key, map, x, y, dir) => placeAt(key, map, x, y, dir),
+      walk: (key, x, y, dir, then) => {
+        const a = key === "me" ? runtime.player : entityOf(key);
+        const p = runtime.player;
+        if (!a || a.map !== p.map) {
+          then?.();
+          return;
+        }
+        keys.current = {};
+        if (key !== "me") staged.current.add(key);
+        // 걷는 동안에는 조작과 다른 이벤트를 막는다 (도착하면 풀고 then)
+        holdRef.current = true;
+        const m = world.maps[a.map];
+        sceneWalk.current[key] = {
+          path: findPath(m, Math.floor(a.x), Math.floor(a.y), x, y).slice(1),
+          dir,
+          then,
+          done: false,
+        };
+      },
+      meTile: () => [Math.floor(runtime.player.x), Math.floor(runtime.player.y)],
+      alone: (map, keep) => {
+        sceneAlone.map = map;
+        sceneAlone.hide = new Set(
+          Object.entries(extras.current)
+            .filter(([id, e]) => e.map === map && !keep.includes(`x:${id}`))
+            .map(([id]) => id),
+        );
+        sceneAlone.hideNpc = new Set(
+          Object.entries(npcs.current)
+            .filter(([id, n]) => !!n && n.map === map && !keep.includes(id))
+            .map(([id]) => id),
+        );
+      },
       near: (key, d) => {
         const e = entityOf(key);
         const p = runtime.player;
@@ -2579,20 +2656,22 @@ export default function World() {
                 if (c.effects)
                   useGame.getState().applyEffects(c.effects, "야간 근무");
               },
-              onDone: () => {
-                useGame.getState().finishShift();
-                // 🎬 다음 근무자가 올라와 교대하는 장면을 보여 준 뒤 복귀
-                setOverlay({
-                  type: "dialogue",
-                  script: {
-                    lines: [
-                      { who: "narr", text: "02:00. 막사 쪽에서 다음 근무자들이 하품을 하며 걸어온다." },
-                      { who: "me", text: "근무 교대! 특이사항… 없음. 암구호는 근무일지에 있습니다." },
-                      { who: "narr", text: `교대를 마쳤다. ${josa(partner === "근무자" ? "같이 선 근무자" : partner, "과", "와")} 함께 조용히 생활관으로 돌아가자.` },
-                    ],
-                  },
-                });
-              },
+              onDone: () =>
+                // 🧩 근무 시간이 끝나기 전, 초소에서 마주치는 문제 (선택) → 그 뒤에 교대
+                nightPuzzleRef.current("guard", () => {
+                  useGame.getState().finishShift();
+                  // 🎬 다음 근무자가 올라와 교대하는 장면을 보여 준 뒤 복귀
+                  setOverlay({
+                    type: "dialogue",
+                    script: {
+                      lines: [
+                        { who: "narr", text: "02:00. 막사 쪽에서 다음 근무자들이 하품을 하며 걸어온다." },
+                        { who: "me", text: "근무 교대! 특이사항… 없음. 암구호는 근무일지에 있습니다." },
+                        { who: "narr", text: `교대를 마쳤다. ${josa(partner === "근무자" ? "같이 선 근무자" : partner, "과", "와")} 함께 조용히 생활관으로 돌아가자.` },
+                      ],
+                    },
+                  });
+                }),
             });
           }
         },
@@ -2674,6 +2753,8 @@ export default function World() {
           if (room === "room2") {
             s2.setNightDuty({ rounds });
             useGame.setState({ minute: Math.max(s2.minute, cur.shiftStart + 30) });
+            // 🧩 순찰 중에 마주치는 문제 (선택)
+            nightPuzzleRef.current("watch", () => {});
           } else {
             // 순찰 끝 → 다음 근무자를 깨워 교대
             s2.setNightDuty({ rounds, phase: "wakeNext" });
@@ -4981,9 +5062,12 @@ export default function World() {
         storyOn && !st.nightDuty && extraOverdue(def, st.day) && !st.daily.includes(`overdue_${def.id}`) &&
         // 아직 이병이면(한 번도 진급하지 않았으면) 남의 계급장이 그대로인 게 이상하다고 느낄 수 없다
         rankIdxForDay(st.day) >= 1 &&
+        // 너무 자주 떠올리지 않는다: 처음 한 번은 꼭, 그 뒤로는 하루에 많아야 한 번 · 그날 그 사람에게 마음이 걸릴 때만(셋 중 하나꼴)
+        (!st.flags.overdueSeen || (!st.daily.includes("overdue_any") && hashStr(`overdue-${st.day}-${def.id}`) % 3 === 0)) &&
         !(ex && extraAsleep(id, ex, st.minute))
       ) {
         st.markDaily(`overdue_${def.id}`);
+        st.markDaily("overdue_any");
         const first = !st.flags.overdueSeen;
         setOverlay({
           type: "dialogue",
@@ -6103,9 +6187,50 @@ export default function World() {
           : n.map;
         runtime.npcLoc[id] = { map: n.map, dest: world.maps[tm] ? tm : n.map };
       }
+      // 🚶 장면 속 걷기: 대화창이 떠 있든 아니든, 정해 준 칸까지 실제로 걸어간다
+      {
+        const walks = Object.entries(sceneWalk.current);
+        for (const [key, sw] of walks) {
+          const a = key === "me" ? p : key.startsWith("x:") ? extras.current[key.slice(2)] : npcs.current[key as NpcId];
+          if (!a || sw.done) continue;
+          if (sw.path.length) {
+            const gx = sw.path[0][0] + 0.5,
+              gy = sw.path[0][1] + 0.5;
+            const dx = gx - a.x,
+              dy = gy - a.y;
+            const d = Math.hypot(dx, dy);
+            const step = 4.6 * Math.min(dt, 0.12);
+            if (d <= step) {
+              a.x = gx;
+              a.y = gy;
+              sw.path.shift();
+            } else {
+              a.x += (dx / d) * step;
+              a.y += (dy / d) * step;
+            }
+            if (d > 0.01) a.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+            a.moving = true;
+          } else {
+            a.dir = sw.dir;
+            a.moving = false;
+            sw.done = true;
+            // 아직 걷는 사람이 남아 있지 않으면 조작 잠금을 풀고 다음 장면으로
+            if (!walks.some(([k2, w2]) => k2 !== key && !w2.done)) holdRef.current = false;
+            sw.then?.();
+          }
+        }
+      }
+      // 🎬 둘만 남는 장면: 내가 그 방을 나서면 다른 사람들도 제자리로 돌아온다
+      if (sceneAlone.map && p.map !== sceneAlone.map && !fading) {
+        sceneAlone.map = null;
+        sceneAlone.hide = new Set();
+        sceneAlone.hideNpc = new Set();
+      }
       // 🎬 대화가 끝났으면 세워 둔 사람들을 풀어 준다
-      if (staged.current.size && !overlayRef.current && !holdRef.current)
+      if (staged.current.size && !overlayRef.current && !holdRef.current) {
         staged.current.clear();
+        sceneWalk.current = {};
+      }
       // 😴 아침에 못 일어난 선임: 내가 깨울 때까지 자기 침상에 누워 있다. 깨우면(또는 점호가 시작되면) 침상 앞 통로에 일어나 선다
       const sleeper = sleepySenior(st);
       if (pinnedSleeper && pinnedSleeper !== sleeper) {
@@ -6292,12 +6417,15 @@ export default function World() {
             routeIdx: 0,
           };
         }
+        // 장면 속에서 걸어가는 중이면 그 걸음을 그대로 둔다
+        if (sceneWalk.current[`x:${def.id}`] && !sceneWalk.current[`x:${def.id}`].done) continue;
         if (staged.current.has(`x:${def.id}`)) {
           e.moving = false;
           e.path = [];
           continue;
         }
         if (pinnedSleeper === `x:${def.id}`) continue;
+        if (sceneWalk.current[`x:${def.id}`]) continue;
         // 🌅 아침 점호 집합: 다른 생활관·부대 인원도 미리 연병장에 오와 열을 맞춰 서 있다 (점호 의식이 세우는 자리 그대로)
         if (!cer.current && rollcallWaiting(st) && leftRoomToday(st.day)) {
           const slot = rollcallSlots(st)[`x:${def.id}`];
@@ -7719,7 +7847,11 @@ export default function World() {
                 }
               : undefined
           }
-          onClose={() => setOverlay(null)}
+          onClose={() => {
+            const o = overlay;
+            setOverlay(null);
+            o.onClose?.();
+          }}
         />
       )}
       {overlay?.type === "menu" && (

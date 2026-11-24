@@ -51,6 +51,12 @@ export interface StoryCtx {
   place: (key: string, map: MapId, x: number, y: number, dir: Dir) => void;
   /** 그 사람이 나와 같은 맵, d칸 안에 있는지 */
   near: (key: string, d: number) => boolean;
+  /** 🚶 장면 속에서 실제로 걸어간다: 'me' 또는 사람 키('x:엑스트라' · NpcId)가 지금 맵의 그 칸까지 걸어가 dir을 보고 선다 → then */
+  walk: (key: string, x: number, y: number, dir: Dir, then?: () => void) => void;
+  /** 내가 서 있는 칸 [x, y] */
+  meTile: () => [number, number];
+  /** 이 방에 keep(사람 키)만 남긴다: 다른 사람들은 내가 이 방을 나설 때까지 자리를 비운다 */
+  alone: (map: MapId, keep: string[]) => void;
   resist: (o: ResistOpts, done: (ok: boolean) => void) => void;
   flash: () => void;
   /** 🧩 두뇌 퍼즐을 띄운다. 풀면 solved(되살아날 기억). 미루고 닫으면 아무 일도 없다 (다시 와서 풀 수 있다) */
@@ -458,17 +464,35 @@ function s02(ctx: StoryCtx) {
     ] },
     // 🧩 P-23: 장부대로라면 있어야 할 상자와, 선반에 실제로 있는 상자
     onDone: () => ctx.puzzle('P-23', (reward) => {
+      // 🐕 하데리어가 직접 움직인다: 일어나 가운데 선반으로 걸어가 틈을 긁고 → 내가 다가가 틈에서 인식표를 꺼내고 → 하데리어가 나를 올려다본다
+      const DOG = 'x:ammodog';
+      let keptTag = false;
+      const found = () => ctx.play({
+        script: { lines: [
+          { who: 'narr', text: '틈에 손을 넣자 차가운 쇠붙이가 잡힌다. 줄에 꿴 인식표 두 장, 「한도윤」. 그리고 접힌 쪽지.', sfx: 'sfx_item' },
+          narr('「금요일, 2인 1조. 나는 들어왔는데, 같이 나가지 못했다. 별이 지는 밤이었다.」'),
+          narr('「이 녀석 밥 좀 챙겨 줘. 문 앞에서 기다리지 말라고 해도 안 듣는다. — 한」'),
+        ] },
+        // 하데리어가 내 쪽으로 돌아앉아 올려다본다
+        onDone: () => ctx.walk(DOG, 9, 2, 'left', () => ctx.walk('me', 8, 2, 'right', choice)),
+      });
       ctx.play({
         script: { lines: [
           narr('장부엔 스물여섯, 선반엔 스물다섯. 기록에 없는 상자 하나가 비었다.'),
           narr('금요일 줄을 다시 본다. 확인자 첫 칸에는 「한도윤」. 두 번째 칸은 하얗게 비어 있다. 지운 자국도 없이, 처음부터 아무것도 쓰이지 않은 것처럼.'),
-          narr('그때 하데리어가 일어났다. 가운데 선반의 빈자리에 코를 박고 킁킁대더니, 선반과 벽 사이 틈을 앞발로 긁는다.'),
-          me('(…거기 뭐가 있어?)'),
-          narr('틈에 손을 넣자 차가운 쇠붙이가 잡힌다. 줄에 꿴 인식표 두 장, 「한도윤」. 그리고 접힌 쪽지.'),
-          narr('「금요일, 2인 1조. 나는 들어왔는데, 같이 나가지 못했다. 별이 지는 밤이었다.」'),
-          narr('「이 녀석 밥 좀 챙겨 줘. 문 앞에서 기다리지 말라고 해도 안 듣는다. — 한」'),
+          narr('그때, 문 옆에 엎드려 있던 하데리어가 일어났다.'),
         ] },
-        onDone: () => ctx.play({
+        onDone: () => ctx.walk(DOG, 9, 2, 'up', () => ctx.play({
+          script: { lines: [
+            { who: 'narr', text: '하데리어가 가운데 선반의 빈자리에 코를 박고 킁킁대더니, 선반과 벽 사이 틈을 앞발로 긁는다. 벅, 벅.', sfx: 'sfx_bump' },
+            me('(…거기 뭐가 있어?)'),
+          ] },
+          // 내가 하데리어 옆으로 걸어간다
+          onDone: () => ctx.walk('me', 8, 2, 'up', found),
+        })),
+      });
+      const choice = () => {
+        ctx.play({
           script: {
             custom: dogSpeaker(),
             lines: [narr('하데리어가 인식표를 한 번 핥고 나를 올려다본다. 짖지도 않는다.')],
@@ -491,16 +515,21 @@ function s02(ctx: StoryCtx) {
               },
             ],
           },
-          onChoice: (c) => { if (c.effects) G().applyEffects(c.effects, '탄약고'); },
-          onDone: () => ctx.play({
-            script: { lines: [
-              me('(2인 1조. 들어간 사람은 둘인데, 나온 기록은 하나.)'),
-              me('(별이 지는 밤마다, 이 부대엔 꼭 누군가 남는다.)'),
-            ] },
-            onDone: () => G().findClue('C-17', reward),
-          }),
-        }),
-      });
+          onChoice: (c) => { if (c.effects) G().applyEffects(c.effects, '탄약고'); keptTag = !!c.effects?.flag && c.effects.flag === 'ammoTagKept'; },
+          onDone: () => {
+            const last = () => ctx.play({
+              script: { lines: [
+                me('(2인 1조. 들어간 사람은 둘인데, 나온 기록은 하나.)'),
+                me('(별이 지는 밤마다, 이 부대엔 꼭 누군가 남는다.)'),
+              ] },
+              onDone: () => G().findClue('C-17', reward),
+            });
+            // 인식표를 내가 가져가면, 하데리어는 다시 문 앞으로 걸어가 문 쪽을 보고 앉는다
+            if (keptTag) ctx.walk(DOG, 8, 7, 'down', last);
+            else last();
+          },
+        });
+      };
     }),
   });
 }
@@ -523,23 +552,42 @@ export function ammoLedgerLines(): Line[] {
 /** M-08 분리수거장: 폐지 더미를 반으로 가르다 나온, 부치지 못한 편지 */
 function m08(ctx: StoryCtx) {
   G().spend(15);
+  // 🗑️ 깨봉이가 직접 움직인다: 줄자 끝을 물고 내 옆으로 걸어오고 → 줄을 당기며 마당 끝으로 걸어가고 → 봉투가 쏟아지면 하나를 물어 온다
+  const BONG = 'x:recycler';
+  const [mx, my] = ctx.meTile();
+  // 내 옆 칸(오른쪽이 막혀 있으면 왼쪽) · 줄을 당겨 가는 자리(같은 줄로 네 칸 더)
+  const side = mx + 1 <= 16 ? 1 : -1;
+  const beside: [number, number] = [mx + side, my];
+  const farX = Math.min(16, Math.max(3, mx + side * 5));
+  const solved = (reward: number) => ctx.walk(BONG, beside[0], beside[1], side > 0 ? 'left' : 'right', () => ctx.play({
+    script: { lines: [
+      { who: 'narr', text: '깨봉이가 쏟아진 봉투 하나를 물어다 내 발치에 내려놓는다. 주둥이로 한 번 밀고는, 한 걸음 물러나 앉는다.', sfx: 'sfx_paper' },
+      narr('해마다 다른 필체로 쓴 편지들. 내용은 전부 같다.'),
+      narr('『집에 가고 싶다』 『집에 가고 싶다』 『집에 가고 싶다』'),
+      narr('뒷면마다 다른 종이를 대고 눌러 쓴 자국이 남아 있다. 여섯 장을 포개자, 자국이 겹쳐 한 장의 쪽지가 된다.'),
+      narr('『다음에 오는 사람에게. 도서관 안쪽 방을 봐라. — 강』'),
+      me('(…나보다 먼저 온 사람이 있었어. 그것도 여러 명.)'),
+    ] },
+    onDone: () => { G().findClue('C-09', reward); withReport(ctx, 'M-08'); },
+  }));
   ctx.play({
     script: { lines: [
       narr('분리수거장. 마당 한쪽에 폐지 더미가 산처럼 쌓여 있다. 오늘은 이걸 종류별로 묶어 내야 한다.'),
-      narr('먼저 와 있던 분리수거 당번 깨봉이가 줄자 끝을 물고 다가온다. 둘이서 반씩 나눠 맡자는 눈치다.'),
-      me('(마당도 반, 폐지 더미도 반. 줄 하나로 공평하게 나누려면…)'),
     ] },
-    // 🧩 P-11: 마당과 폐지 더미를 한 줄로 반씩 가르면, 더미 한가운데서 봉투가 나온다
-    onDone: () => ctx.puzzle('P-11', (reward) => ctx.play({
+    onDone: () => ctx.walk(BONG, beside[0], beside[1], side > 0 ? 'left' : 'right', () => ctx.play({
       script: { lines: [
-        narr('줄을 따라 폐지 더미를 반으로 가르자, 한가운데서 봉투 뭉치가 쏟아진다. 우표도, 주소도 없다.'),
-        narr('해마다 다른 필체로 쓴 편지들. 내용은 전부 같다.'),
-        narr('『집에 가고 싶다』 『집에 가고 싶다』 『집에 가고 싶다』'),
-        narr('뒷면마다 다른 종이를 대고 눌러 쓴 자국이 남아 있다. 여섯 장을 포개자, 자국이 겹쳐 한 장의 쪽지가 된다.'),
-        narr('『다음에 오는 사람에게. 도서관 안쪽 방을 봐라. — 강』'),
-        me('(…나보다 먼저 온 사람이 있었어. 그것도 여러 명.)'),
+        narr('먼저 와 있던 분리수거 당번 깨봉이가 줄자 끝을 물고 다가왔다. 둘이서 반씩 나눠 맡자는 눈치다.'),
+        me('(마당도 반, 폐지 더미도 반. 줄 하나로 공평하게 나누려면…)'),
       ] },
-      onDone: () => { G().findClue('C-09', reward); withReport(ctx, 'M-08'); },
+      // 줄자를 문 채 마당 저쪽으로 걸어가 줄을 팽팽하게 당긴다
+      onDone: () => ctx.walk(BONG, farX, my, side > 0 ? 'left' : 'right', () =>
+        // 🧩 P-11: 마당과 폐지 더미를 한 줄로 반씩 가르면, 더미 한가운데서 봉투가 나온다
+        ctx.puzzle('P-11', (reward) => ctx.play({
+          script: { lines: [
+            narr('줄을 따라 폐지 더미를 반으로 가르자, 한가운데서 봉투 뭉치가 쏟아진다. 우표도, 주소도 없다.'),
+          ] },
+          onDone: () => solved(reward),
+        }))),
     })),
   });
 }
@@ -566,7 +614,7 @@ function m09(ctx: StoryCtx) {
   });
 }
 
-// ═════════════════════════ 3장 「떡밥을 따라서」 ═════════════════════════
+// ═════════════════════════ 3장 「별빛을 따라서」 ═════════════════════════
 
 /** M-10 기록 보관실 (도서관 안쪽 방) */
 function m10(ctx: StoryCtx) {
@@ -1189,7 +1237,7 @@ export function storyNpcOptions(id: NpcId, ctx: StoryCtx): MenuOption[] {
     if (isOpen('M-06')) opts.push({ label: '🧺 "같이 빨래하러 가자"', hint: forgot ? forgotHint : free ? '📖 스토리' : '점심·개인정비 시간에', disabled: forgot || !free, onSelect: () => m06(tone(ctx, 'bgm_12_unease')) });
     if (isOpen('D-01')) {
       const ev = eveningNow();
-      opts.push({ label: '🗣️ "남아서 같이 정리하자" (추리 정리 1)', hint: forgot ? forgotHint : ev ? '체단실에서' : '19:00~21:20', disabled: forgot || !ev, onSelect: () => ctx.goTo('gymroom', 6.5, 6.5, 'right', () => { ctx.place('buddy', 'gymroom', 7.5, 6.5, 'left'); d01(tone(ctx, 'bgm_09_mystery_clues')); }) });
+      opts.push({ label: '🗣️ "남아서 같이 정리하자" (추리 정리 1)', hint: forgot ? forgotHint : ev ? '체단실에서' : '19:00~21:20', disabled: forgot || !ev, onSelect: () => ctx.goTo('gymroom', 6.5, 6.5, 'right', () => { ctx.alone('gymroom', ['buddy']); ctx.place('buddy', 'gymroom', 7.5, 6.5, 'left'); d01(tone(ctx, 'bgm_09_mystery_clues')); }) });
     }
   }
   // 7일차 밤 당직 간부: "어젯밤 당직부관?"
