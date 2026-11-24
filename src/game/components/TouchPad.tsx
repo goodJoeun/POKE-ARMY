@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 type Keys = React.MutableRefObject<Record<string, boolean>>;
 
-const DIR_KEYS = { u: 'arrowup', d: 'arrowdown', l: 'arrowleft', r: 'arrowright' } as const;
+const DIR_KEYS = { u: 'ArrowUp', d: 'ArrowDown', l: 'ArrowLeft', r: 'ArrowRight' } as const;
 /** 가운데에서 반지름의 이 비율 안쪽은 '안 누름' */
 const DEAD = 0.18;
 /** 대각선으로 치는 범위: 45° 방향에서 ±이 각도 안 (나머지는 가까운 상하좌우로 붙인다) */
@@ -20,20 +20,28 @@ function dirsAt(dx: number, dy: number, radius: number): string {
 }
 
 /** 키보드 E를 누른 것과 똑같이 알린다 → 상호작용 · 대화 넘기기 · 안내 닫기가 키보드와 같은 길로 처리된다 */
-const pressKey = (type: 'keydown' | 'keyup') => window.dispatchEvent(new KeyboardEvent(type, { key: 'e', bubbles: true }));
+const pressKey = (type: 'keydown' | 'keyup', key = 'e') => window.dispatchEvent(new KeyboardEvent(type, { key, bubbles: true }));
 
 /**
  * 터치 기기용 조작부.
  * - 방향패드: 판 하나가 손가락을 따라간다. 누른 채 미끄러뜨리면 떼지 않고도 방향이 바뀐다 (대각선 포함)
- * - 확인 버튼(이중 원): 상호작용 · 대화 넘기기
+ * - 확인 버튼(이중 원): 상호작용 · 대화 넘기기 · 메뉴와 선택지에서 커서가 놓인 항목 고르기
  */
 export default function TouchPad({ keys }: { keys: Keys }) {
   const pad = useRef<HTMLDivElement>(null);
   const finger = useRef<number | null>(null);
   const [held, setHeld] = useState('');
 
+  const heldRef = useRef('');
   const apply = (dirs: string) => {
-    for (const [d, k] of Object.entries(DIR_KEYS)) keys.current[k] = dirs.includes(d);
+    const before = heldRef.current;
+    heldRef.current = dirs;
+    for (const [d, k] of Object.entries(DIR_KEYS)) {
+      const on = dirs.includes(d);
+      keys.current[k.toLowerCase()] = on;
+      // 방향이 새로 눌리거나 떼일 때 방향키로도 알린다 → 메뉴 · 선택지의 커서가 방향패드로 움직인다
+      if (on !== before.includes(d)) pressKey(on ? 'keydown' : 'keyup', k);
+    }
     setHeld(dirs);
   };
   const track = (x: number, y: number) => {

@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Choice, Line, NpcId } from '../types';
 import { useGame } from '../state/store';
 import { TEXT_SPEED, useSettings } from '../state/settings';
@@ -31,6 +31,10 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
   const [phase, setPhase] = useState<'lines' | 'choices' | 'reply'>('lines');
   const [picked, setPicked] = useState<Choice | null>(null);
   const [typed, setTyped] = useState(0);
+  // 선택지 커서: ↑↓(방향패드)로 옮기고 확인(E · Enter · 터치 확인 버튼)으로 고른다
+  const [sel, setSel] = useState(0);
+  const choicesAt = useRef(0);
+  useEffect(() => { if (phase === 'choices') { setSel(0); choicesAt.current = performance.now(); } }, [phase]);
 
   const line = lines[idx];
   const text = line ? fmt(line.text, ctx) : '';
@@ -82,14 +86,23 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
     const onKey = (e: KeyboardEvent) => {
       if (phase === 'choices' && script.choices) {
         const n = parseInt(e.key, 10);
-        if (n >= 1 && n <= script.choices.length) { e.preventDefault(); choose(script.choices[n - 1]); }
+        if (n >= 1 && n <= script.choices.length) { e.preventDefault(); choose(script.choices[n - 1]); return; }
+        const count = script.choices.length;
+        if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') { e.preventDefault(); playSfx('sfx_cursor', 0.5); setSel((v) => (v + 1) % count); }
+        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') { e.preventDefault(); playSfx('sfx_cursor', 0.5); setSel((v) => (v - 1 + count) % count); }
+        // 대사를 넘기던 손이 그대로 첫 선택지를 골라 버리지 않게, 선택지가 뜬 직후엔 잠깐 받지 않는다
+        if ((e.key === ' ' || e.key === 'Enter' || e.key === 'e' || e.key === 'E') && !e.repeat && performance.now() - choicesAt.current > 400) {
+          e.preventDefault();
+          const c = script.choices[sel];
+          if (c) choose(c);
+        }
         return;
       }
       if (e.key === ' ' || e.key === 'Enter' || e.key === 'e' || e.key === 'E') { e.preventDefault(); advance(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase, script.choices, choose, advance]);
+  }, [phase, script.choices, choose, advance, sel]);
 
   return (
     <div className="dialogue-wrap" onClick={advance}>
@@ -117,7 +130,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
             <div className="choices" onClick={(e) => e.stopPropagation()}>
               <div className="choice-prompt">{fmt(lines[lines.length - 1]?.text ?? '', ctx)}</div>
               {script.choices.map((c, i) => (
-                <button key={i} className="choice" onClick={() => choose(c)}>
+                <button key={i} className={`choice ${i === sel ? 'sel' : ''}`} onMouseEnter={() => setSel(i)} onClick={() => choose(c)}>
                   <span className="choice-num">{i + 1}</span> {fmt(c.text, ctx)}
                 </button>
               ))}

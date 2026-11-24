@@ -707,3 +707,22 @@ canvas { image-rendering: pixelated; }
 }
 /* 가로로 누운 화면: 대화창은 아래에 두고 확인 버튼 자리만 오른쪽에 비운다 */
 @media (pointer: coarse) and (max-height: 500px) { .world .dialogue-wrap { padding-bottom: 10px; padding-right: 100px; } }
+
+/* ───── 선택지 커서 (↑↓ · 방향패드로 옮기고 확인으로 고른다) ───── */
+.choice.sel:not(:disabled) { background: var(--panel-2); }
+.choice.sel:not(:disabled)::before { opacity: 1; animation: cursorBlink 0.6s steps(2) infinite; }
+/* 좁은 화면: 선택지를 고를 땐 초상화를 접어 선택지가 창 너비를 다 쓴다 */
+@media (max-width: 760px) { .dialogue:has(.choices) .portrait { display: none; } }
+@media (pointer: coarse) {
+  /* 선택지가 뜨면 방향패드를 다시 보여 주고, 대화창은 그 위로 올린다 */
+  .world:has(.dialogue-wrap .choices) .touchpad .dpad { visibility: visible; }
+  .world .dialogue-wrap:has(.choices) { padding-bottom: 204px; }
+  /* 메뉴(대화하기 · 선물하기 …)가 떠도 방향패드와 확인 버튼이 눌리게 창 뒤 가림막 위로 올린다 */
+  .world:has(.menu:not(.puzzle)) .touchpad { z-index: 42; }
+}
+@media (pointer: coarse) and (max-height: 500px) {
+  /* 가로로 누운 화면: 방향패드(왼쪽)와 확인 버튼(오른쪽) 사이에 놓는다 */
+  .world .dialogue-wrap:has(.choices) { padding-bottom: 10px; padding-left: 160px; }
+  .dialogue:has(.choices) .portrait { display: none; }
+  .world .modal-backdrop:has(> .menu:not(.puzzle)) { padding-left: 160px; padding-right: 160px; }
+}
