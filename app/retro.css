@@ -726,3 +726,18 @@ canvas { image-rendering: pixelated; }
   .dialogue:has(.choices) .portrait { display: none; }
   .world .modal-backdrop:has(> .menu:not(.puzzle)) { padding-left: 160px; padding-right: 160px; }
 }
+
+/* ───── 좁은 화면: 대화창을 한 단계 작게 ───── */
+@media (max-width: 760px) {
+  .dialogue { min-height: 82px; padding: 10px 12px 9px; gap: 9px; margin-top: 18px; border-width: 3px; }
+  .portrait { width: 64px; height: 64px; border-width: 2px; }
+  .portrait canvas { width: 60px !important; height: 60px !important; }
+  .speaker { font-size: 13px; top: -22px; padding: 3px 10px 2px; }
+  .speaker-sub { font-size: 10px; }
+  .dialogue-text { font-size: 14px; line-height: 1.55; margin-top: 0; }
+  .choice-prompt { font-size: 14px; margin-bottom: 0; }
+  .choice { font-size: 14px; padding: 5px 8px 5px 24px; }
+  .choice::before { left: 6px; font-size: 10px; }
+  .choices { margin-top: 2px; }
+  .tip-card { font-size: 13px; padding: 6px 10px; margin-bottom: 6px; }
+}
