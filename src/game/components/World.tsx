@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  BranchId,
   Choice,
   Dialogue,
   Line,
@@ -9,7 +10,8 @@ import type {
   NpcId,
   SpotId,
 } from "../types";
-import { extraLook, extrasForDay, extraOverdue, sergeantSinceArrival } from "../data/extras";
+import { extraLook, extrasForDay, extraOverdue, sergeantSinceArrival, type ExtraDef } from "../data/extras";
+import { QUICK_SCENES, fillExtraNames, hostNpc, quickSpotOfHost } from "../data/quickScenes";
 import {
   useGame,
   presentNpcs,
@@ -696,6 +698,16 @@ const npcAsleep = (id: NpcId, n: { map: MapId; y: number }, minute: number) =>
   BED_X[id] !== undefined &&
   n.map === "room1" &&
   Math.abs(n.y - bedY("top")) < 0.05;
+/** 엑스트라를 대화창 화자로 (이름 + 계급 · 직책 · 모자) */
+function extraSpeakerInfo(def: ExtraDef, branch: BranchId): SpeakerInfo {
+  const words = def.title.split(" ");
+  return {
+    name: `${def.name} ${words[words.length - 1]}`,
+    sub: words.length > 1 ? words.slice(0, -1).join(" ") : def.title,
+    look: extraLook(def),
+    cap: (def.noCap ? null : def.officer ? `officer-${BRANCHES[branch].cap}` : BRANCHES[branch].cap) as CapType,
+  };
+}
 /** 엑스트라: 밤에 안 보임(자기 부대 막사로) / 침상에 누움 */
 const extraHiddenAtNight = (id: string, minute: number) => {
   // 🎬 둘만 남는 장면 동안 자리를 비운 사람
@@ -804,7 +816,7 @@ function rollcallSlots(st: ReturnType<typeof useGame.getState>): Record<string, 
   const late = st.day === 1 && !st.flags.tutorial;
   if (!late) order.splice(Math.max(0, order.indexOf("buddy")), 0, "me");
   for (const def of extrasForDay(st.branch, st.day))
-    if (!def.officer && !["dog", "guard", "cook"].includes(def.id)) order.push(`x:${def.id}`);
+    if (!def.officer && !def.wild && !["dog", "guard", "cook"].includes(def.id)) order.push(`x:${def.id}`);
   order.forEach((k, i) => (out[k] = i));
   return out;
 }
@@ -1093,38 +1105,99 @@ export default function World() {
       return;
     }
     if (!q || !def) return;
+    // 🧩 그 자리에서 누군가 겪고 있는 일(상황 장면) → 퍼즐 → 그 포켓몬의 한마디 → 혼잣말
+    quickPlayRef.current(spot);
+  };
+
+  /** 🧩 짬짬이 퍼즐의 상황을 꺼내는 쪽: 엑스트라면 그 화자, 주요 인물이면 그 npc */
+  const hostScript = (host: string): { npc?: NpcId; custom?: SpeakerInfo } => {
+    const nid = hostNpc(host);
+    if (nid) return { npc: nid };
+    const def = extraDefs.find((d) => d.id === host.slice(2));
+    return def ? { custom: extraSpeakerInfo(def, useGame.getState().branch) } : {};
+  };
+  /**
+   * 🧩 짬짬이 퍼즐 하나를 상황째로 연다 (data/quickScenes.ts): 상황 장면 → 퍼즐 → 풀면 보상과 그 포켓몬의 한마디.
+   * 장소 메뉴 · 상황을 꺼내는 포켓몬에게 말 걸기 · 혼자 실마리 찾기가 모두 이 길로 온다.
+   * 혼자 찾아온 자리였다면 풀고 난 뒤 혼잣말이 이어진다.
+   */
+  const quickPlayRef = useRef<(spot: string) => void>(() => {});
+  quickPlayRef.current = (spot) => {
+    const st = useGame.getState();
+    const quick = QUICK_SPOTS[spot];
+    const def = quick ? PUZZLES[quick.puzzle] : undefined;
+    if (!quick || !def) return;
     const lv = QUICK_LEVELS[def.level ?? 1];
+    const solo = st.solo === spot;
+    const sc = QUICK_SCENES[spot];
+    const who = sc ? hostScript(sc.host) : {};
+    const named = (ls: Line[]) => fillExtraNames(ls, (id) => extraDefs.find((d) => d.id === id)?.name);
+    const p = runtime.player;
     keys.current = {};
-    runtime.player.moving = false;
-    setOverlay({
-      type: "dialogue",
-      script: {
-        lines: [
-          { who: "narr", text: `${def.mission}. 평소라면 그냥 지나쳤을 곳이다. 오늘은 걸음이 멈춘다.` },
-          { who: "me", text: "(여기서는 다들 묻지 않고 넘어간다. 나는 하나씩 따져 보자. 눈앞의 이것부터.)" },
-        ],
-      },
-      onDone: () =>
-        setOverlay({
-          type: "puzzle",
-          id: q.puzzle,
-          onSolved: () => {
-            const s2 = useGame.getState();
-            s2.applyEffects(lv.reward, "혼자 찾은 실마리");
+    p.moving = false;
+    // 상황을 꺼내는 포켓몬이 곁에 있으면 서로 마주 본다
+    const he = sc?.host.startsWith("x:") ? extras.current[sc.host.slice(2)] : sc ? npcs.current[sc.host as NpcId] : undefined;
+    if (he && he.map === p.map && Math.hypot(he.x - p.x, he.y - p.y) < 4.5) {
+      const dx = he.x - p.x,
+        dy = he.y - p.y;
+      p.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+      he.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "left" : "right") : dy > 0 ? "up" : "down";
+    }
+    const puzzle = () =>
+      setOverlay({
+        type: "puzzle",
+        id: quick.puzzle,
+        onSolved: () => {
+          const s2 = useGame.getState();
+          s2.applyEffects(lv.reward, solo ? "혼자 찾은 실마리" : "짬짬이 퍼즐");
+          if (s2.solo === spot) {
             soloLead.spot = null;
             useGame.setState({ solo: null });
-            setOverlay({
-              type: "dialogue",
-              script: {
-                lines: [
-                  { who: "me", text: "(…풀렸다. 따져 보니 답이 있다. 이 부대의 이상한 점들도, 이렇게 하나씩 따져 가면 풀릴지 모른다.)" },
-                  { who: "narr", text: "🌟 스스로 생각한 만큼, 흐려지던 기억이 조금 또렷해진다." },
-                ],
-              },
-            });
-          },
-        }),
-    });
+          }
+          const after: Line[] = solo
+            ? [
+                { who: "me", text: "(…풀렸다. 따져 보니 답이 있다. 이 부대의 이상한 점들도, 이렇게 하나씩 따져 가면 풀릴지 모른다.)" },
+                { who: "narr", text: "🌟 스스로 생각한 만큼, 흐려지던 기억이 조금 또렷해진다." },
+              ]
+            : [];
+          const lines = [...(sc ? named(sc.outro) : []), ...after];
+          if (lines.length) setOverlay({ type: "dialogue", script: { ...who, lines } });
+        },
+      });
+    if (!sc) {
+      puzzle();
+      return;
+    }
+    setOverlay({ type: "dialogue", script: { ...who, lines: named(sc.intro) }, onDone: puzzle });
+  };
+  /**
+   * 🧩 짬짬이 퍼즐 선택지 (장소 메뉴와, 그 상황을 꺼내는 포켓몬의 메뉴에 같은 것이 붙는다). 없으면 null.
+   * 쉬움은 처음부터, 보통은 일병부터, 어려움은 상병부터 (짬이 차야 선임들이 어려운 문제를 내준다)
+   */
+  const quickOptionRef = useRef<(spot: string) => MenuOption | null>(() => null);
+  quickOptionRef.current = (spot) => {
+    const st = useGame.getState();
+    const quick = QUICK_SPOTS[spot];
+    if (!quick || !(st.clues.length > 0 || st.solo === spot) || st.puzzles[quick.puzzle]?.solved) return null;
+    const lv = QUICK_LEVELS[PUZZLES[quick.puzzle]?.level ?? 1];
+    const ranked = rankIdxForDay(st.day) >= lv.rank;
+    const mealFirst = !!st.mealCheck && !st.mealCheck.done;
+    const due = eventDue(st);
+    const free = !mealFirst && !due && (isFreeTimeEvening(st.minute) || isMealTime(st.minute));
+    return {
+      label: `🧩 ${quick.label}`,
+      hint: !ranked
+        ? `${lv.stars} ${lv.name} · 🔒 ${RANKS[lv.rank]}부터`
+        : free
+          ? `짬짬이 퍼즐 · ${lv.stars} ${lv.name}`
+          : due
+            ? "⏰ 집합 시간 — 일정부터"
+            : mealFirst
+              ? "🍚 먼저 분대와 식사"
+              : "점심·개인정비 시간에",
+      disabled: !free || !ranked,
+      onSelect: () => quickPlayRef.current(spot),
+    };
   };
 
   /**
@@ -1494,7 +1567,7 @@ export default function World() {
       if (!rollcall.late)
         order.splice(Math.max(0, order.indexOf("buddy")), 0, "me");
       for (const def of extraDefs)
-        if (!def.officer && !["dog", "guard", "cook"].includes(def.id))
+        if (!def.officer && !def.wild && !["dog", "guard", "cook"].includes(def.id))
           order.push("x:" + def.id);
       if (rollcall.late) order.push("me");
       let i = 0;
@@ -5001,28 +5074,8 @@ export default function World() {
         });
       // 🧩 짬짬이 퍼즐: 선택. 풀면 기억과 별사탕을 얻고, 그 장소에서 사라진다.
       // 난이도별로 놓여 있다: 쉬움은 처음부터, 보통은 일병부터, 어려움은 상병부터 (짬이 차야 선임들이 어려운 문제를 내준다)
-      const quick = QUICK_SPOTS[id];
-      if (quick && (st.clues.length > 0 || st.solo === id) && !st.puzzles[quick.puzzle]?.solved) {
-        const lv = QUICK_LEVELS[PUZZLES[quick.puzzle]?.level ?? 1];
-        const ranked = rankIdxForDay(st.day) >= lv.rank;
-        opts.push({
-          label: `🧩 ${quick.label}`,
-          hint: !ranked
-            ? `${lv.stars} ${lv.name} · 🔒 ${RANKS[lv.rank]}부터`
-            : free
-              ? `짬짬이 퍼즐 · ${lv.stars} ${lv.name}`
-              : mealFirst
-                ? "🍚 먼저 분대와 식사"
-                : "점심·개인정비 시간에",
-          disabled: !free || !ranked,
-          onSelect: () =>
-            setOverlay({
-              type: "puzzle",
-              id: quick.puzzle,
-              onSolved: () => useGame.getState().applyEffects(lv.reward, "짬짬이 퍼즐"),
-            }),
-        });
-      }
+      const quickOpt = quickOptionRef.current(id);
+      if (quickOpt) opts.push(quickOpt);
       opts.push({ label: "닫기", onSelect: () => setOverlay(null) });
       setOverlay({ type: "menu", title, options: opts });
     },
@@ -5094,10 +5147,13 @@ export default function World() {
         });
         return;
       }
-      const sopts =
-        skipStory || (ex && extraAsleep(id, ex, st.minute))
-          ? []
-          : storyExtraOptions(id, storyCtx);
+      const asleepNow = !!ex && extraAsleep(id, ex, st.minute);
+      const hostSpot = quickSpotOfHost(id);
+      const hostOpt = hostSpot && !skipStory && !asleepNow ? quickOptionRef.current(hostSpot) : null;
+      const sopts = [
+        ...(skipStory || asleepNow ? [] : storyExtraOptions(id, storyCtx)),
+        ...(hostOpt && !hostOpt.hint?.includes("🔒") ? [hostOpt] : []),
+      ];
       if (sopts.length) {
         setOverlay({
           type: "menu",
@@ -5300,17 +5356,7 @@ export default function World() {
         });
         return;
       }
-      const words = def.title.split(" ");
-      const speaker = {
-        name: `${def.name} ${words[words.length - 1]}`,
-        sub: words.length > 1 ? words.slice(0, -1).join(" ") : def.title,
-        look: extraLook(def),
-        cap: (def.noCap
-          ? null
-          : def.officer
-            ? `officer-${BRANCHES[st.branch].cap}`
-            : BRANCHES[st.branch].cap) as CapType,
-      };
+      const speaker = extraSpeakerInfo(def, st.branch);
       const say = () => {
         useGame.getState().spend(5);
         const line = pickTalk(`x:${def.id}`, [

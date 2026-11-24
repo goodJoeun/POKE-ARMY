@@ -27,6 +27,8 @@ export interface ExtraDef {
   officer?: boolean;
   /** 군견 등: 모자 없음 */
   noCap?: boolean;
+  /** 부대원이 아닌 포켓몬 (책벌레 · 건조기 지킴이 · 초소 지붕의 두두): 점호 대열에 서지 않는다 */
+  wild?: boolean;
   lines: string[];
   daily?: { label: string; hint: string; effects: Effects; text: string };
   /** 이 날짜부터는 없다 (전역 등) */
@@ -288,4 +290,28 @@ const KITCHEN_FIRE: ExtraDef = {
   ],
 };
 
-for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN, AMMO_DOG, RECYCLER, KITCHEN_HELPER, KITCHEN_FIRE);
+/**
+ * 🧩 짬짬이 퍼즐의 상황을 꺼내는 포켓몬 (세 군 공통, data/quickScenes.ts).
+ * 퍼즐이 놓인 장소에서 문제를 안고 있다가, 말을 걸면 그 상황을 들려준다.
+ * 장소의 E(살펴보기) 자리를 가리지 않도록 그 자리에서 두 칸 넘게 떨어져 선다.
+ */
+const QUICK_HOSTS: ExtraDef[] = [
+  { id: 'caterpie', wild: true, sprite: 'caterpie', name: '캐터피', title: '진중문고 책벌레', map: 'library', x: 2, y: 2, wander: 0, noCap: true, color: '#8ac858',
+    lines: ['사각… 사각사각. (책장 틈에서 고개를 내밀었다가 쏙 들어간다)', '꾸우. (「병영생활 길라잡이」 책등 위에서 꿈틀거린다)', '사각! (네이티오 쪽을 힐끔 보더니 책 뒤로 숨는다)'] },
+  { id: 'magnemite', sprite: 'magnemite', name: '코일', title: '정비병 이병', map: 'maint', x: 8, y: 2, wander: 1, color: '#a8b0b8',
+    lines: ['삐빅. 정비실 공구는 제자리에. 자석에 붙는 건 전부 제 담당입니다.', '레어코일 병장님이 계실 땐 공구함이 늘 열려 있었습니다. 삐빅.', '렌치에 자꾸 제가 붙습니다. …제가 렌치에 붙는 건가.'] },
+  { id: 'klefki', wild: true, sprite: 'klefki', name: '클레피', title: '건조기 지킴이', map: 'laundry2', x: 7, y: 4, wander: 0, noCap: true, color: '#c8c8d8',
+    lines: ['짤랑. (건조기를 쓰려면 고리를 내라는 듯 꾸러미를 흔든다)', '짤랑짤랑. (열쇠 꾸러미를 세어 보는 중이다. 하나도 빠짐없이.)', '짤랑…? (내 주머니 쪽을 한참 본다. 고리 냄새를 맡은 걸까.)'] },
+  { id: 'oddish', sprite: 'oddish', name: '뚜벅쵸', title: '파견 이병', map: 'laundry2', x: 1, y: 4, wander: 0, color: '#5a7ac8', from: 4,
+    lines: ['파견 와서 아직 길을 잘 모릅니다. 세탁실은 여기가 맞지요?', '여기 건조기는 고리를 받는답니다. 처음 들어 봤습니다.', '해 잘 드는 날엔 이파리부터 말립니다. 전투복은 그다음입니다.'] },
+  { id: 'roofdoduo', wild: true, sprite: 'doduo', name: '두두', title: '초소 지붕 터줏대감', map: 'depot', x: 11, y: 25, wander: 0, noCap: true, color: '#c8a878',
+    lines: ['두! 두두! (두 머리가 서로 반대쪽을 본다)', '두…? (왼쪽 머리가 고개를 갸웃하자, 오른쪽 머리가 반대로 갸웃한다)', '두두! (초소 지붕에서 위병소 앞길을 내려다본다. 근무를 같이 서는 기분이다.)'] },
+  { id: 'rapidash', sprite: 'rapidash', name: '날쌩마', title: '3분대 상병', map: 'lounge', x: 2, y: 6, wander: 0, color: '#f8e0a0',
+    lines: ['장기 둘 줄 아냐? 이 부대 장기판 말은 전부 내 얼굴이다.', '말년엔 뛰지 않는다. 대신 머리를 굴리지.', '내 갈기 불꽃? 커피 데울 때만 쓴다.'] },
+  { id: 'combee', sprite: 'combee', name: '세꿀버리', title: '3분대 이병', map: 'hq2', x: 22, y: 5, wander: 0, color: '#f0c050',
+    lines: ['붕붕… 꿀물은 제 비상식량입니다. 셋이서 나눠 먹습니다.', '아이앤트가 자꾸 제 물병을 노립니다. 붕.', '이, 이병 세꿀버리! 셋이지만 한 명입니다!'] },
+  { id: 'vulpix', sprite: 'vulpix', name: '식스테일', title: '3분대 상병', map: 'outdoor', x: 33, y: 20, wander: 0, color: '#e8784a',
+    lines: ['불꽃조 주장이다. 농구는 꼬리 여섯 개로 페이크 쓰는 게 기본이지.', '시합 끝나면 악수는 꼭 한다. 그게 예의다.', '공 하나 던져 볼래? 링에 닿기만 해도 인정해 준다.'] },
+];
+
+for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN, AMMO_DOG, RECYCLER, KITCHEN_HELPER, KITCHEN_FIRE, ...QUICK_HOSTS);

@@ -29,6 +29,7 @@ npm run sprites
 | 해군 NPC | lapras(라프라스), tentacool(왕눈해), magikarp(잉어킹), marill(마릴), horsea(쏘드라), dewgong(쥬레곤), slowbro(야도란), gyarados(갸라도스) |
 | 공군 NPC | swablu(파비코), delibird(딜리버드), zubat(주뱃), taillow(테일로), emolga(에몽가), swellow(스왈로), fearow(깨비드릴조), pidgeot(피죤투) |
 | 경계근무 | rattata(꼬렛), wingull(갈모매), meowth(나옹) — 야생 / ekans(아보), koffing(또가스) — 수상한 접근자 |
+| 짬짬이 퍼즐 상황 | munchlax(먹고자), magmar(마그마), caterpie(캐터피), magnemite(코일), klefki(클레피), oddish(뚜벅쵸), doduo(두두), vulpix(식스테일), rapidash(날쌩마), combee(세꿀버리) |
 
 ## 필드 걷기 스프라이트 (선택)
 
