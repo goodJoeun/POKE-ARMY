@@ -9,3 +9,5 @@ docs
 scripts
 next-env.d.ts
 *.tsbuildinfo
+.vercel
+.env*

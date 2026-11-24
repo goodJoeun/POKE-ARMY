@@ -12,3 +12,6 @@ public/sprites/icon/
 public/sprites/follower/
 public/sprites/manifest.json
 public/sprites/ar/
+
+.vercel
+.env*
