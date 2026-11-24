@@ -264,12 +264,22 @@ button.big:not(.primary) { background: #fff8e6; color: var(--ink); box-shadow: 0
 .touchpad { display: none; }
 @media (pointer: coarse) {
   .touchpad { display: flex; position: absolute; left: 14px; right: 14px; bottom: 60px; justify-content: space-between; align-items: flex-end; pointer-events: none; }
-  .dpad { position: relative; width: 132px; height: 132px; pointer-events: auto; }
-  .dpad button { position: absolute; width: 44px; height: 44px; border-radius: 10px; border: none; background: rgba(255,248,230,0.8); font-size: 16px; touch-action: none; }
-  .dpad .up { left: 44px; top: 0; } .dpad .down { left: 44px; bottom: 0; } .dpad .left { left: 0; top: 44px; } .dpad .right { right: 0; top: 44px; }
-  .touchpad .touch-actions { display: flex; gap: 10px; align-items: flex-end; }
-  .touchpad .dash { pointer-events: auto; width: 54px; height: 54px; border-radius: 50%; border: none; background: rgba(58,143,224,0.9); color: #fff; font-size: 12px; font-family: 'Galmuri11', sans-serif; touch-action: none; }
-  .touchpad .action { pointer-events: auto; width: 64px; height: 64px; border-radius: 50%; border: none; background: rgba(224,96,58,0.9); color: #fff; font-size: 22px; font-family: 'Galmuri14', 'Galmuri11', sans-serif; touch-action: none; }
+  .touchpad, .touchpad * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  /* 방향패드: 판 하나가 손가락을 따라간다 (십자는 그림일 뿐, 누르는 건 판 전체) */
+  .dpad { position: relative; width: 132px; height: 132px; pointer-events: auto; touch-action: none; border-radius: 50%; background: rgba(24, 30, 48, 0.32); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35); }
+  .dpad i { position: absolute; width: 44px; height: 44px; display: grid; place-items: center; background: rgba(255, 248, 230, 0.82); color: #283048; font-size: 15px; font-style: normal; pointer-events: none; }
+  .dpad .up { left: 44px; top: 0; border-radius: 10px 10px 0 0; } .dpad .down { left: 44px; bottom: 0; border-radius: 0 0 10px 10px; }
+  .dpad .left { left: 0; top: 44px; border-radius: 10px 0 0 10px; } .dpad .right { right: 0; top: 44px; border-radius: 0 10px 10px 0; }
+  .dpad .mid { left: 44px; top: 44px; }
+  .dpad i.on { background: #f8d048; }
+  .touchpad .touch-actions { display: flex; gap: 12px; align-items: flex-end; }
+  /* 달리기: 채운 원 하나 */
+  .touchpad .dash { pointer-events: auto; width: 54px; height: 54px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.6); background: rgba(24, 30, 48, 0.45); color: #fff; font-size: 12px; font-family: 'Galmuri11', sans-serif; touch-action: none; }
+  .touchpad .dash:active { background: rgba(248, 208, 72, 0.85); color: #283048; }
+  /* 확인: 채운 이중 원 (바깥 고리 + 안쪽 원) */
+  .touchpad .action { position: relative; pointer-events: auto; width: 68px; height: 68px; padding: 0; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.75); background: rgba(24, 30, 48, 0.45); touch-action: none; }
+  .touchpad .action::before { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.88); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); transition: transform 0.06s; }
+  .touchpad .action:active::before { transform: scale(0.86); background: #f8d048; }
 }
 @media (max-width: 760px) {
   .hud-objective { top: 120px; max-width: calc(100% - 20px); font-size: 12px; }

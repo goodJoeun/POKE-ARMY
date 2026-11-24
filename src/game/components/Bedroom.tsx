@@ -396,7 +396,7 @@ export default function Bedroom() {
           <kbd>E</kbd> 조사: {prompt.label}
         </div>
       )}
-      <TouchPad keys={keys} onAction={interact} />
+      <TouchPad keys={keys} />
       {overlay?.type === 'dialogue' && (
         <DialogueBox key={overlay.script.lines[0].text} script={overlay.script} onClose={closeOverlay} />
       )}

@@ -277,7 +277,6 @@ canvas { image-rendering: pixelated; }
 .fatigue-warn { font-size: 13px; }
 /* 다음 일정 · 집합 알림 */
 .hud-objective { top: 90px; font-size: 15px; padding: 9px 18px; max-width: calc(100% - 760px); }
-@media (max-width: 1100px) { .hud-objective { top: auto; bottom: 64px; max-width: calc(100% - 40px); } }
 /* 상호작용 안내 · 위치 표시 · 방 이름 배너 */
 .prompt { font-size: 16px; padding: 10px 18px; bottom: 80px; }
 @media (max-width: 1100px) { .prompt { bottom: 118px; } }
@@ -645,3 +644,66 @@ canvas { image-rendering: pixelated; }
 
 /* 퍼즐 그림: 분리수거장 마당 */
 .pz-yard { width: min(330px, 100%); height: auto; flex: none; margin: 0 auto; display: block; }
+
+/* ═════════════════════════════════════════════════════════════
+   좁은 화면 · 터치 화면: 부대 화면 HUD가 서로 겹치지 않게 자리를 나눈다
+   위: 상태창 → 목표 안내(한 줄 통째) / 아래: 상호작용 안내 → 방향패드 → 버튼 줄
+   ═════════════════════════════════════════════════════════════ */
+/* 목표 안내는 상태창(.hud-top) 안에 들어 있다. 넓은 화면에선 그 안에서 가운데 띠로 뜬다 */
+.hud-objective { top: 80px; }
+.hud-place { display: none; }
+@keyframes pulseFlat { 50% { filter: brightness(1.3); } }
+@media (max-width: 1100px) {
+  .hud-objective, .hud-objective.urgent {
+    position: static; transform: none; flex: 1 1 100%; max-width: none;
+    white-space: normal; text-align: center; line-height: 1.45; word-break: keep-all;
+  }
+  .hud-objective.urgent { animation: pulseFlat 1s infinite; }
+}
+/* 터치: 상호작용 안내는 방향패드 위로 */
+@media (pointer: coarse) { .prompt { bottom: 204px; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; } }
+/* 터치 + 가로로 누운 화면: 방향패드와 버튼 사이 빈 자리에 */
+@media (pointer: coarse) and (max-height: 500px) { .prompt { bottom: 70px; max-width: calc(100% - 330px); } }
+@media (max-width: 760px) {
+  .hud-top { top: 8px; left: 8px; right: 8px; gap: 6px; }
+  .hud-box { padding: 6px 10px; font-size: 13px; }
+  .hud-box .hud-dim { font-size: 11px; }
+  .hud-day { font-size: 18px; }
+  .clock { font-size: 22px; }
+  .hud-clock { min-width: 0; }
+  .hud-rank .hud-dim { display: none; }
+  /* 위치는 상태창 줄에 끼워 넣는다 (왼쪽 아래 배지는 방향패드 자리라 숨긴다) */
+  .hud-place { display: flex; align-items: center; margin-left: auto; font-weight: 700; }
+  .location-badge { display: none; }
+  .hud-objective { font-size: 13px; padding: 7px 12px; }
+  /* 아래 버튼 줄: 화면 너비를 다섯으로 나눠 아이콘 위 · 이름 아래 */
+  .hud-buttons { left: 8px; right: 8px; bottom: 8px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .hud-buttons button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    min-height: 46px; padding: 3px 2px; font-size: 12px; white-space: nowrap;
+  }
+  .hud-buttons kbd { display: none; }
+  .touchpad { bottom: 62px; }
+}
+
+/* 화면보다 긴 창(퍼즐 · 메뉴 · 점호 문답)은 창 안에서 스크롤한다 */
+.menu, .rollcall { max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+.menu > * { flex-shrink: 0; }
+
+/* ───── 터치: 대화 중에도 확인 버튼(이중 원)이 보이고 눌린다 ───── */
+@media (pointer: coarse) {
+  .touchpad { z-index: 32; } /* 대화창(30) 위, 메뉴 · 퍼즐 창(40) 아래 */
+  /* 대화 중엔 움직일 일이 없으니 방향패드 · 달리기는 숨기고 확인 버튼만 남긴다 */
+  .world:has(.dialogue-wrap) .touchpad .dpad,
+  .world:has(.dialogue-wrap) .touchpad .dash { visibility: hidden; }
+  /* 대화창은 확인 버튼 위에 놓는다 */
+  .world .dialogue-wrap { padding-bottom: 138px; }
+  /* 상호작용 안내의 E 글쇠 자리에 확인 버튼 그림 */
+  .prompt { display: flex; align-items: center; gap: 7px; }
+  .prompt kbd {
+    flex: none; width: 16px; height: 16px; padding: 0; margin: 0; font-size: 0; border-radius: 50%;
+    border: 2px solid var(--win-frame); box-shadow: none; background: radial-gradient(circle, var(--win-frame) 0 42%, #fff 46%);
+  }
+}
+/* 가로로 누운 화면: 대화창은 아래에 두고 확인 버튼 자리만 오른쪽에 비운다 */
+@media (pointer: coarse) and (max-height: 500px) { .world .dialogue-wrap { padding-bottom: 10px; padding-right: 100px; } }

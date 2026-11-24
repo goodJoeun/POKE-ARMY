@@ -40,7 +40,7 @@ function nightObjective(nd: NightDuty, branch: Parameters<typeof memberName>[0])
   }
 }
 
-export default function Hud({ onNotebook, onQuests, onMap, onHome }: { onNotebook: () => void; onQuests: () => void; onMap: () => void; onHome: () => void }) {
+export default function Hud({ onNotebook, onQuests, onMap, onHome, place }: { onNotebook: () => void; onQuests: () => void; onMap: () => void; onHome: () => void; place?: string }) {
   const s = useGame();
   const b = BRANCHES[s.branch];
   const rank = rankIdxForDay(s.day);
@@ -106,14 +106,17 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome }: { onNoteboo
             <div className="hud-dim">{b.name} {b.unit}</div>
           </div>
         </div>
+        {/* 좁은 화면에서만 보인다 (넓은 화면은 왼쪽 아래 .location-badge) */}
+        {place && <div className="hud-box hud-place">📍 {place}</div>}
+        {/* 넓은 화면에선 가운데 띠, 좁은 화면에선 상태창 아래 한 줄 */}
+        {objective && <div className={`hud-objective ${called ? 'urgent' : ''}`}>{objective}</div>}
       </div>
-      {objective && <div className={`hud-objective ${called ? 'urgent' : ''}`}>{objective}</div>}
       <div className="hud-buttons">
-        <button onClick={onHome}>🏠 생활관 <kbd>R</kbd></button>
-        <button onClick={onMap}>🗺️ 지도 <kbd>M</kbd></button>
-        <button onClick={onQuests}>📋 퀘스트 <kbd>Q</kbd></button>
-        <button onClick={onNotebook}>📒 수첩 <kbd>Tab</kbd></button>
-        <button onClick={() => useSettings.getState().openMenu()}>⚙️ 설정 <kbd>Esc</kbd></button>
+        <button onClick={onHome}><span>🏠</span> <span>생활관</span> <kbd>R</kbd></button>
+        <button onClick={onMap}><span>🗺️</span> <span>지도</span> <kbd>M</kbd></button>
+        <button onClick={onQuests}><span>📋</span> <span>퀘스트</span> <kbd>Q</kbd></button>
+        <button onClick={onNotebook}><span>📒</span> <span>수첩</span> <kbd>Tab</kbd></button>
+        <button onClick={() => useSettings.getState().openMenu()}><span>⚙️</span> <span>설정</span> <kbd>Esc</kbd></button>
       </div>
     </>
   );

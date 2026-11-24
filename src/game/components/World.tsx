@@ -7339,6 +7339,7 @@ export default function World() {
         onQuests={() => setOverlay({ type: "quests" })}
         onMap={() => setOverlay({ type: "map" })}
         onHome={goHome}
+        place={world.maps[location].name}
       />
       {!overlay && !cerShow && !(state.day === 1 && !state.flags.tutorial) && (
         <QuestTracker onOpen={() => setOverlay({ type: "quests" })} />
@@ -7355,7 +7356,7 @@ export default function World() {
           <kbd>E</kbd> {fmt(prompt.label, ctx)}
         </div>
       )}
-      <TouchPad keys={keys} onAction={interact} />
+      <TouchPad keys={keys} />
       {overlay?.type === "dialogue" && (
         <>
           {overlay.bg && <StoryBackdrop bg={overlay.bg} />}
