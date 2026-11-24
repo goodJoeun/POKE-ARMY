@@ -286,7 +286,8 @@ canvas { image-rendering: pixelated; }
 .hud-buttons { gap: 8px; }
 .hud-buttons button { font-size: 14px; padding: 9px 14px; }
 /* 토스트 알림 */
-.toasts { top: 140px; width: min(430px, calc(100% - 24px)); gap: 8px; }
+/* 부대 화면에선 상태창 · 목표 안내 바로 아래 (--hud-bottom은 Hud가 재서 넣는다) */
+.toasts { top: calc(var(--hud-bottom, 132px) + 8px); width: min(430px, calc(100% - 24px)); gap: 8px; }
 .toast { font-size: 14px; padding: 9px 15px; }
 /* 대화창 */
 .dialogue { width: min(940px, 100%); min-height: 160px; padding: 20px 22px 18px; }

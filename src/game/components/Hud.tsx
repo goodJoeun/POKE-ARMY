@@ -1,4 +1,5 @@
 'use client';
+import { useLayoutEffect, useRef } from 'react';
 import { useGame, spotLabel, type NightDuty } from '../state/store';
 import { memberFullName, memberName } from '../engine/whereabouts';
 import { fixJosa } from '../engine/text';
@@ -82,9 +83,31 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome, place }: { on
   if (s.minute >= 21 * 60 + 30) period = '점호/취침';
   if (s.nightDuty && s.nightDuty.phase !== 'sleep') period = s.nightDuty.kind === 'watch' ? '불침번' : '경계근무';
 
+  // 토스트는 상태창 · 목표 안내 바로 아래에 뜬다. 목표 안내는 글 길이 · 화면 너비에 따라 줄 수가 바뀌니 직접 재서 알린다
+  const top = useRef<HTMLDivElement>(null);
+  const hasObjective = !!objective;
+  const hasMemory = s.clues.length > 0;
+  const hasPlace = !!place;
+  useLayoutEffect(() => {
+    const el = top.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const measure = () => {
+      let bottom = el.getBoundingClientRect().bottom;
+      for (const c of Array.from(el.children)) bottom = Math.max(bottom, c.getBoundingClientRect().bottom);
+      root.style.setProperty('--hud-bottom', `${Math.ceil(bottom)}px`);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    for (const c of Array.from(el.children)) ro.observe(c);
+    window.addEventListener('resize', measure);
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); root.style.removeProperty('--hud-bottom'); };
+  }, [hasObjective, hasMemory, hasPlace]);
+
   return (
     <>
-      <div className="hud-top">
+      <div className="hud-top" ref={top}>
         <div className="hud-box">
           <div className="hud-day">DAY {s.day}<span className="hud-dim">/{TOTAL_DAYS}</span></div>
           <div className="hud-dim">복무 {serviceMonth(s.day, s.branch)}개월차 · {SEASON_LABEL[seasonForDay(s.day)]}</div>
