@@ -144,17 +144,10 @@ export function serviceMonth(day: number, branch: BranchId): number {
   return Math.min(months, Math.max(1, Math.round(((day - 1) / (TOTAL_DAYS - 1)) * (months - 1)) + 1));
 }
 
-/** 2025년 기준 병 봉급 (원) */
-export const MONTHLY_PAY = [750000, 900000, 1200000, 1500000];
-
 export function fmtTime(min: number): string {
   const h = Math.floor(min / 60) % 24;
   const m = Math.floor(min % 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
-export function fmtMoney(n: number): string {
-  return n.toLocaleString('ko-KR') + '원';
 }
 
 /** 위병소 옆 군별 핵심 시설: 육군 탄약고 / 공군 격납고 / 해군 함정 부두 */

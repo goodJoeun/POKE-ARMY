@@ -116,7 +116,7 @@ export const EXTRAS: Record<BranchId, ExtraDef[]> = {
     { id: 'cook', sprite: 'snorlax', name: '잠만보', title: '취사병 상병', map: 'kitchen', x: 5, y: 3, wander: 2, color: '#3a5a6a',
       lines: ['오늘 메뉴는 제육볶음이다. 많이 먹어라!', '짬밥 맛없다는 소리는 우리 식당에선 금지다.', '남기면… 내가 먹는다.', '쿨… 쿨… (잠만보가 조리실 한가운데를 막고 자고 있다. 깨우려면 포켓몬의 피리가 필요할 것 같다.)'] },
     { id: 'px', sprite: 'pachirisu', name: '파치리스', title: 'PX병 일병', map: 'px', x: 6, y: 2, color: '#e8e8f0',
-      lines: ['어서 와! 냉동은 3500원, 초코파이는 정(情)이야.', '월급날엔 줄이 엄청 길어. 미리 와.', '신상 냉동 들어왔다! 비밀이다.'] },
+      lines: ['어서 와! 냉동 만두는 PX 국룰, 초코파이는 정(情)이야.', '월급날엔 줄이 엄청 길어. 미리 와.', '신상 냉동 들어왔다! 비밀이다.'] },
     { id: 'medic', sprite: 'chansey', name: '럭키', title: '의무병 상병', map: 'hq1', x: 10, y: 3, wander: 2, color: '#f8b8c8',
       lines: ['아프면 참지 말고 의무대 와라.', '물집 잡히면 터뜨리지 말고 보여줘.', '감기 유행이다. 손 잘 씻어!'], daily: MEDIC_DAILY },
     { id: 'nco', sprite: 'lucario', name: '루카리오', title: '당직부사관 중사', map: 'command', x: 8, y: 4, officer: true, color: '#4a6aa8',
@@ -168,7 +168,7 @@ export const EXTRAS: Record<BranchId, ExtraDef[]> = {
     { id: 'cook', sprite: 'snorlax', name: '잠만보', title: '조리병 상병', map: 'kitchen', x: 5, y: 3, wander: 2, color: '#3a5a6a',
       lines: ['오늘 메뉴는 돈가스다. 조종사들도 먹는 메뉴지!', '짬밥 맛없다는 소리는 우리 식당에선 금지다.', '남기면… 내가 먹는다.', '쿨… 쿨… (잠만보가 조리실 한가운데를 막고 자고 있다. 깨우려면 포켓몬의 피리가 필요할 것 같다.)'] },
     { id: 'px', sprite: 'pachirisu', name: '파치리스', title: 'BX병 일병', map: 'px', x: 6, y: 2, color: '#e8e8f0',
-      lines: ['어서 와! 공군은 PX를 BX라고 불러.', '냉동은 3500원, 초코파이는 정(情)이야.', '월급날엔 줄이 엄청 길어.'] },
+      lines: ['어서 와! 공군은 PX를 BX라고 불러.', '냉동 만두는 BX 국룰, 초코파이는 정(情)이야.', '월급날엔 줄이 엄청 길어.'] },
     { id: 'medic', sprite: 'chansey', name: '럭키', title: '의무병 상병', map: 'hq1', x: 10, y: 3, wander: 2, color: '#f8b8c8',
       lines: ['활주로 소음에 귀 아프면 말해.', '물집 잡히면 터뜨리지 말고 보여줘.', '아프면 참지 말고 와라.'], daily: MEDIC_DAILY },
     { id: 'nco', sprite: 'staraptor', name: '찌르호크', title: '당직부사관 중사', map: 'command', x: 8, y: 4, officer: true, color: '#6a6a7a',
@@ -272,4 +272,15 @@ const KITCHEN_HELPER: ExtraDef = {
   ],
 };
 
-for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN, AMMO_DOG, RECYCLER, KITCHEN_HELPER);
+/** 조리실 마그마 (세 군 공통): 화구 담당. 석쇠 밑 불을 늘 같은 세기로 지킨다 (짬짬이 퍼즐 「꽁치 세 마리」의 그 마그마) */
+const KITCHEN_FIRE: ExtraDef = {
+  id: 'magmar', sprite: 'magmar', name: '마그마', title: '화구 담당 일병', map: 'kitchen', x: 3, y: 2, wander: 0, color: '#f0703a',
+  lines: [
+    '마그! (석쇠 밑으로 불꽃을 한 번 올려 보인다. 화구 담당이라는 뜻인 것 같다.)',
+    '화력은 늘 똑같이. 꽁치 한 면에 정확히 5분. 그게 내 자부심이다.',
+    '불 앞은 덥다고? 나는 여기가 제일 시원하다.',
+    '석쇠엔 두 마리까지만 올려라. 세 마리째는… 머리를 써야지.',
+  ],
+};
+
+for (const b of Object.keys(MORE) as BranchId[]) EXTRAS[b].push(...MORE[b], LIBRARIAN, AMMO_DOG, RECYCLER, KITCHEN_HELPER, KITCHEN_FIRE);

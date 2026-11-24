@@ -804,6 +804,17 @@ function rollcallSlots(st: ReturnType<typeof useGame.getState>): Record<string, 
   order.forEach((k, i) => (out[k] = i));
   return out;
 }
+/**
+ * 📢 지금 누군가 나를 불러 맡길 스토리 임무 (열려 있는데 아직 호출도 지시도 받지 않은 것).
+ * 동기가 나를 잊은 날에는 분실물함 정리(잊혀 가는 이름)부터 부른다: 그 지시를 받아야 함께 되짚는 길이 열린다
+ */
+function nextCallable(st: ReturnType<typeof useGame.getState>) {
+  if (st.clues.length === 0) return undefined;
+  const callable = (x: (typeof STORY_MISSIONS)[number]) =>
+    !!ORDERS[x.id] && !st.flags[`order_${x.id}`] && !st.flags[`summon_${x.id}`] && missionState(x, st) === "open";
+  const urgent = st.flags.m13 ? STORY_MISSIONS.find((x) => x.id === "M-13" && callable(x)) : undefined;
+  return urgent ?? STORY_MISSIONS.find(callable);
+}
 const WALK_SPEED = 6;
 const DASH_SPEED = 10.5;
 
@@ -885,6 +896,21 @@ export default function World() {
       alive = false;
     };
   }, [tilesetOn]);
+
+  // 🍚 부대 화면이 새로 뜰 때(새 하루 · 불러오기 · 다시 시작): 지난 판의 식사 진행 기록을 비운다.
+  // 같은 날짜를 다시 하면 "이번 끼니는 이미 출발했다"는 기록이 남아, 생활관에 가도 분대가 모이지 않는다
+  useEffect(() => {
+    mealCall.key = "";
+    mealCall.withMe = "";
+    mealCall.back = "";
+    mealCall.talking = false;
+    mealCall.waitSince = 0;
+    mealRt.key = "";
+    mealRt.seated = {};
+    mealRt.me = null;
+    myMeal.tray = "";
+    myMeal.eating = null;
+  }, []);
 
   // 정적 맵 렌더 (야외 + 모든 건물 내부)
   useEffect(() => {
@@ -1913,6 +1939,8 @@ export default function World() {
   // 화면이 옮겨 주지 않는다 → 내가 직접 그 사람이 있는 곳으로 걸어가 마주 서면 명령을 듣고,
   // 일을 마치면 다시 내 발로 돌아가 보고한다. (가야 할 곳이 있는 동안 다른 문은 열리지 않는다 · data/errands.ts)
   const lastOrder = useRef<{ day: number; minute: number } | null>(null);
+  /** 📢 저녁 점호로 넘어가려는데 아직 받지 않은 임무가 있다 → 뜸 들이지 않고 곧바로 부른다 */
+  const forceCall = useRef(false);
   useEffect(() => {
     const faceTo = (fx: number, fy: number, tx: number, ty: number): Dir =>
       Math.abs(tx - fx) > Math.abs(ty - fy) ? (tx > fx ? "right" : "left") : ty > fy ? "down" : "up";
@@ -2042,15 +2070,12 @@ export default function World() {
       // 📢 새 호출: 자유 시간에, 밥을 다 먹은 뒤에만 부른다
       if (!freeNow) return;
       // 방금 다른 일(보고 · 식사 복귀 · 대화)을 마쳤으면 몇 초는 기다렸다가 부른다
-      if (performance.now() - idleSince < 5000) return;
+      if (!forceCall.current && performance.now() - idleSince < 5000) return;
       // 한 번 부르고 나면 한동안은 다시 부르지 않는다
       const lo = lastOrder.current;
-      const recent = !!lo && lo.day === st.day && st.minute - lo.minute < 40;
-      const callable = (x: (typeof STORY_MISSIONS)[number]) =>
-        !!ORDERS[x.id] && !st.flags[`order_${x.id}`] && !st.flags[`summon_${x.id}`] && missionState(x, st) === "open";
-      // 📖 동기가 나를 잊은 날에는 분실물함 정리(잊혀 가는 이름)부터 부른다: 그 지시를 받아야 함께 되짚는 길이 열린다
-      const urgent = st.flags.m13 ? STORY_MISSIONS.find((x) => x.id === "M-13" && callable(x)) : undefined;
-      const m = st.clues.length > 0 && !recent ? (urgent ?? STORY_MISSIONS.find(callable)) : undefined;
+      const recent = !forceCall.current && !!lo && lo.day === st.day && st.minute - lo.minute < 40;
+      const m = !recent ? nextCallable(st) : undefined;
+      forceCall.current = false;
       if (!m) {
         // 🔎 부르는 사람이 없는 자유 시간: 가만히 있지 않고, 혼자서라도 실마리를 찾아 나선다 (자유 시간마다 한 번)
         const win = st.minute < 15 * 60 ? "lunch" : "dinner";
@@ -3613,10 +3638,14 @@ export default function World() {
       dist(STAGE_STAR[0], STAGE_STAR[1] + 1.6) < 2.6
     )
       return { key: "final", kind: "story", label: "✨ 구령대에 내려온 별" };
+    // 실내 집합 장소(생활관 등)에서는 곁에 있는 사람과의 대화가 먼저다: 말을 걸려던 E가 점호 시작이 되지 않게 한다
+    let evIt: Interactable | null = null;
     if (ev && !st.eventBegun && !ev.auto && ev.spot) {
       const sp = world.spots[ev.spot];
-      if (sp.map === p.map && dist(sp.x + 0.5, sp.y + 0.5) < 2.2) {
-        return {
+      // 저녁 점호는 생활관 안 어디서든 시작할 수 있다 (곁에 사람이나 침상 같은 것이 없을 때)
+      const pmRoll = ev.kind === "rollcall_pm";
+      if (sp.map === p.map && (pmRoll || dist(sp.x + 0.5, sp.y + 0.5) < 2.2)) {
+        evIt = {
           key: `ev_${ev.id}`,
           kind: "event",
           label:
@@ -3626,9 +3655,12 @@ export default function World() {
                 ? "🍚 먼저 분대와 식사하자 (1생활관)"
                 : ev.start - st.minute > ARRIVE_AUTO_GAP
                 ? `${ev.label} 시작하기 (자유 시간을 마치고 ${fmtTime(ev.start)}로)`
-                : `집합 완료 보고: ${ev.label}`,
+                : pmRoll
+                  ? `${ev.label} 시작하기`
+                  : `집합 완료 보고: ${ev.label}`,
           spot: ev.spot,
         };
+        if (!world.maps[sp.map].indoor) return evIt;
       }
     }
     // 🍱 식판을 들고 내 자리 근처에 오면 앉아서 먹기
@@ -3711,6 +3743,7 @@ export default function World() {
       }
     }
     if (best) return best;
+    if (evIt && !evIt.key.startsWith("ev_rollcall_pm")) return evIt;
     const spotNames: Partial<Record<SpotId, string>> = {
       bed: "내 침상",
       mess: "밥차 (배식)",
@@ -3748,7 +3781,7 @@ export default function World() {
           label: (id === "wc1" || id === "wc2") && mirrorPending(st) ? "세면대에서 세수하기" : label,
         };
     }
-    return null;
+    return evIt;
   }, [world, extraDefs]);
 
   // ───── 상호작용 핸들러 ─────
@@ -4174,7 +4207,7 @@ export default function World() {
           for (const it of Object.values(ITEMS)) {
             opts.push({
               label: `${it.icon} ${it.name}`,
-              hint: `${it.price.toLocaleString()}원`,
+              hint: it.desc,
               disabled: !free,
               onSelect: () => {
                 useGame.getState().buy(it.id);
@@ -5131,7 +5164,21 @@ export default function World() {
       return;
     }
     if (it.kind === "event") {
-      useGame.getState().arrive();
+      const stE = useGame.getState();
+      // 🌙 저녁 점호로 넘어가기 전에: 가야 할 곳(호출 · 심부름 · 보고)이 남았거나, 오늘 받을 임무를 아직 받지 못했으면 점호부터 하지 않는다
+      if (stE.currentEvent()?.kind === "rollcall_pm") {
+        const erE = errandNow(stE);
+        if (erE) {
+          stE.toast(erE.hud, "alert");
+          return;
+        }
+        if (orderWindow(stE) && !(stE.mealCheck && !stE.mealCheck.done) && nextCallable(stE)) {
+          forceCall.current = true;
+          thought.current = { text: "(…아직 점호 준비를 하기엔 이르다. 누가 나를 찾는 것 같다.)", until: performance.now() + 2600 };
+          return;
+        }
+      }
+      stE.arrive();
       return;
     }
     if (it.kind === "seat") {
@@ -5324,6 +5371,8 @@ export default function World() {
     let doorArmed = true;
     let arrivedAt = { x: 0, y: 0 };
     let shownMap: MapId = runtime.player.map;
+    /** 내가 방금 떠나온 맵 (문 · 생활관 바로 가기로 맵이 바뀔 때마다) */
+    let cameFrom: MapId | null = null;
     setLocation(shownMap);
 
     let npcRetarget = 0;
@@ -5354,6 +5403,8 @@ export default function World() {
         !evA.auto &&
         evA.spot &&
         evA.kind !== "farewell" &&
+        // 저녁 점호는 내 생활관에서 한다: 그 방에 있거나 누구와 이야기했다고 저절로 시작되지 않는다 (E로 시작)
+        evA.kind !== "rollcall_pm" &&
         evA.start - st.minute <= ARRIVE_AUTO_GAP &&
         !(st.mealCheck && !st.mealCheck.done) &&
         !breakfastPending(st) &&
@@ -5416,6 +5467,7 @@ export default function World() {
       doorCooldown = Math.max(0, doorCooldown - dt);
       // 문 이동·순간이동 등으로 맵이 바뀌면 위치 표시 갱신
       if (p.map !== shownMap) {
+        cameFrom = shownMap;
         shownMap = p.map;
         setLocation(p.map);
       }
@@ -6359,6 +6411,26 @@ export default function World() {
             const e = entityOf(k);
             return !e || e.map === "room1";
           };
+          // 🏠 내가 생활관에 들어서는 순간(화면이 바뀌는 사이): 아직 오는 중이던 분대원들은 먼저 와서 기다리던 것으로 한다.
+          // 내가 생활관 바로 가기로 먼저 도착해서, 걸어오는 사람들을 멍하니 기다리는 일이 없게.
+          // 방금 내 눈앞(떠나온 맵)에 있던 사람만 문으로 뒤따라 들어온다
+          if (!myAte && p.map === "room1") {
+            const doorIn = cameFrom ? doorToward(world, cameFrom, "room1") : null;
+            for (const k of squad) {
+              const e = entityOf(k);
+              const g = MEAL_GATHER[k];
+              if (!e || !g || e.map === "room1" || followsMe(k, st)) continue;
+              const seen = !!doorIn && doorIn.to === "room1" && e.map === cameFrom;
+              e.map = "room1";
+              e.x = seen ? doorIn!.arrive.x : g[1] + 0.5;
+              e.y = seen ? doorIn!.arrive.y : g[2] + 0.5;
+              e.dir = "down";
+              e.path = [];
+              e.viaDoor = null;
+              e.moving = false;
+              e.targetKey = seen ? "" : `${g[0]}:${g[1]},${g[2]}`;
+            }
+          }
           const meReady =
             !myAte && p.map === "room1" && !blocked && !fading && !warpReq.current && !myMeal.eating;
           // 시간은 멈춰 있으니, 생활관에 들어서고 잠깐(3초) 기다려도 다 안 모이면 그냥 출발한다

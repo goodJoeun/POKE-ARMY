@@ -4,7 +4,7 @@ import type { Archetype, BranchId, NpcId } from '../types';
 import { useGame, presentNpcs, fmtDelta } from '../state/store';
 import { TEXT_SPEED, useSettings } from '../state/settings';
 import { hasGuardNight, hasNightDuty } from '../data/schedule';
-import { BRANCHES, RANKS, TOTAL_DAYS, fmtMoney, rankIdxForDay, serviceMonth } from '../data/branches';
+import { BRANCHES, RANKS, TOTAL_DAYS, rankIdxForDay, serviceMonth } from '../data/branches';
 import { ARCHETYPE_INFO, findSpecies } from '../data/monsters';
 import { PERSONALITY_QUIZ } from '../data/quiz';
 import { NPC_IDS, NPC_SKINS } from '../data/npcs';
@@ -493,9 +493,6 @@ export function DayEnd() {
           {s.dayLog.length === 0 && <li>평범한 하루였다.</li>}
           {s.dayLog.map((l, i) => <li key={i}>{l}</li>)}
         </ul>
-        <div className="diary-stats">
-          <span>💰 {fmtMoney(s.stats.money)}</span>
-        </div>
         {affDiff.length > 0 && (
           <div className="diary-aff">
             {affDiff.map(([id, d]) => <span key={id} className={d > 0 ? 'up' : 'down'}>{NPC_SKINS[s.branch][id].name} {sign(d)}</span>)}

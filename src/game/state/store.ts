@@ -4,7 +4,7 @@ import type {
   ActiveQuest, Archetype, BranchId, Dialogue, DialogueCtx, Effects, GameId,
   NpcId, Scene, ScheduleEvent, SpotId, Stats,
 } from '../types';
-import { BRANCHES, FACILITY_NAME, MONTHLY_PAY, RANKS, STORE_NAME, TOTAL_DAYS, fmtMoney, rankIdxForDay, seasonForDay } from '../data/branches';
+import { BRANCHES, FACILITY_NAME, RANKS, STORE_NAME, TOTAL_DAYS, rankIdxForDay, seasonForDay } from '../data/branches';
 import { pickSpecies, topArchetype } from '../data/monsters';
 import { NPC_IDS, NPC_SKINS, SOLDIER_IDS, birthdayNpcs, currentSquadLeader, npcPresent, arriveDay, leaveDay } from '../data/npcs';
 import { buildSchedule, mealFromWork } from '../data/schedule';
@@ -257,7 +257,7 @@ const initialPersist = (): Persist => ({
   speciesId: 'charmander',
   day: 1,
   minute: 360,
-  stats: { hp: 80, mental: 70, discipline: 50, skill: 10, money: 30000 },
+  stats: { hp: 80, mental: 70, discipline: 50, skill: 10 },
   affinity: zeroAff(),
   talked: [],
   gifted: [],
@@ -280,7 +280,7 @@ const initialPersist = (): Persist => ({
   candy: CANDY_START,
   susSeen: {},
   dayLog: [],
-  dayStart: { stats: { hp: 80, mental: 70, discipline: 50, skill: 10, money: 30000 }, affinity: zeroAff() },
+  dayStart: { stats: { hp: 80, mental: 70, discipline: 50, skill: 10 }, affinity: zeroAff() },
   lateCount: 0,
   askedQ: [],
   farewellDone: [],
@@ -359,10 +359,6 @@ export const useGame = create<Store>((set, get) => ({
         st.discipline = Math.max(0, st.discipline - slack);
         logs.push('🫠 하루가 지나며 긴장이 조금 풀렸다.');
       }
-    }
-    if (day % 2 === 0) {
-      st.money += MONTHLY_PAY[rank];
-      logs.push(`💰 월급 ${fmtMoney(MONTHLY_PAY[rank])}이 입금됐다.`);
     }
     const promoted = day > 1 && rank > prevRank;
     if (promoted) logs.push(`🎖️ ${RANKS[rank]}으로 진급했다!`);
@@ -648,15 +644,14 @@ export const useGame = create<Store>((set, get) => ({
     };
     const stats = { ...s.stats };
     const parts: string[] = [];
-    (['hp', 'mental', 'discipline', 'skill', 'money'] as (keyof Stats)[]).forEach((k) => {
+    (['hp', 'mental', 'discipline', 'skill'] as (keyof Stats)[]).forEach((k) => {
       const raw = e[k];
       if (!raw) return;
       let v = mult(k, raw);
       // 군기·숙련도는 높을수록 오르기 어렵다 (소프트 캡)
       if ((k === 'discipline' || k === 'skill') && v > 0) v = Math.round(v * Math.max(0.2, 1 - stats[k] / 125) * 10) / 10;
-      stats[k] = k === 'money' ? Math.max(0, stats[k] + v) : clamp(stats[k] + v);
-      // 체력·멘탈·군기·숙련은 화면에 보이지 않는 값이다: 알림에는 돈만 적는다
-      if (k === 'money') parts.push(`돈 ${v > 0 ? '+' : ''}${v.toLocaleString()}`);
+      // 체력·멘탈·군기·숙련은 화면에 보이지 않는 값이다: 알림에는 적지 않는다
+      stats[k] = clamp(stats[k] + v);
     });
     const affinity = { ...s.affinity };
     if (e.affinity) {
@@ -818,12 +813,9 @@ export const useGame = create<Store>((set, get) => ({
   buy: (item) => {
     const s = get();
     const def = ITEMS[item];
-    if (s.stats.money < def.price) {
-      get().toast('💸 돈이 부족하다.', 'bad');
-      return false;
-    }
-    set({ stats: { ...s.stats, money: s.stats.money - def.price }, inventory: { ...s.inventory, [item]: (s.inventory[item] ?? 0) + 1 } });
-    get().toast(`🛒 ${def.icon} ${def.name} 구매 (-${def.price.toLocaleString()}원)`, 'info');
+    // 돈은 따로 세지 않는다: PX에서는 고르는 대로 챙긴다
+    set({ inventory: { ...s.inventory, [item]: (s.inventory[item] ?? 0) + 1 } });
+    get().toast(fixJosa(`🛒 ${def.icon} ${def.name}을(를) 샀다.`), 'info');
     return true;
   },
 

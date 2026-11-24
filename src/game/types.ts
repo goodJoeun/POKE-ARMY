@@ -25,7 +25,6 @@ export interface Stats {
   mental: number;
   discipline: number;
   skill: number;
-  money: number;
 }
 
 export interface Effects {
@@ -33,7 +32,6 @@ export interface Effects {
   mental?: number;
   discipline?: number;
   skill?: number;
-  money?: number;
   affinity?: Partial<Record<NpcId, number>>;
   /** 🌟 인간의 기억 (메인 스토리) */
   memory?: number;

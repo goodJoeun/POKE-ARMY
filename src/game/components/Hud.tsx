@@ -60,7 +60,9 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome, place }: { on
         ? `${soloWalk(s) ? '🚶 혼자 걷기' : '🔎 혼자 실마리 찾기'} — ${spotLabel(s.branch, s.solo as Parameters<typeof spotLabel>[1])} 살펴보기 (❗ 표시) · 그 뒤 ${fmtTime(ev.start)} ${ev.label}`
         : `🕊️ 자유 시간 — 준비되면 ${spotLabel(s.branch, ev.spot)}에서 ${fmtTime(ev.start)} ${ev.label} 시작 (E)`;
     else if (pending && ev.spot)
-      objective = `📍 ${ev.label} → ${spotLabel(s.branch, ev.spot)} (도착하면 ${fmtTime(ev.start)} 시작)`;
+      objective = ev.kind === 'rollcall_pm'
+        ? `📍 ${ev.label} → ${spotLabel(s.branch, ev.spot)} (준비되면 생활관에서 E · ${fmtTime(ev.start)} 시작)`
+        : `📍 ${ev.label} → ${spotLabel(s.branch, ev.spot)} (도착하면 ${fmtTime(ev.start)} 시작)`;
   }
   // 🍚 식사는 분대 단위: 분대와 먹고 돌아오기 전에는 다음 일정이 진행되지 않는다
   if (s.mealCheck && !s.mealCheck.done && !s.nightDuty)

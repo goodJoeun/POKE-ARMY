@@ -632,6 +632,10 @@ canvas { image-rendering: pixelated; }
 .notice-kicker { margin-top: 8px; font-family: 'Galmuri11', sans-serif; font-weight: 700; font-size: 15px; letter-spacing: 3px; color: #c04830; text-shadow: none; }
 .notice-title { margin: 10px 0 12px; font-family: 'Galmuri14', sans-serif; font-size: 26px; line-height: 1.5; word-break: keep-all; color: var(--win-ink); }
 .notice-from { font-size: 15px; font-weight: 700; color: #3860b0; text-shadow: none; margin-bottom: 6px; }
+/* 호출 · 새 임무 카드와 알림은 낱말 중간에서 줄이 바뀌지 않게 한다 (띄어쓰기에서만 줄바꿈 · 칸보다 긴 낱말만 예외) */
+.notice, .notice * { word-break: keep-all; overflow-wrap: break-word; }
+.notice-title, .notice-line { text-wrap: balance; }
+.toast { word-break: keep-all; overflow-wrap: break-word; }
 .notice-line { font-size: 14px; line-height: 1.7; color: var(--ink-dim); text-shadow: none; word-break: keep-all; }
 .notice-foot { margin-top: 14px; font-size: 12px; color: var(--ink-dim); text-shadow: none; }
 @keyframes noticeDim { from { opacity: 0; } to { opacity: 1; } }

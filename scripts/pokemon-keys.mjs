@@ -35,6 +35,8 @@ export const DEX = {
   trubbish: 568,
   // 조리실 먹고자(Munchlax)
   munchlax: 446,
+  // 조리실 화구 담당 마그마(Magmar)
+  magmar: 126,
   // 빌런: 거울 속의 팬텀(Gengar)
   gengar: 94,
 };
