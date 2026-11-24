@@ -251,7 +251,8 @@ function build(info: CeremonyInfo, ctl: CeremonyCtl, aide: SpeakerInfo | null, s
   if (st.day > 1) {
     if (info.kind === 'am') {
       steps.push(
-        { t: 'wait', secs: 1.4, before: () => ctl.move(D, info.marks.stage[0], info.marks.stage[1], 1.2, 'down') },
+        // 구령대에 걸어 올라가는 과정은 첫날만 보여 준다: 둘째 날부터는 이미 올라서 있다
+        { t: 'wait', secs: 0.6, before: () => ctl.move(D, info.marks.stage[0], info.marks.stage[1], 0.01, 'down') },
         { t: 'talk', script: { lines: [
           ...(info.late ? [{ who: 'me' as LineWho, text: '(늦게 뛰어온 탓에 맨 뒷줄 끝자리에 섰다… 시선이 따갑다.)' }] : []),
           { who: 'narr', text: `아침 점호. 구령대 위의 {r:${D}}이(가) 정렬한 장병들을 훑어본다.` },

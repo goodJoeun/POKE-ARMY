@@ -83,13 +83,59 @@ interface Persist {
 /** 야간 순찰 점검 장소: 막사 1·2층 복도 게시판 · 세탁실 · 화장실 */
 export const PATROL_SPOTS: SpotId[] = ['board1', 'laundry1', 'wc1', 'board2', 'laundry2', 'wc2'];
 const PATROL_TEXT: Partial<Record<SpotId, string[]>> = {
-  board1: ['1층 복도 이상 무. 게시판 경계작전명령서 최신본 확인.', '1층 복도 창문 잠금 확인. 이상 무.'],
-  board2: ['2층 복도 이상 무. 비상구 표지등 정상.', '2층 복도 창문 하나가 열려 있다. 닫았다.'],
-  laundry1: ['1층 세탁실: 건조기가 아직 돌아간다. 취침 시간 이후 사용 금지… 전원을 끄고 메모를 붙였다.', '1층 세탁실 이상 무. 물 새는 곳 없음.'],
-  laundry2: ['2층 세탁실 이상 무. 세제 정리 상태 양호.', '2층 세탁실: 누군가 빨래를 두고 갔다. 이름표 확인 후 메모.'],
-  wc1: ['1층 화장실: 불이 켜져 있다. 아무도 없다. 소등 완료.', '1층 화장실 이상 무. 수도꼭지 잠금 확인.'],
-  wc2: ['2층 화장실 이상 무.', '2층 화장실: 물이 계속 흐른다. 꼭지를 잠그고 수리 요청 메모.'],
+  board1: [
+    '1층 복도 이상 무. 게시판 경계작전명령서 최신본 확인.',
+    '1층 복도 창문 잠금 확인. 이상 무.',
+    '1층 복도: 게시판 압정 하나가 바닥에 떨어져 있다. 주워서 다시 꽂았다.',
+    '1층 복도: 소화기 압력 바늘 초록 칸. 점검표에 서명했다.',
+    '1층 복도: 손전등 불빛에 내 그림자가 길게 늘어진다. …그림자는 하나다. 이상 무.',
+    '1층 복도: 식단표가 한 장 넘어가 있다. 누가 넘겼는지는 모르겠다. 오늘 날짜로 돌려 놓았다.',
+  ],
+  board2: [
+    '2층 복도 이상 무. 비상구 표지등 정상.',
+    '2층 복도 창문 하나가 열려 있다. 닫았다.',
+    '2층 복도: 게시판 유리에 불빛이 반사돼 잠깐 눈이 부셨다. 이상 무.',
+    '2층 복도: 체단실 문틈으로 아령 굴러가는 소리. 열어 보니 아무도 없다. 아령을 거치대에 올렸다.',
+    '2층 복도: 계단 쪽에서 찬 바람이 내려온다. 옥상 철문은 잠겨 있다. 이상 무.',
+    '2층 복도: 비상구 표지등이 한 번 깜빡였다. 다시 보니 멀쩡하다. 메모만 남긴다.',
+  ],
+  laundry1: [
+    '1층 세탁실: 건조기가 아직 돌아간다. 취침 시간 이후 사용 금지… 전원을 끄고 메모를 붙였다.',
+    '1층 세탁실 이상 무. 물 새는 곳 없음.',
+    '1층 세탁실: 건조대의 전투복 한 벌이 아직 젖어 있다. 이름표 자리는 비어 있다. 그대로 둔다.',
+    '1층 세탁실: 세탁기 문이 열려 있다. 안은 비었다. 닫고 나왔다.',
+    '1층 세탁실: 수도꼭지에서 물방울이 똑, 똑. …박자가 너무 일정하다. 꽉 잠갔다.',
+  ],
+  laundry2: [
+    '2층 세탁실 이상 무. 세제 정리 상태 양호.',
+    '2층 세탁실: 누군가 빨래를 두고 갔다. 이름표 확인 후 메모.',
+    '2층 세탁실: 건조기 보풀 통이 가득 찼다. 비우고 점검표에 적었다.',
+    '2층 세탁실: 창문에 김이 서려 있다. 손자국 같은 얼룩 하나. 닦으니 지워진다. 이상 무.',
+    '2층 세탁실: 양말 한 짝이 바닥에 떨어져 있다. 분실물 바구니에 넣었다.',
+  ],
+  wc1: [
+    '1층 화장실: 불이 켜져 있다. 아무도 없다. 소등 완료.',
+    '1층 화장실 이상 무. 수도꼭지 잠금 확인.',
+    '1층 화장실: 맨 끝 칸 문이 닫혀 있다. 노크해 보니 비어 있다. 열어 두었다.',
+    '1층 화장실: 환풍기가 혼자 돌고 있다. 스위치를 내렸다.',
+    '1층 화장실: 세면대 거울에 김이 서려 있다. 방금까지 누가 있었던 것처럼. …인원 없음.',
+  ],
+  wc2: [
+    '2층 화장실 이상 무.',
+    '2층 화장실: 물이 계속 흐른다. 꼭지를 잠그고 수리 요청 메모.',
+    '2층 화장실: 비누 받침이 바닥에 떨어져 있다. 제자리에 올렸다.',
+    '2층 화장실: 창문이 한 뼘 열려 있다. 밖은 안개뿐이다. 닫았다.',
+    '2층 화장실: 거울 쪽은 길게 보지 않았다. 이상 무.',
+  ],
 };
+/** 같은 자리에서 방금 본 문구는 다음 순찰에 다시 나오지 않게 한다 */
+const lastPatrolText: Partial<Record<SpotId, string>> = {};
+
+/** ⏰ 다음 일정이 시작할 시각이 됐다 (집합 장소에 가야 할 때): 시간이 드는 일(퀘스트 · 활동)은 일정을 마친 뒤로 미룬다 */
+export function eventDue(s: { minute: number; eventBegun: boolean; currentEvent: () => ScheduleEvent | null }): boolean {
+  const ev = s.currentEvent();
+  return !!ev && !s.eventBegun && !ev.auto && ev.kind !== 'farewell' && s.minute >= ev.start;
+}
 
 const fmtClock = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(Math.floor(min % 60)).padStart(2, '0')}`;
 
@@ -322,7 +368,7 @@ export const useGame = create<Store>((set, get) => ({
   go: (s) => set({ scene: s }),
 
   newGame: (name) => {
-    set({ ...initialPersist(), name: name.trim() || '김몬스', scene: 'home', rollcall: null, work: null, toasts: [], busy: false });
+    set({ ...initialPersist(), name: name.trim() || '김몬스', scene: 'home', nightDuty: null, rollcall: null, work: null, toasts: [], busy: false });
   },
 
   chooseBranch: (b) => set({ branch: b }),
@@ -954,7 +1000,10 @@ export const useGame = create<Store>((set, get) => ({
     const done = [...pt.done, spot];
     set({ patrol: { done } });
     const pool = PATROL_TEXT[spot] ?? ['이상 무.'];
-    get().toast(`🔦 (${done.length}/${PATROL_SPOTS.length}) ${pool[Math.floor(Math.random() * pool.length)]}`, 'info');
+    const fresh = pool.filter((t) => t !== lastPatrolText[spot]);
+    const text = (fresh.length ? fresh : pool)[Math.floor(Math.random() * (fresh.length || pool.length))];
+    lastPatrolText[spot] = text;
+    get().toast(`🔦 (${done.length}/${PATROL_SPOTS.length}) ${text}`, 'info');
     if (done.length >= PATROL_SPOTS.length) get().toast('✅ 순찰 완료! 막사 1층 지휘통제실 당직사관에게 보고하자.', 'good');
   },
 
@@ -1016,7 +1065,7 @@ export const useGame = create<Store>((set, get) => ({
 
   resetAll: () => {
     get().wipe();
-    set({ ...initialPersist(), scene: 'title', rollcall: null, work: null, toasts: [], busy: false });
+    set({ ...initialPersist(), scene: 'title', nightDuty: null, rollcall: null, work: null, toasts: [], busy: false });
   },
 }));
 

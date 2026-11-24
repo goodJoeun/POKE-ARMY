@@ -50,7 +50,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
   }, [text, idx, phase, typeMs, typeStep]);
 
   // 🔊 새 줄 · 타자 소리 (선택지를 고르는 동안은 조용히)
-  useLineSound(`${phase}-${idx}`, text, typed, { cue: line?.sfx, silent: phase === 'choices', spoken: !!line && line.who !== 'narr' });
+  useLineSound(`${phase}-${idx}`, text, typed, { cue: line?.sfx, hush: line?.hush, silent: phase === 'choices', spoken: !!line && line.who !== 'narr' });
 
   const speaker: SpeakerInfo | null = useMemo(() => {
     if (!line) return null;

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { playCue, playSfx, type BgmMood, type CueId } from './audio';
+import { playCue, playSfx, setBgmMood, type BgmMood, type CueId } from './audio';
 
 /**
  * 글에 어울리는 소리를 고른다.
@@ -145,7 +145,7 @@ export function sceneMood(h: SceneHint | null): BgmMood | null {
  * - 글자가 찍히는 동안: 타자 소리 (너무 촘촘하지 않게)
  * key 는 줄이 바뀔 때마다 달라지는 값(줄 번호 등), cue 는 줄에 직접 적어 둔 소리.
  */
-export function useLineSound(key: string | number, text: string, typed: number, opts?: { cue?: CueId | null; voice?: number; silent?: boolean; spoken?: boolean }) {
+export function useLineSound(key: string | number, text: string, typed: number, opts?: { cue?: CueId | null; voice?: number; silent?: boolean; spoken?: boolean; hush?: boolean }) {
   const first = useRef(true);
   const cue = opts?.cue;
   const silent = opts?.silent;
@@ -153,6 +153,8 @@ export function useLineSound(key: string | number, text: string, typed: number, 
   const voice = opts?.voice ?? 1;
   useEffect(() => {
     if (silent || !text) return;
+    // 🔇 음악이 뚝 끊기는 줄: 정적 위에 효과음만 남는다
+    if (opts?.hush) setBgmMood('none');
     const c = cue ?? lineCue(text, spoken);
     if (c) playCue(c, 0.9);
     else if (!first.current) playSfx('sfx_cursor', 0.35);

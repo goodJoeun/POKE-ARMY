@@ -16,7 +16,7 @@ import {
   questOffers,
   dialogueById,
   PATROL_SPOTS,
-  buddyForgot, spotLabel } from "../state/store";
+  buddyForgot, spotLabel, eventDue } from "../state/store";
 import {
   BRANCHES,
   FACILITY_NAME,
@@ -815,6 +815,56 @@ function nextCallable(st: ReturnType<typeof useGame.getState>) {
   const urgent = st.flags.m13 ? STORY_MISSIONS.find((x) => x.id === "M-13" && callable(x)) : undefined;
   return urgent ?? STORY_MISSIONS.find(callable);
 }
+/**
+ * 👁 밤 순찰의 기척: 야간 순찰 · 불침번 순찰로 복도를 걸을 때 가끔 일어나는 일 (대화도 벌점도 없다. 긴장감만)
+ * - stalk: 등 뒤에서 진자를 든 손이 따라온다. 돌아보는 순간 사라진다
+ * - glimpse: 앞쪽 벽에 웃는 그림자가 아주 잠깐 비친다
+ */
+const haunt: {
+  key: string;
+  stalks: number;
+  glimpses: number;
+  cool: number;
+  stalk: null | { map: MapId; x: number; y: number; since: number };
+  glimpse: null | { map: MapId; x: number; y: number; until: number };
+} = { key: "", stalks: 0, glimpses: 0, cool: 0, stalk: null, glimpse: null };
+const HAUNT_TURNED = [
+  "(…뒤에 뭔가 따라오고 있었는데. 돌아보니 복도뿐이다.)",
+  "(똑딱 소리가 뚝 그쳤다. …내 발소리였나.)",
+  "(손전등을 돌렸다. 아무도 없다. 그런데 방금까지 불빛 끝에 손 같은 게…)",
+];
+const HAUNT_GONE = ["(…발소리가 하나 더 있었던 것 같은데.)", "(등 뒤가 서늘하다. 돌아보지 말자. 순찰이나 마저 돌자.)"];
+const HAUNT_WALL = ["(…방금, 벽에. 웃는 입 같은 게.)", "(벽의 얼룩이 잠깐 얼굴처럼 보였다. …얼룩이다. 얼룩이어야 한다.)"];
+/** 🔦 불침번 생활관 순찰: 날마다 다른 풍경 (근무 날짜로 고른다) */
+const ROUND_ROOM2: [string, string][] = [
+  ["2생활관. 손전등 불빛을 바닥으로 낮추고 침상 사이를 조용히 걷는다.", "고른 숨소리. 걷어찬 모포를 덮어 주고 인원을 센다. 이상 없음."],
+  ["2생활관 문을 소리 나지 않게 민다. 손전등을 손바닥으로 반쯤 가리고 발끝으로 걷는다.", "침상 끝으로 삐져나온 발 하나를 모포 안으로 넣어 주고, 머릿수를 센다. 이상 없음."],
+  ["2생활관. 누군가 잠꼬대로 구령을 붙인다. \"하나, 둘…\" 셋은 끝내 나오지 않는다.", "열려 있던 관물대 문을 조용히 닫고 인원을 센다. 맞다."],
+  ["2생활관. 창문 틈으로 바람이 들어 커튼이 숨 쉬듯 부푼다. 창을 닫는다.", "침상마다 불빛을 한 번씩 스친다. 다들 같은 쪽으로 돌아누워 있다. 인원 이상 없음."],
+  ["2생활관. 바닥에 굴러다니는 슬리퍼 한 짝을 침상 밑으로 밀어 넣는다.", "맨 끝 침상까지 걸어갔다 돌아온다. 숨소리의 수와 침상의 수가 맞는다. 이상 없음."],
+];
+const ROUND_ROOM1: string[] = [
+  "1생활관으로 돌아와 침상 끝까지 한 바퀴 돈다. 분대원들의 숨소리가 고르다.",
+  "1생활관. 모포가 걷혀 있는 건 내 빈 침상뿐이다. 나머지는 고른 숨소리.",
+  "1생활관으로 돌아왔다. 바닥에 떨어진 베개 하나를 주워 제 주인 머리맡에 놓는다.",
+  "1생활관. 누가 이를 간다. 그 소리마저 박자가 일정하다. 인원 이상 없음.",
+  "1생활관. 창밖 가로등 불빛이 침상 위로 줄무늬를 그린다. 한 명씩 세며 끝까지 걷는다.",
+];
+/** 🌙 밤새 지휘통제실을 지키는 당직병(행정병)의 말: 밤 근무 중에만 */
+const NIGHT_CLERK_TALK = [
+  "(작게) …근무 중 이상 무. 당직병은 밤새 전화기 옆을 지킨다. 벨이 두 번 울리기 전에 받아야 하거든.",
+  "(하품을 삼키며) 새벽 세 시가 제일 길어. 시계를 안 보는 게 요령이다.",
+  "(작게) 상황 일지는 30분마다 적는다. '특이 사항 없음'을 열 번쯤 쓰면 해가 뜨지.",
+  "(작게) 순찰 돌 땐 손전등을 바닥으로. 자는 사람 얼굴에 비추면 내일 아침이 시끄러워진다.",
+  "(작게) 당직사관님 커피는 내가 탄다. 진하게 타야 내가 덜 깨워 드려도 되거든.",
+  "(작게) 낮의 행정반은 서류 싸움이고, 밤의 지통실은 졸음 싸움이야. 난 둘 다 한다.",
+  "(작게) 근무 교대 시간 꼭 지켜. 1분 늦으면 앞 근무자가 평생 기억한다.",
+  "(작게) 밤엔 발소리가 멀리 간다. 네가 2층 복도 도는 거, 여기서 다 들려.",
+];
+const NIGHT_CLERK_ODD = [
+  "(작게) …자정에 벽시계 봤어? 난 그때마다 눈을 깜빡이나 봐. 늘 1분이 비어.",
+  "(작게) 아까 복도에서 누가 따라오지 않았냐고? 순찰은 너 혼자잖아. …혼자 맞지?",
+];
 const WALK_SPEED = 6;
 const DASH_SPEED = 10.5;
 
@@ -852,6 +902,7 @@ export default function World() {
   if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
     (window as unknown as Record<string, unknown>).__npcs = npcs; // 개발용 디버그 핸들
     (window as unknown as Record<string, unknown>).__extras = extras;
+    (window as unknown as Record<string, unknown>).__haunt = haunt;
     (window as unknown as Record<string, unknown>).__meal = {
       myMeal,
       mealRt,
@@ -2076,6 +2127,11 @@ export default function World() {
       const recent = !forceCall.current && !!lo && lo.day === st.day && st.minute - lo.minute < 40;
       const m = !recent ? nextCallable(st) : undefined;
       forceCall.current = false;
+      // 📋 지시받은 임무가 아직 진행 중이거나, 곧 부를 임무가 남아 있으면 혼자 실마리를 찾아 나서지 않는다 (두 가지 일이 겹치지 않게)
+      const busyMission =
+        !!nextCallable(st) ||
+        (st.clues.length > 0 && STORY_MISSIONS.some((x) => !!ORDERS[x.id] && !!st.flags[`order_${x.id}`] && missionState(x, st) === "open"));
+      if (!m && busyMission) return;
       if (!m) {
         // 🔎 부르는 사람이 없는 자유 시간: 가만히 있지 않고, 혼자서라도 실마리를 찾아 나선다 (자유 시간마다 한 번)
         const win = st.minute < 15 * 60 ? "lunch" : "dinner";
@@ -2142,6 +2198,11 @@ export default function World() {
       const present = npcPresent(o.giver, st.day);
       const at = orderStage(m.id, st.day);
       lastOrder.current = { day: st.day, minute: st.minute };
+      // 혼자 살펴보러 가던 길이었다면 접는다: 부르는 사람이 먼저다
+      if (st.solo) {
+        soloLead.spot = null;
+        useGame.setState({ solo: null });
+      }
       keys.current = {};
       p.moving = false;
       st.applyEffects({ flag: `summon_${m.id}` }, undefined, true);
@@ -2594,13 +2655,12 @@ export default function World() {
           lines:
             room === "room2"
               ? [
-                  { who: "narr", text: "2생활관. 손전등 불빛을 바닥으로 낮추고 침상 사이를 조용히 걷는다." },
-                  { who: "narr", text: "고른 숨소리. 걷어찬 모포를 덮어 주고 인원을 센다. 이상 없음." },
+                  ...ROUND_ROOM2[Math.floor(st.day / 2) % ROUND_ROOM2.length].map((text) => ({ who: "narr" as const, text })),
                   ...extra,
                   { who: "me", text: "(2생활관 이상 무. 이제 1생활관으로 돌아가자.)" },
                 ]
               : [
-                  { who: "narr", text: "1생활관으로 돌아와 침상 끝까지 한 바퀴 돈다. 분대원들의 숨소리가 고르다." },
+                  { who: "narr", text: ROUND_ROOM1[Math.floor(st.day / 2) % ROUND_ROOM1.length] },
                   ...extra,
                   { who: "narr", text: "근무 일지에 적는다. 「생활관 순찰, 이상 무」." },
                   { who: "narr", text: "…00:50. 근무가 끝나 간다. 다음 근무자를 깨울 시간이다." },
@@ -3353,6 +3413,13 @@ export default function World() {
             ? "(지휘통제실에 근무 철수 보고부터 하자.)"
             : "(하아암… 피곤하다. 얼른 내 침상으로 가서 자자.)";
     }
+    // 🔦 야간 순찰: 점검할 곳은 모두 막사 안이다. 순찰 중에는 막사 밖으로 나가지 않는다
+    if (st.patrol && !world.maps[d.to].indoor) return "(야간 순찰 중이다. 점검할 곳은 전부 막사 안이다. 밖으로 나갈 일은 없다.)";
+    // 🌙 야간 위병소 근무: 사수 · 부사수와 함께 초소로 가는 길에는 다른 곳으로 빠지지 않는다
+    if (nd && nd.kind === "guard" && nd.phase === "toPost") {
+      if (doorToward(world, p.map, world.spots.post.map)?.to !== d.to)
+        return "(근무 교대 시간이다. 딴 데로 새지 말고 곧장 위병소 초소로 가자.)";
+    }
     // 🔦 불침번: 근무 신고는 지휘통제실로, 순찰은 2생활관 → 1생활관 순서로만 간다
     if (nd && nd.kind === "watch" && (nd.phase === "checkin" || nd.phase === "rounds")) {
       const dest = nd.phase === "checkin" ? DUTY_DESK[0] : nextRound(nd);
@@ -3617,6 +3684,11 @@ export default function World() {
             label: "침상에 누워 잠들기",
           };
       }
+      // 🌙 밤새 깨어 있는 당직병(행정병)에게는 근무 중에도 말을 걸 수 있다
+      const ck = extras.current.clerk;
+      const ckDef = extraDefs.find((d) => d.id === "clerk");
+      if (ck && ckDef && ck.map === p.map && dist(ck.x, ck.y) < 1.7)
+        return { key: "extra_clerk", kind: "extra", extra: "clerk", label: `대화: ${ckDef.name} (당직병)` };
       // 근무 중엔 다른 일은 하지 않는다 (다들 자고 있다)
       return null;
     }
@@ -3743,6 +3815,45 @@ export default function World() {
       }
     }
     if (best) return best;
+    // 🪑 책상 같은 구조물을 사이에 두고 마주 선 사람: 돌아가지 않고 그 자리에서 말을 건다 (행정반 · 지휘통제실 책상 너머)
+    {
+      const mapI = world.maps[p.map];
+      const across = (e: { x: number; y: number }): number | null => {
+        const dx = e.x - p.x,
+          dy = e.y - p.y;
+        const fwd = dx * fx + dy * fy;
+        const side = Math.abs(dx * fy - dy * fx);
+        if (fwd <= 1 || fwd > 3.3 || side > 0.8) return null;
+        // 나와 그 사람 사이 칸에 지나갈 수 없는 구조물이 있어야 한다
+        for (let s = 1; s < fwd; s++) {
+          const tx = Math.floor(p.x + fx * s),
+            ty = Math.floor(p.y + fy * s);
+          if (tx === Math.floor(e.x) && ty === Math.floor(e.y)) break;
+          if (isSolid(mapI, tx, ty)) return fwd;
+        }
+        return null;
+      };
+      let far = 99;
+      for (const id of visibleNpcs(st.day, st.minute)) {
+        const n = npcs.current[id];
+        if (!n || n.map !== p.map || npcAsleep(id, n, st.minute)) continue;
+        const d = across(n);
+        if (d !== null && d < far) {
+          far = d;
+          best = { key: `npc_${id}`, kind: "npc", npc: id, label: `대화: ${npcDisplayName(st.branch, id, st.day)}` };
+        }
+      }
+      for (const def of extraDefs) {
+        const e = extras.current[def.id];
+        if (!e || e.map !== p.map || extraHiddenAtNight(def.id, st.minute) || extraAsleep(def.id, e, st.minute)) continue;
+        const d = across(e);
+        if (d !== null && d < far) {
+          far = d;
+          best = { key: `extra_${def.id}`, kind: "extra", extra: def.id, label: `대화: ${def.name} ${def.title}` };
+        }
+      }
+      if (best) return best;
+    }
     if (evIt && !evIt.key.startsWith("ev_rollcall_pm")) return evIt;
     const spotNames: Partial<Record<SpotId, string>> = {
       bed: "내 침상",
@@ -3815,6 +3926,14 @@ export default function World() {
       // 📖 동기가 나를 잊은 동안엔 동기와 하던 퀘스트를 이어 갈 수 없다 (낯선 사람처럼 대한다)
       const forgot = id === "buddy" && buddyForgot(st);
       const q = forgot ? null : st.questStepAt({ npc: id });
+      // ⏰ 집합할 시각이면 부탁받은 일은 일정을 마친 뒤로 미룬다 (퀘스트에는 시간이 든다)
+      if (q && eventDue(st)) {
+        setOverlay({
+          type: "dialogue",
+          script: { lines: [{ who: "me", text: "(…지금은 집합 시간이다. 부탁받은 일은 일정을 마친 뒤에 이어 가자.)" }] },
+        });
+        return;
+      }
       if (q) {
         setOverlay({
           type: "dialogue",
@@ -4024,14 +4143,18 @@ export default function World() {
       }
       // 🍚 식사 시간엔 분대와 먼저 밥을 먹어야 한다: 그 전에는 장소에서 하는 일(퀘스트 · 활동 · 퍼즐)을 미룬다
       const mealFirst = !!st.mealCheck && !st.mealCheck.done;
-      const free = !mealFirst && (isFreeTimeEvening(m) || isMealTime(m));
+      // ⏰ 집합할 시각이 됐으면 시간이 드는 일(퀘스트 · 활동 · 퍼즐)은 일정을 마친 뒤로 미룬다
+      const due = eventDue(st);
+      const hold = mealFirst || due;
+      const holdHint = due ? "⏰ 집합 시간 — 일정부터" : "🍚 먼저 분대와 식사";
+      const free = !hold && (isFreeTimeEvening(m) || isMealTime(m));
       const opts: MenuOption[] = [];
       const q = st.questStepAt({ spot: id });
       if (q) {
         opts.push({
           label: `📋 퀘스트 진행`,
-          hint: mealFirst ? "🍚 먼저 분대와 식사" : q.minutes ? `${q.minutes}분` : "",
-          disabled: mealFirst,
+          hint: hold ? holdHint : q.minutes ? `${q.minutes}분` : "",
+          disabled: hold,
           onSelect: () => {
             const s2 = useGame.getState();
             s2.spend(q.minutes ?? 10);
@@ -4055,9 +4178,9 @@ export default function World() {
       ) => {
         opts.push({
           label,
-          hint: mealFirst ? "🍚 먼저 분대와 식사" : hint,
+          hint: hold ? holdHint : hint,
           disabled:
-            mealFirst || disabled || (dailyKey ? st.daily.includes(dailyKey) : false),
+            hold || disabled || (dailyKey ? st.daily.includes(dailyKey) : false),
           onSelect: () => {
             const s2 = useGame.getState();
             s2.spend(mins);
@@ -4837,6 +4960,19 @@ export default function World() {
       // 😴 아침에 못 일어난 선임이면 깨워 드린다
       if (sleepySenior(st) === `x:${id}`) {
         wakeSeniorRef.current();
+        return;
+      }
+      // 🌙 밤 근무 중의 당직병(행정병): 지휘통제실에서 밤을 새우는 사람의 말을 한다 (시간은 쓰지 않는다)
+      if (id === "clerk" && st.minute >= LIGHTS_OUT) {
+        const odd = st.clues.includes("C-07") || haunt.stalks > 0 ? NIGHT_CLERK_ODD : [];
+        const words = def.title.split(" ");
+        setOverlay({
+          type: "dialogue",
+          script: {
+            custom: { name: `${def.name} ${words[words.length - 1]}`, sub: "당직병", look: extraLook(def), cap: BRANCHES[st.branch].cap as CapType },
+            lines: [{ who: "npc", text: pickTalk("x:clerk-night", [...NIGHT_CLERK_TALK, ...odd]) }],
+          },
+        });
         return;
       }
       const storyOn = st.clues.length > 0;
@@ -5821,6 +5957,66 @@ export default function World() {
         }
       }
 
+      // 👁 밤 순찰의 기척: 복도를 걷는 동안 등 뒤의 진자 · 벽의 그림자가 잠깐 스친다
+      {
+        const ndH = st.nightDuty;
+        const roaming = !!st.patrol || (!!ndH && ndH.kind === "watch" && ndH.phase === "rounds");
+        if (haunt.key !== `${st.day}`) {
+          haunt.key = `${st.day}`;
+          haunt.stalks = 0;
+          haunt.glimpses = 0;
+          haunt.cool = 7;
+          haunt.stalk = null;
+          haunt.glimpse = null;
+        }
+        if (!roaming || st.clues.length === 0 || (p.map !== "hq1" && p.map !== "hq2")) {
+          haunt.stalk = null;
+          haunt.glimpse = null;
+        } else if (!blocked && !fading) {
+          haunt.cool = Math.max(0, haunt.cool - dt);
+          const sk = haunt.stalk;
+          const [qx, qy] = DIR_VEC[p.dir];
+          if (sk) {
+            // 내 발자취를 따라 두어 칸 뒤에서 따라온다. 내가 그쪽을 보는 순간 사라진다
+            const [bx, by] = trailBack(2.3);
+            const k = Math.min(1, dt * 5);
+            sk.x += (bx - sk.x) * k;
+            sk.y += (by - sk.y) * k;
+            const dx = sk.x - p.x,
+              dy = sk.y - p.y;
+            const d = Math.hypot(dx, dy);
+            const facing = d > 0.2 && (dx * qx + dy * qy) / d > 0.4;
+            const age = now - sk.since;
+            if ((facing && age > 450) || age > 9000 || sk.map !== p.map) {
+              haunt.stalk = null;
+              haunt.cool = 14;
+              const pool = facing ? HAUNT_TURNED : HAUNT_GONE;
+              thought.current = { text: pool[Math.floor(Math.random() * pool.length)], until: now + 2800 };
+              if (facing) playSfx("sfx_heartbeat", 0.6);
+            }
+          } else if (haunt.glimpse) {
+            if (now > haunt.glimpse.until) {
+              haunt.glimpse = null;
+              haunt.cool = 14;
+              thought.current = { text: HAUNT_WALL[Math.floor(Math.random() * HAUNT_WALL.length)], until: now + 2800 };
+            }
+          } else if (haunt.cool <= 0 && p.moving && myTrail.map === p.map && myTrail.pts.length > 34 && Math.random() < dt * 0.5) {
+            const canStalk = haunt.stalks < 2;
+            const canGlimpse = haunt.glimpses < 1 && (qx !== 0);
+            if (canGlimpse && (!canStalk || Math.random() < 0.4)) {
+              // 걸어가는 앞쪽 벽에, 아주 잠깐
+              haunt.glimpses++;
+              haunt.glimpse = { map: p.map, x: Math.min(map.w - 2, Math.max(2, p.x + qx * 3.2)), y: 1.15, until: now + 850 };
+              playSfx("sfx_heartbeat", 0.5);
+            } else if (canStalk) {
+              haunt.stalks++;
+              const [sx, sy] = trailBack(3.4);
+              haunt.stalk = { map: p.map, x: sx, y: sy, since: now };
+              playSfx("sfx_pendulum_ticktock", 0.45);
+            }
+          }
+        }
+      }
       // 🔦 야간 순찰: 점검 장소에 다가가면 자동으로 점검
       if (st.patrol && !blocked && !fading) {
         for (const sid of PATROL_SPOTS) {
@@ -6562,6 +6758,24 @@ export default function World() {
         }
         g.drawImage(mc, 0, 0);
       }
+      // 👻 복도 벽에 잠깐 비치는 웃는 그림자 (밤 순찰)
+      {
+        const gl = haunt.glimpse;
+        if (gl && gl.map === p.map) {
+          const left = Math.max(0, gl.until - performance.now()) / 850;
+          g.save();
+          g.globalAlpha = Math.sin(Math.min(1, left) * Math.PI) * 0.75;
+          const cx = gl.x * TILE,
+            cy = gl.y * TILE;
+          const glow = g.createRadialGradient(cx, cy - 6, 3, cx, cy - 6, 34);
+          glow.addColorStop(0, "rgba(150,70,210,0.55)");
+          glow.addColorStop(1, "rgba(150,70,210,0)");
+          g.fillStyle = glow;
+          g.fillRect(cx - 36, cy - 40, 72, 68);
+          drawMonster(g, PHANTOM_LOOK, cx, cy + 8, 30, { dir: "down", t, shadow: false });
+          g.restore();
+        }
+      }
       // 👻 거울 속의 팬텀 (돌아서 있는 동안만)
       if (phantomRt.showAt && (p.map === "wc1" || p.map === "wc2")) {
         const m = PHANTOM_MIRROR;
@@ -7101,6 +7315,42 @@ export default function World() {
             g.lineTo(p.x * TILE + 5, my - 46);
             g.lineTo(p.x * TILE, my - 39);
             g.fill();
+          },
+        });
+      // 👁 등 뒤를 따라오는 손과 진자 (밤 순찰 · 돌아보면 사라진다)
+      const hs = haunt.stalk;
+      if (hs && hs.map === p.map)
+        ents.push({
+          y: hs.y,
+          draw: () => {
+            const age = (performance.now() - hs.since) / 1000;
+            const hx = hs.x * TILE,
+              hy = hs.y * TILE - 20;
+            g.save();
+            g.globalAlpha = Math.min(0.7, age * 1.4);
+            // 어둠 속에서 뻗어 나온 누런 손
+            g.fillStyle = "#f2d050";
+            g.fillRect(hx - 6, hy - 4, 12, 7);
+            g.fillRect(hx - 6, hy + 3, 3, 4);
+            g.fillRect(hx - 1, hy + 3, 3, 5);
+            g.fillRect(hx + 4, hy + 3, 2, 4);
+            g.fillStyle = "#8a6a30";
+            g.fillRect(hx - 6, hy - 6, 12, 2);
+            // 똑딱, 똑딱… 손끝에서 흔들리는 진자
+            const a = Math.sin(t * 3) * 0.7;
+            const ex = hx + Math.sin(a) * 20,
+              ey = hy + 8 + Math.cos(a) * 20;
+            g.strokeStyle = "#d8d8e0";
+            g.lineWidth = 1;
+            g.beginPath();
+            g.moveTo(hx, hy + 6);
+            g.lineTo(ex, ey);
+            g.stroke();
+            g.fillStyle = "#e8e8f0";
+            g.beginPath();
+            g.arc(ex, ey, 3.2, 0, Math.PI * 2);
+            g.fill();
+            g.restore();
           },
         });
       const sl = slipper.current;

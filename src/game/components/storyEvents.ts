@@ -15,7 +15,7 @@ import type { Dir } from '../engine/drawMonster';
 import type { SpeakerInfo } from '../engine/speakers';
 import type { DialogueScript } from './DialogueBox';
 import type { MenuOption } from './Menu';
-import { useGame, presentNpcs } from '../state/store';
+import { useGame, presentNpcs, eventDue } from '../state/store';
 import { BRANCHES, FACILITY_NAME, TOTAL_DAYS, rankIdxForDay } from '../data/branches';
 import { NPC_IDS, NPC_ROLES, npcPresent } from '../data/npcs';
 import { extraLook, extrasForDay } from '../data/extras';
@@ -1139,8 +1139,9 @@ export function storySpotOptions(spot: SpotId, ctx: StoryCtx): MenuOption[] {
   const add = (id: string, label: string, run: () => void, needFree = true) => {
     if (!isOpen(id)) return;
     // 식사 시간엔 분대와 먼저 밥을 먹어야 한다 (자유 시간이 아니어도 되는 미션도 마찬가지)
-    const locked = mealPending() || (needFree && !free);
-    opts.push({ label, hint: mealPending() ? '🍚 먼저 분대와 식사' : locked ? '점심·개인정비 시간에' : '📖 스토리', disabled: locked, onSelect: run });
+    const due = eventDue(G());
+    const locked = mealPending() || due || (needFree && !free);
+    opts.push({ label, hint: mealPending() ? '🍚 먼저 분대와 식사' : due ? '⏰ 집합 시간 — 일정부터' : locked ? '점심·개인정비 시간에' : '📖 스토리', disabled: locked, onSelect: run });
   };
   switch (spot) {
     case 'cyber': add('M-05', '🔍 인터넷 편지함 확인', () => m05(tone(ctx, 'bgm_12_unease'))); break;

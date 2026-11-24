@@ -76,6 +76,8 @@ export interface Line {
   text: string;
   /** 이 줄이 나올 때 울릴 소리 (없으면 글을 보고 고른다 · engine/soundCues.ts) */
   sfx?: import('./engine/audio').CueId;
+  /** 이 줄에서 음악이 뚝 끊긴다 (대화가 끝나면 원래 곡으로 돌아온다): 모두가 멈춘 듯한 순간의 정적 */
+  hush?: boolean;
 }
 
 export interface Choice {
