@@ -226,7 +226,7 @@ const MORE: Record<BranchId, ExtraDef[]> = {
     { id: 'r2c', sprite: 'houndour', name: '델빌', title: '2분대 일병', map: 'room2', x: 8, y: 4, wander: 1, color: '#3a3a42',
       lines: ['불침번 서다 보면 눈이 빨개진다… 원래 빨갛다고?', '우리 분대장님 잔소리 장난 아니다.', '같은 일병끼리 힘내자.'] },
     { id: 'r2d', sprite: 'sandshrew', name: '모래두지', title: '2분대 이병', map: 'room2', x: 10, y: 6, wander: 1, color: '#e0c060',
-      lines: ['이, 이병 모래두지! 아직 다 모르겠습니다…', '전입 온 지 일주일 됐습니다!', '모래주머니 쌓기는 자신 있습니다!'] },
+      lines: ['모, 모래두지입니다! 아직 다 모르겠습니다…', '전입 온 지 얼마 안 됐습니다!', '모래주머니 쌓기는 자신 있습니다!'] },
   ],
   navy: [
     SERVER,
@@ -237,7 +237,7 @@ const MORE: Record<BranchId, ExtraDef[]> = {
     { id: 'r2c', sprite: 'shellder', name: '셀러', title: '2분대 일병', map: 'room2', x: 8, y: 4, wander: 1, color: '#a878c8',
       lines: ['껍데기 속에 숨고 싶은 날이 있지…', '갑판 청소는 내 담당이다.', '같은 일병끼리 힘내자.'] },
     { id: 'r2d', sprite: 'wooper', name: '우파', title: '2분대 이병', map: 'room2', x: 10, y: 6, wander: 1, color: '#7ab8e8',
-      lines: ['이병 우파입니다! …헤헤.', '바다는 아직 조금 무섭습니다.', '선임님들 다 좋으십니다!'] },
+      lines: ['우파입니다! …헤헤.', '바다는 아직 조금 무섭습니다.', '선임님들 다 좋으십니다!'] },
   ],
   air: [
     SERVER,
@@ -248,7 +248,7 @@ const MORE: Record<BranchId, ExtraDef[]> = {
     { id: 'r2c', sprite: 'natu', name: '네이티', title: '2분대 일병', map: 'room2', x: 8, y: 4, wander: 1, color: '#58b858',
       lines: ['…(가만히 먼 곳을 보고 있다) 너, 내일 불침번이다.', '앞으로 일어날 일은… 비밀.', '같은 일병끼리 힘내자.'] },
     { id: 'r2d', sprite: 'farfetchd', name: '파오리', title: '2분대 이병', map: 'room2', x: 10, y: 6, wander: 1, color: '#c8a070',
-      lines: ['이병 파오리! 대파는 제 몸의 일부입니다!', '식당에서 대파 남기면 안 됩니다!', '아직 모르는 게 많습니다!'] },
+      lines: ['파오리입니다! 대파는 제 몸의 일부입니다!', '식당에서 대파 남기면 안 됩니다!', '아직 모르는 게 많습니다!'] },
   ],
 };
 /** 서브 S-02: 탄약고 군견 하데리어 (세 군 공통). 탄약고 문 쪽을 보고 엎드려 있다 */
@@ -309,7 +309,7 @@ const QUICK_HOSTS: ExtraDef[] = [
   { id: 'rapidash', sprite: 'rapidash', name: '날쌩마', title: '3분대 상병', map: 'lounge', x: 2, y: 6, wander: 0, color: '#f8e0a0',
     lines: ['장기 둘 줄 아냐? 이 부대 장기판 말은 전부 내 얼굴이다.', '말년엔 뛰지 않는다. 대신 머리를 굴리지.', '내 갈기 불꽃? 커피 데울 때만 쓴다.'] },
   { id: 'combee', sprite: 'combee', name: '세꿀버리', title: '3분대 이병', map: 'hq2', x: 22, y: 5, wander: 0, color: '#f0c050',
-    lines: ['붕붕… 꿀물은 제 비상식량입니다. 셋이서 나눠 먹습니다.', '아이앤트가 자꾸 제 물병을 노립니다. 붕.', '이, 이병 세꿀버리! 셋이지만 한 명입니다!'] },
+    lines: ['붕붕… 꿀물은 제 비상식량입니다. 셋이서 나눠 먹습니다.', '아이앤트가 자꾸 제 물병을 노립니다. 붕.', '세, 세꿀버리입니다! 셋이지만 한 명입니다!'] },
   { id: 'vulpix', sprite: 'vulpix', name: '식스테일', title: '3분대 상병', map: 'outdoor', x: 33, y: 20, wander: 0, color: '#e8784a',
     lines: ['불꽃조 주장이다. 농구는 꼬리 여섯 개로 페이크 쓰는 게 기본이지.', '시합 끝나면 악수는 꼭 한다. 그게 예의다.', '공 하나 던져 볼래? 링에 닿기만 해도 인정해 준다.'] },
 ];

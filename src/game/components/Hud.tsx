@@ -8,6 +8,14 @@ import { BRANCHES, RANKS, SEASON_LABEL, TOTAL_DAYS, fmtTime, rankIdxForDay, seas
 import { isFreeTimeEvening, isMealTime } from '../data/schedule';
 import { errandNow } from '../data/errands';
 import { soloWalk } from '../data/wanders';
+import { STORY_MISSIONS, missionReady } from '../data/story';
+
+/** 저녁 개인정비 시간(19:00~21:20)에만 할 수 있는 스토리 일: 상단 안내 문구 */
+const EVENING_TASKS: Record<string, string> = {
+  'D-01': '체단실 기구 정리 — 동기에게 "남아서 같이 정리하자"',
+  'D-02': '2층 계단 옆 옥상 철문 → 동기와 이불 걷기 · 별 보기',
+  'D-03': '2층 계단 옆 옥상 철문 → 동기와 돌아가는 방법 정리하기',
+};
 import { sleepySenior } from '../data/reveille';
 
 export function RankBadge({ rankIdx, size = 22 }: { rankIdx: number; size?: number }) {
@@ -63,6 +71,14 @@ export default function Hud({ onNotebook, onQuests, onMap, onHome, place }: { on
       objective = ev.kind === 'rollcall_pm'
         ? `📍 ${ev.label} → ${spotLabel(s.branch, ev.spot)} (준비되면 생활관에서 E · ${fmtTime(ev.start)} 시작)`
         : `📍 ${ev.label} → ${spotLabel(s.branch, ev.spot)} (도착하면 ${fmtTime(ev.start)} 시작)`;
+  }
+  // 🌙 저녁에만 할 수 있는 스토리 일이 남았으면: 저녁 점호를 먼저 시작해 버리지 않게, 그 일과 기다리는 법을 알려 준다
+  if (pending?.kind === 'rollcall_pm' && freeTime && s.clues.length > 0 && s.minute < 21 * 60 + 20) {
+    const eve = STORY_MISSIONS.find((m) => EVENING_TASKS[m.id] && missionReady(m, s));
+    if (eve)
+      objective = s.minute < 19 * 60
+        ? `🌙 19:00부터 ${EVENING_TASKS[eve.id]} · 그때까지 휴게실 TV·싸지방 등에서 시간을 보내자`
+        : `🌙 지금 ${EVENING_TASKS[eve.id]} (21:20까지)`;
   }
   // 🍚 식사는 분대 단위: 분대와 먹고 돌아오기 전에는 다음 일정이 진행되지 않는다
   if (s.mealCheck && !s.mealCheck.done && !s.nightDuty)

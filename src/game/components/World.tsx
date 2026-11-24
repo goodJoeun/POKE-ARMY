@@ -2277,9 +2277,11 @@ export default function World() {
       const recent = !forceCall.current && !!lo && lo.day === st.day && st.minute - lo.minute < 40;
       const m = !recent ? nextCallable(st) : undefined;
       forceCall.current = false;
-      // 📋 지시받은 임무가 아직 진행 중이거나, 곧 부를 임무가 남아 있으면 혼자 실마리를 찾아 나서지 않는다 (두 가지 일이 겹치지 않게)
+      // 📋 지시받은 임무가 아직 진행 중이면 혼자 실마리를 찾아 나서지 않는다 (두 가지 일이 겹치지 않게).
+      // 부를 임무가 남았어도 방금 한 번 불러서 쉬는 중이면(recent) 기다리지 않는다: 게임 시간은 가만히 있으면 흐르지 않아서,
+      // 그대로 두면 임무 하나를 마친 뒤의 자유 시간이 통째로 빈다. 다음 호출은 다음 자유 시간에 온다
       const busyMission =
-        !!nextCallable(st) ||
+        (!recent && !!nextCallable(st)) ||
         (st.clues.length > 0 && STORY_MISSIONS.some((x) => !!ORDERS[x.id] && !!st.flags[`order_${x.id}`] && missionState(x, st) === "open"));
       if (!m && busyMission) return;
       if (!m) {
@@ -3857,6 +3859,9 @@ export default function World() {
         kind: "story",
         label: st.flags.roof ? "옥상으로 (철문)" : "옥상 철문",
       };
+    // 🔦 순찰을 다 돌았으면 지휘통제실 안 어디서든 E는 순찰 결과 보고다 (책상 건너편 당직사관에게 말을 걸면 잡담 메뉴만 뜨던 것)
+    if (st.patrol && st.patrol.done.length >= PATROL_SPOTS.length && p.map === "command")
+      return { key: "spot_command", kind: "spot", spot: "command", label: "🔦 순찰 결과 보고 (당직사관)" };
     // 📖 전역일: 연병장 구령대에 내려온 별
     if (
       finalStarOn(st) &&
