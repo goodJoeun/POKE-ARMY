@@ -167,7 +167,12 @@ export const sergeantJoins = (s: { clues: string[]; memory: number }) => s.clues
 
 // ───────── 꿈: 별의 언덕 ─────────
 export type DreamWho = 'narr' | 'voice' | 'mom' | 'me' | 'jirachi';
-export interface DreamLine { who: DreamWho; text: string }
+export interface DreamLine {
+  who: DreamWho;
+  text: string;
+  /** 빛이 모습을 드러내는 연출: gather 빛이 한 점으로 모인다 → flash 눈부시게 터진다 → reveal 그 자리에 지라치가 떠 있다 (이 줄부터 지라치가 보인다) */
+  fx?: 'gather' | 'flash' | 'reveal';
+}
 export interface DreamScript {
   /** 처음 몇 줄은 생활관(어두운 방)에서, 그 뒤로 별의 언덕 */
   room?: DreamLine[];
@@ -293,8 +298,16 @@ export const DREAMS: Record<number, DreamScript> = {
   },
   11: {
     hill: [
-      { who: 'narr', text: '빛이 처음으로 모습을 드러낸다. 별 모양 머리에, 졸린 눈의 작은 포켓몬.' },
-      { who: 'jirachi', text: '…나는 지라치. 네 소원을 들어준 별이야.' },
+      { who: 'narr', text: '오늘은 빛이 평소보다 가깝다. 손을 뻗으면 닿을 것 같다.' },
+      { who: 'voice', text: '…열한 번째 밤이네. 이제 숨어 있을 필요가 없겠지.' },
+      { who: 'me', text: '숨어 있었다고? 너, 계속 거기 있었던 거야?' },
+      { who: 'voice', text: '응. 처음부터. …눈 감지 마. 한 번만 보여 줄 거니까.' },
+      { who: 'narr', text: '빛이 안쪽으로 접힌다. 한 겹, 또 한 겹. 언덕의 별빛이 전부 그 한 점으로 빨려 들어간다.', fx: 'gather' },
+      { who: 'narr', text: '눈을 뜰 수 없을 만큼 환해졌다가 —', fx: 'flash' },
+      { who: 'narr', text: '빛이 있던 자리에 작은 포켓몬이 떠 있다. 별 모양 머리, 소원 쪽지처럼 늘어진 세 장의 띠, 그리고 졸린 눈.', fx: 'reveal' },
+      { who: 'me', text: '(…별이다. 그날 밤 창밖으로 떨어지던, 그 별.)' },
+      { who: 'jirachi', text: '…안녕. 이 모습으로는 처음이지.' },
+      { who: 'jirachi', text: '나는 지라치. 네 소원을 들어준 별이야.' },
       { who: 'jirachi', text: '미안해. 가기 싫다길래, 대신 가게 해 주면 될 줄 알았어.' },
       { who: 'jirachi', text: '돌아가면 여기 일은 꿈처럼 흐려질 거야. 남으면, 거기 일이 흐려지고.' },
       { who: 'jirachi', text: '어느 쪽이든 하나는 놓아야 해. 이번엔 내가 아니라, 네 입으로 말해 줘.' },

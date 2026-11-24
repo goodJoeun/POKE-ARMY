@@ -111,12 +111,13 @@ export interface SceneHint {
 export function sceneMood(h: SceneHint | null): BgmMood | null {
   if (!h) return null;
   if (h.bgm) return h.bgm;
-  if (h.type === 'resist') return h.resistMode === 'still' ? null : 'bgm_10_boss_slipper';
+  // 슬리퍼 · 팬텀이 나오는 장면은 밝은 대결곡 대신 스산한 곡으로 (대화 · 최면 저항 · 대결 퍼즐 모두)
+  if (h.type === 'resist') return h.resistMode === 'still' ? null : 'bgm_12_unease';
   if (h.type === 'mirror') return 'none';
   if (h.type === 'puzzle') {
     const id = h.puzzle ?? '';
     // 슬리퍼와의 대결 · 최면 저항
-    if (id.startsWith('P-20') || id === 'P-14') return 'bgm_10_boss_slipper';
+    if (id.startsWith('P-20') || id === 'P-14') return 'bgm_12_unease';
     // 별의 창문 (첫 조각 · 마지막 조각)
     if (id === 'P-01' || id === 'P-21') return 'bgm_03_dream_star_hill';
     // 안개 너머: 어느 길로 가도 초소 앞
@@ -124,7 +125,7 @@ export function sceneMood(h: SceneHint | null): BgmMood | null {
     return 'bgm_09_mystery_clues';
   }
   if (h.type === 'dialogue') {
-    if (h.speaker === '슬리퍼') return 'bgm_10_boss_slipper';
+    if (h.speaker === '슬리퍼') return 'bgm_12_unease';
     if (h.speaker === '당직부관' && h.speakerSub?.includes('???')) return 'bgm_12_unease';
     if (h.speaker?.includes('지라치') || h.speaker?.includes('별빛')) return 'bgm_03_dream_star_hill';
     if (h.speaker && /팬텀|거울 속|안개 속|화강돌/.test(h.speaker)) return 'bgm_12_unease';

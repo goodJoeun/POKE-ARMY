@@ -7,6 +7,10 @@ import { DREAMS, DREAM_FADED, type DreamLine } from '../data/story';
 import PuzzleBox from './PuzzleBox';
 import { setBgmMood, type CueId } from '../engine/audio';
 import { useLineSound } from '../engine/soundCues';
+import MonsterCanvas from './MonsterCanvas';
+import type { MonsterLook } from '../types';
+
+const JIRACHI = { sprite: 'jirachi', body: '#f8f4d0', belly: '#ffffff', accent: '#f2d050', shape: 'round', ears: 'tuft', tail: 'none', eyes: 'sleepy', mouth: 'smile' } as MonsterLook;
 
 /**
  * 꿈: 별의 언덕 — 하루 끝(결산) 전에 보는 짧은 장면.
@@ -36,7 +40,13 @@ export default function Dream() {
   }, [text, typeMs, typeStep]);
 
   // 🔊 꿈의 소리: 엄마 목소리엔 심장 소리, 빛의 목소리는 높고 맑게. 소등한 생활관 장면은 곡 없이 조용하다
-  const lineCueId: CueId | null = line?.who === 'mom' ? 'sfx_heartbeat' : line?.who === 'jirachi' && idx > 0 && lines[idx - 1].who !== 'jirachi' ? 'sfx_star_twinkle' : null;
+  // ✨ 빛이 모습을 드러내는 연출 (data/story.ts DreamLine.fx): reveal 줄부터는 지라치가 보인다
+  const revealAt = lines.findIndex((l) => l.fx === 'reveal');
+  const revealed = revealAt >= 0 && idx >= revealAt;
+  const fx = line?.fx ?? null;
+  const fxRef = useRef<{ fx: string | null; revealed: boolean; since: number }>({ fx: null, revealed: false, since: 0 });
+  if (fxRef.current.fx !== fx || fxRef.current.revealed !== revealed) fxRef.current = { fx, revealed, since: typeof performance !== 'undefined' ? performance.now() : 0 };
+  const lineCueId: CueId | null = fx === 'gather' ? 'sfx_evo_pulse' : fx === 'flash' ? 'sfx_flash' : fx === 'reveal' ? 'jingle_star_fragment' : line?.who === 'mom' ? 'sfx_heartbeat' : line?.who === 'jirachi' && idx > 0 && lines[idx - 1].who !== 'jirachi' ? 'sfx_star_twinkle' : null;
   useLineSound(idx, text, typed, { cue: lineCueId, spoken: !!line && line.who !== 'narr', voice: line?.who === 'voice' || line?.who === 'jirachi' ? 1.5 : line?.who === 'mom' ? 0.8 : 1 });
   const inRoom = line?.scene === 'room';
   useEffect(() => {
@@ -111,10 +121,40 @@ export default function Dream() {
         g.beginPath(); g.moveTo(0, h); g.quadraticCurveTo(w * 0.4, h * 0.55, w, h * 0.78); g.lineTo(w, h); g.fill();
         // 빛 (지라치의 목소리)
         const ox = w * 0.42, oy = h * 0.38 + Math.sin(t * 1.6) * 8;
-        const og = g.createRadialGradient(ox, oy, 0, ox, oy, 70);
-        og.addColorStop(0, 'rgba(255,250,200,1)'); og.addColorStop(0.35, 'rgba(255,230,120,0.6)'); og.addColorStop(1, 'rgba(255,230,120,0)');
-        g.fillStyle = og; g.beginPath(); g.arc(ox, oy, 70, 0, Math.PI * 2); g.fill();
-        star(g, ox, oy, 12, '#fffbe0');
+        const f = fxRef.current;
+        const age = (now - f.since) / 1000;
+        if (f.fx === 'gather') {
+          // 언덕의 별빛이 한 점으로 빨려 들어간다: 사방에서 모여드는 빛줄기 + 점점 커지는 빛
+          const k = Math.min(1, age / 2.2);
+          g.strokeStyle = 'rgba(255,245,190,0.75)'; g.lineWidth = 2;
+          for (let i = 0; i < 18; i++) {
+            const a = (Math.PI * 2 * i) / 18 + t * 0.4;
+            const r1 = (1 - ((age * 0.9 + i * 0.13) % 1)) * Math.max(w, h) * 0.55 + 30;
+            g.beginPath(); g.moveTo(ox + Math.cos(a) * r1, oy + Math.sin(a) * r1); g.lineTo(ox + Math.cos(a) * (r1 - 46), oy + Math.sin(a) * (r1 - 46)); g.stroke();
+          }
+          const rr = 70 + k * 90 + Math.sin(t * 14) * 6;
+          const gg = g.createRadialGradient(ox, oy, 0, ox, oy, rr);
+          gg.addColorStop(0, 'rgba(255,255,240,1)'); gg.addColorStop(0.4, 'rgba(255,236,150,0.8)'); gg.addColorStop(1, 'rgba(255,230,120,0)');
+          g.fillStyle = gg; g.beginPath(); g.arc(ox, oy, rr, 0, Math.PI * 2); g.fill();
+          star(g, ox, oy, 12 + k * 14, '#ffffff');
+        } else if (f.fx === 'flash') {
+          // 눈부시게 터진다
+          const rr = 160 + age * 900;
+          const gg = g.createRadialGradient(ox, oy, 0, ox, oy, rr);
+          gg.addColorStop(0, 'rgba(255,255,255,1)'); gg.addColorStop(0.6, 'rgba(255,250,220,0.9)'); gg.addColorStop(1, 'rgba(255,240,180,0)');
+          g.fillStyle = gg; g.fillRect(0, 0, w, h);
+        } else if (f.revealed) {
+          // 모습을 드러낸 뒤: 등 뒤로 은은한 후광만 남는다 (지라치는 화면 위에 따로 그린다)
+          const rr = 96 + Math.sin(t * 2) * 8;
+          const gg = g.createRadialGradient(ox, oy, 0, ox, oy, rr);
+          gg.addColorStop(0, 'rgba(255,246,190,0.75)'); gg.addColorStop(0.5, 'rgba(255,230,120,0.3)'); gg.addColorStop(1, 'rgba(255,230,120,0)');
+          g.fillStyle = gg; g.beginPath(); g.arc(ox, oy, rr, 0, Math.PI * 2); g.fill();
+        } else {
+          const og = g.createRadialGradient(ox, oy, 0, ox, oy, 70);
+          og.addColorStop(0, 'rgba(255,250,200,1)'); og.addColorStop(0.35, 'rgba(255,230,120,0.6)'); og.addColorStop(1, 'rgba(255,230,120,0)');
+          g.fillStyle = og; g.beginPath(); g.arc(ox, oy, 70, 0, Math.PI * 2); g.fill();
+          star(g, ox, oy, 12, '#fffbe0');
+        }
       }
       raf = requestAnimationFrame(draw);
     };
@@ -127,6 +167,10 @@ export default function Dream() {
   return (
     <div className="dream-scene" onClick={advance}>
       <canvas ref={ref} className="dream-canvas" />
+      {fx === 'flash' && <div className="dream-flash" />}
+      {revealed && line.scene === 'hill' && (
+        <div className="dream-jirachi" key="jirachi"><span><MonsterCanvas look={JIRACHI} size={150} /></span></div>
+      )}
       <div className="dream-title">{line.scene === 'room' ? `DAY ${s.day} · 소등` : '꿈 · 별의 언덕'}</div>
       <div className="dialogue-wrap dream-box">
         <div className="dialogue">

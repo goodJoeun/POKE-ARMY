@@ -6074,6 +6074,7 @@ export default function World() {
             if ((facing && age > 450) || age > 9000 || sk.map !== p.map) {
               haunt.stalk = null;
               haunt.cool = 14;
+              setBgmMood(null);
               const pool = facing ? HAUNT_TURNED : HAUNT_GONE;
               thought.current = { text: pool[Math.floor(Math.random() * pool.length)], until: now + 2800 };
               if (facing) playSfx("sfx_heartbeat", 0.6);
@@ -6082,6 +6083,7 @@ export default function World() {
             if (now > haunt.glimpse.until) {
               haunt.glimpse = null;
               haunt.cool = 14;
+              setBgmMood(null);
               thought.current = { text: HAUNT_WALL[Math.floor(Math.random() * HAUNT_WALL.length)], until: now + 2800 };
             }
           } else if (haunt.cool <= 0 && p.moving && myTrail.map === p.map && myTrail.pts.length > 34 && Math.random() < dt * 0.5) {
@@ -6091,11 +6093,14 @@ export default function World() {
               // 걸어가는 앞쪽 벽에, 아주 잠깐
               haunt.glimpses++;
               haunt.glimpse = { map: p.map, x: Math.min(map.w - 2, Math.max(2, p.x + qx * 3.2)), y: 1.15, until: now + 850 };
+              // 🔊 기척이 스치는 동안은 스산한 곡으로
+              setBgmMood("bgm_12_unease");
               playSfx("sfx_heartbeat", 0.5);
             } else if (canStalk) {
               haunt.stalks++;
               const [sx, sy] = trailBack(3.4);
               haunt.stalk = { map: p.map, x: sx, y: sy, since: now };
+              setBgmMood("bgm_12_unease");
               playSfx("sfx_pendulum_ticktock", 0.45);
             }
           }
