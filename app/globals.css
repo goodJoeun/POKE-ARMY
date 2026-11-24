@@ -25,6 +25,20 @@ button { font-family: inherit; cursor: pointer; }
 h1, h2, h3, .speaker, .mg-title, .menu-title, .clock, .hud-day, .big-grade, .ending-title, .bc-name { font-family: 'Galmuri14', 'Galmuri11', sans-serif; font-weight: 400; }
 
 .game-root { position: fixed; inset: 0; overflow: hidden; }
+/*
+ * 🖐️ 게임 화면은 글자 선택 · 끌어다 놓기 · 길게 누르기 메뉴를 받지 않는다.
+ * (모바일에서 방향패드를 누르다 손가락이 패드 밖으로 미끄러지면 화면 글자가 선택되거나 화면이 끌려 조작이 끊기던 것)
+ * 글자를 써야 하는 칸(퍼즐의 이름 쓰기 · 숫자 칸)만 예외다. 스크롤이 필요한 창(메뉴 · 수첩)은 그대로 스크롤된다.
+ */
+html, body { overscroll-behavior: none; }
+.game-root, .game-root * {
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none; -webkit-user-drag: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.game-root input, .game-root textarea { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+/* 화면(캔버스) 위에서는 손가락으로 끌어도 페이지가 움직이거나 확대되지 않는다 */
+.game-root canvas { touch-action: none; }
 .hud-dim { color: var(--ink-dim); font-size: 0.86em; }
 .small { font-size: 0.8em; }
 kbd {

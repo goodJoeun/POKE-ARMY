@@ -54,6 +54,21 @@ export default function Game() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [tester]);
 
+  // 🖐️ 끌어다 놓기 · 글자 선택 · 길게 누르기 메뉴 막기 (글자를 쓰는 칸은 예외). CSS(globals.css)와 같이 막아 둔다:
+  // 일부 모바일 브라우저는 user-select만으로는 길게 누른 뒤 끄는 동작을 선택 · 드래그로 잡는다
+  useEffect(() => {
+    const typing = (t: EventTarget | null) => t instanceof Element && !!t.closest('input, textarea');
+    const stop = (e: Event) => { if (!typing(e.target)) e.preventDefault(); };
+    document.addEventListener('dragstart', stop);
+    document.addEventListener('selectstart', stop);
+    document.addEventListener('contextmenu', stop);
+    return () => {
+      document.removeEventListener('dragstart', stop);
+      document.removeEventListener('selectstart', stop);
+      document.removeEventListener('contextmenu', stop);
+    };
+  }, []);
+
   return (
     <div className="game-root">
       {scene === 'title' && <Title />}
