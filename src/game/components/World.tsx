@@ -5591,6 +5591,7 @@ export default function World() {
     let w = 0,
       h = 0;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const touchScreen = window.matchMedia("(pointer: coarse)");
     const resize = () => {
       const r = wrapRef.current!.getBoundingClientRect();
       w = r.width;
@@ -7349,13 +7350,14 @@ export default function World() {
               Math.hypot(p.x - n.x, p.y - n.y) > 1.8
             )
               return;
-            g.font = '11px "Galmuri11", sans-serif';
+            const nameSize = touchScreen.matches ? 13 : 11;
+            g.font = `${nameSize}px "Galmuri11", sans-serif`;
             const nm = sk.name;
             const tw = g.measureText(nm).width + 8;
             g.fillStyle = NPC_ROLES[id].officer
               ? "rgba(60,50,20,0.8)"
               : "rgba(20,30,40,0.7)";
-            g.fillRect((n.x * TILE + nx0) - tw / 2, n.y * TILE - 44, tw, 14);
+            g.fillRect((n.x * TILE + nx0) - tw / 2, n.y * TILE - 33 - nameSize, tw, nameSize + 3);
             g.fillStyle = NPC_ROLES[id].officer ? "#ffe08a" : "#ffffff";
             g.fillText(nm, (n.x * TILE + nx0), n.y * TILE - 33);
             if (offerGivers.has(id)) {
@@ -7460,10 +7462,11 @@ export default function World() {
               Math.hypot(p.x - e.x, p.y - e.y) > 1.8
             )
               return;
-            g.font = '10px "Galmuri11", sans-serif';
+            const nameSize = touchScreen.matches ? 12 : 10;
+            g.font = `${nameSize}px "Galmuri11", sans-serif`;
             const tw = g.measureText(def.name).width + 8;
             g.fillStyle = "rgba(70,74,84,0.72)";
-            g.fillRect((e.x * TILE + ex0) - tw / 2, e.y * TILE - 42, tw, 13);
+            g.fillRect((e.x * TILE + ex0) - tw / 2, e.y * TILE - 32 - nameSize, tw, nameSize + 3);
             g.fillStyle = "#e8ecf2";
             g.fillText(def.name, (e.x * TILE + ex0), e.y * TILE - 32);
           },
