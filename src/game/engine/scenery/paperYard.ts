@@ -54,6 +54,17 @@ export function unsentLetters(g: Ink, w: number, h: number) {
   rect(g, '#262e2b4d', 0, 0, w, h);
   // A close view of the opened bale lifts the envelopes above the dialogue box.
   const cx = Math.round(w / 2), cy = Math.round(h * .38);
+  const lip = Math.round(h * .66);
+  polygon(g, '#807c69', [[cx - 96, cy + 12], [cx + 93, cy + 12], [w, lip], [0, lip]]);
+  rect(g, '#565a4d', 0, lip, w, h - lip);
+  line(g, '#ad9f7b', 0, lip, w, 0, 2);
+  for (let i = 1; i < 6; i++) {
+    const y = cy + 12 + (lip - cy - 12) * (i / 6) ** 1.5;
+    const edge = (lip - y) / (lip - cy - 12);
+    const left = (cx - 96) * edge;
+    line(g, '#5a6053', left, y, w - left - (w - cx - 93) * edge, 0);
+  }
+  rect(g, '#595d50', cx - 73, cy + 28, 154, 6);
   bale(g, cx - 77, cy - 17, 154, 48);
   for (const [dx, dy, shade] of [[-54, -18, '#b7a087'], [-36, -27, '#c6ae8b'], [-17, -15, '#d2bea0']] as const) {
     const x = cx + dx, y = cy + dy;
