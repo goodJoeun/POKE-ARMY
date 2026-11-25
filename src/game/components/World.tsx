@@ -2738,6 +2738,7 @@ export default function World() {
             setOverlay({
               type: "dialogue",
               script: { ...nightScene(s3.day, "guard", partner, hasFace), npc: psp?.npc, custom: psp?.custom },
+              bg: s3.day === 3 ? "fogGate" : undefined,
               onChoice: (c) => {
                 if (c.effects)
                   useGame.getState().applyEffects(c.effects, "야간 근무");

@@ -9,9 +9,10 @@ import { bedtime } from '../engine/scenery/bedtime';
 import { dreamWater } from '../engine/scenery/dreamWater';
 import { washroom } from '../engine/scenery/washroom';
 import { watchDesk } from '../engine/scenery/watchDesk';
+import { fogGate, gateMist } from '../engine/scenery/fogGate';
 import { rect, wash } from '../engine/scenery/pixels';
 
-const paintings = { hill: dreamHill, roof, library, radio, archive, parade, wakingBarracks, bedtime, dreamWater, washroom, watchDesk };
+const paintings = { hill: dreamHill, roof, library, radio, archive, parade, wakingBarracks, bedtime, dreamWater, washroom, watchDesk, fogGate };
 
 export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof paintings; day?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -19,7 +20,7 @@ export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof 
     const canvas = ref.current!;
     const g = canvas.getContext('2d', { alpha: false });
     if (!g) return;
-    const still = scene === 'archive' || scene === 'parade' ? document.createElement('canvas') : null;
+    const still = scene === 'archive' || scene === 'parade' || scene === 'fogGate' ? document.createElement('canvas') : null;
     const paint = () => {
       const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
       if (!aspect) return;
@@ -64,7 +65,9 @@ export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof 
       timer = window.setInterval(() => {
         const t = performance.now() / 1000, w = still.width, h = still.height;
         g.drawImage(still, 0, 0);
-        if (scene === 'parade') {
+        if (scene === 'fogGate') {
+          gateMist(g, w, h, t);
+        } else if (scene === 'parade') {
           wash(g, w / 2, h * 0.49, 16 + 3 * Math.sin(t * 1.5), '#fff0ad46');
         } else {
           for (let i = 0; i < 24; i++) {
