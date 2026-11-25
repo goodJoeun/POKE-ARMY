@@ -156,6 +156,7 @@ interface ExtraRt extends NpcRt {
 }
 
 const puzzleBackdrop: Partial<Record<string, StoryBg>> = {
+  "P-06": "mailbox",
   "P-13": "archive",
   "P-21": "parade",
   "P-10": "library",

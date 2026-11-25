@@ -28,7 +28,7 @@ import type { BgmMood } from '../engine/audio';
 import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding, missionReady } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
-export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate';
+export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate' | 'mailbox' | 'datedMailbox';
 export interface StoryScene {
   script: DialogueScript; bg?: StoryBg; onChoice?: (c: Choice) => void; onDone?: () => void;
   /** 🔊 이 장면 동안 흐를 곡. null = 평소 곡 그대로 (tone으로 정한 곡도 쓰지 않는다) */
@@ -161,6 +161,7 @@ const me = (text: string) => say('me', text);
 function m05(ctx: StoryCtx) {
   G().spend(20);
   ctx.play({
+    bg: 'mailbox',
     script: { lines: [
       narr('싸지방 컴퓨터로 인터넷 편지함을 열었다.'),
       narr('받은 편지함 맨 위에, 날짜 칸이 비어 있는 편지가 한 통 있다. 보낸 사람: 엄마.'),
@@ -170,6 +171,7 @@ function m05(ctx: StoryCtx) {
     ] },
     // 🧩 P-06: 편지를 쓴 날과 시각을 알아내야 현실의 시간이 보인다
     onDone: () => ctx.puzzle('P-06', (reward) => ctx.play({
+      bg: 'datedMailbox',
       script: { lines: [
         narr('비어 있던 날짜 칸에 글자가 떠오른다. 입대일, 오전 11시.'),
         me('(나는 여기서 며칠을 보냈는데… 현실은 아직 그날 오전이야.)'),
