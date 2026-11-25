@@ -28,7 +28,7 @@ import type { BgmMood } from '../engine/audio';
 import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding, missionReady } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
-export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate' | 'mailbox' | 'datedMailbox' | 'patrolBoard' | 'paperYard' | 'unsentLetters';
+export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate' | 'mailbox' | 'datedMailbox' | 'patrolBoard' | 'paperYard' | 'unsentLetters' | 'pendulumHall' | 'emptyDutyHall';
 export interface StoryScene {
   script: DialogueScript; bg?: StoryBg; onChoice?: (c: Choice) => void; onDone?: () => void;
   /** 🔊 이 장면 동안 흐를 곡. null = 평소 곡 그대로 (tone으로 정한 곡도 쓰지 않는다) */
@@ -658,6 +658,7 @@ export function slipperCorridor(ctx: StoryCtx, onEnd: (ok: boolean) => void) {
   // 상병부터는 내가 사수: 부사수(후임)는 존댓말
   const iLead = rankIdxForDay(s.day) >= 2;
   ctx.play({
+    bg: 'pendulumHall',
     script: {
       custom: slipperSpeaker(false),
       lines: [
@@ -677,6 +678,7 @@ export function slipperCorridor(ctx: StoryCtx, onEnd: (ok: boolean) => void) {
       if (ok) {
         s2.applyEffects({ memory: 2 }, '최면 저항');
         ctx.play({
+          bg: 'emptyDutyHall',
           script: { lines: [
             narr('번쩍 정신이 든다. 복도엔 아무도 없다. 지휘통제실 문은 굳게 닫혀 있다.'),
             narr('바닥에… 동그란 자국이 남아 있다. 진자를 끈 것 같은.'),
@@ -688,6 +690,7 @@ export function slipperCorridor(ctx: StoryCtx, onEnd: (ok: boolean) => void) {
       } else {
         s2.applyEffects({ memory: -10 }, '최면');
         ctx.play({
+          bg: 'fogGate',
           script: { lines: [
             narr('…눈을 떠 보니 위병소 초소 앞이다. 어떻게 걸어왔는지 기억이 없다.'),
             say('narr', iLead ? `${partner}: "괜찮으십니까? 걸으면서 조시던데요."` : `${partner}: "괜찮냐? 걸으면서 졸더라."`),
