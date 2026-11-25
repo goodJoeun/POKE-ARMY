@@ -6,7 +6,8 @@ out
 .git
 .claude
 docs
-scripts
+scripts/*
+!scripts/sprites-blob.mjs
 next-env.d.ts
 *.tsbuildinfo
 .vercel

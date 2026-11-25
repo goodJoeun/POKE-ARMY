@@ -42,3 +42,14 @@ npm run followers -- "<...\Graphics\Characters\Followers 폴더 경로>"
 
 - `public/sprites/follower/`로 복사되고 `manifest.json`에 `follower` 항목이 추가됩니다 (저장소에는 올리지 않음).
 - 시트가 없는 포켓몬은 `icon/`으로 자동 생성한 걷기 그림을 씁니다.
+
+## 배포 (Vercel)
+
+`main`에 푸시하면 Vercel이 자동으로 배포합니다. 이 폴더는 저장소에 없으므로, 빌드 직전(`prebuild`)에
+`scripts/sprites-blob.mjs`가 Vercel Blob 비공개 저장소(`poke-army-sprites`)에서 그림 묶음을 받아 풉니다.
+
+그림을 추가·교체했다면 푸시 전에 한 번 올려 주세요 (Vercel CLI 로그인 필요):
+
+```bash
+npm run sprites:upload
+```

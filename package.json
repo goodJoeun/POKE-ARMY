@@ -5,10 +5,12 @@
   "description": "Poké Army: 별빛에 소원을 빌던 밤 - 포켓몬이 되어 군생활을 하는 생활 시뮬레이션 프로토타입",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/sprites-blob.mjs download",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "sprites": "node scripts/fetch-sprites.mjs",
+    "sprites:upload": "node scripts/sprites-blob.mjs upload",
     "followers": "node scripts/import-followers.mjs",
     "anotherred": "node scripts/import-another-red.mjs",
     "tiles": "node scripts/tileset/build.mjs"
@@ -24,6 +26,7 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vercel/blob": "^2.9.0",
     "typescript": "^5.9.3"
   }
 }
