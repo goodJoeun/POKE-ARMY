@@ -279,12 +279,14 @@ export function MirrorReveal({ onDone }: { onDone: () => void }) {
       )}
       {stage >= last && (
         <div className="transform-info fade-in" onClick={(e) => e.stopPropagation()}>
-          <h2>"내가… 포켓몬?!"</h2>
-          <p><b className="species-name">{sp.name}</b> <span className="bc-type" style={{ background: b.typeColor }}>{sp.type} 타입</span></p>
-          <p>{sp.desc}</p>
-          <p>성격 분석 결과: <b>{ARCHETYPE_INFO[s.archetype].name}</b> — {ARCHETYPE_INFO[s.archetype].desc}<br />
-            <span className="perk">✨ {ARCHETYPE_INFO[s.archetype].perk}</span></p>
-          <p className="hud-dim">꿈이 아니다. 머리 위에는 {b.name} 모자까지 얹혀 있다. …분대장이 3분 준다고 했다. 일단 생활관으로 돌아가자!</p>
+          <div className="mirror-description">
+            <h2>"내가… 포켓몬?!"</h2>
+            <p><b className="species-name">{sp.name}</b> <span className="bc-type" style={{ background: b.typeColor }}>{sp.type} 타입</span></p>
+            <p>{sp.desc}</p>
+            <p>성격 분석 결과: <b>{ARCHETYPE_INFO[s.archetype].name}</b> — {ARCHETYPE_INFO[s.archetype].desc}<br />
+              <span className="perk">✨ {ARCHETYPE_INFO[s.archetype].perk}</span></p>
+            <p className="hud-dim">꿈이 아니다. 머리 위에는 {b.name} 모자까지 얹혀 있다. …분대장이 3분 준다고 했다. 일단 생활관으로 돌아가자!</p>
+          </div>
           <button className="primary big" onClick={onDone}>▶ 생활관으로 (Enter)</button>
         </div>
       )}

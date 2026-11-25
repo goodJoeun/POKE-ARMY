@@ -690,7 +690,11 @@ canvas { image-rendering: pixelated; }
 .mirror-scene.stage-0 .mirror-frame canvas { filter: brightness(0) blur(2px); opacity: .55; }
 .mirror-frame .sparkle { inset: -4%; }
 .mirror-scene .wake-text p { margin: 2px 0 6px; }
-.mirror-scene .transform-info { position: relative; overflow-y: auto; max-height: 58%; }
+.mirror-scene .transform-info {
+  position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center; max-height: 58%;
+}
+.mirror-description { width: 100%; overflow-y: auto; }
 @media (max-height: 480px) {
   .first-dream .dream-box { bottom: 8px; max-height: 61%; min-height: 0; padding: 8px 14px; }
   .first-dream .dream-progress { top: 5%; left: 6%; }
