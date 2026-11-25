@@ -365,6 +365,13 @@ canvas { image-rendering: pixelated; }
 .scenery-canvas { position: absolute; inset: 0; image-rendering: pixelated; }
 .story-bg-actors { position: absolute; display: flex; gap: 6px; }
 .story-bg-actors.roof { left: 50%; top: 52%; transform: translateX(-50%); }
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .story-bg:has(.roof) { background: #293440; }
+  .story-bg:has(.roof) > canvas { height: 66%; }
+  /* Feet meet the deck at 64% of the shortened painting, above the dialogue. */
+  .story-bg-actors.roof { top: 42%; transform: translate(-50%, -82%); }
+  .story-bg-actors.roof canvas { width: 17dvh !important; height: 17dvh !important; }
+}
 .story-bg-actors.parade { left: 50%; bottom: 41%; transform: translateX(-50%); }
 .parade-star-art { display: block; width: clamp(68px, 16vh, 120px); height: auto; }
 .story-bg-actors .jirachi { animation: storyFloat 2.4s ease-in-out infinite; filter: drop-shadow(0 0 18px rgba(255,240,170,0.9)); }
