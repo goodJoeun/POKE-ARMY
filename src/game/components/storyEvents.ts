@@ -28,7 +28,7 @@ import type { BgmMood } from '../engine/audio';
 import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding, missionReady } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
-export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate' | 'mailbox' | 'datedMailbox' | 'patrolBoard';
+export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate' | 'mailbox' | 'datedMailbox' | 'patrolBoard' | 'paperYard' | 'unsentLetters';
 export interface StoryScene {
   script: DialogueScript; bg?: StoryBg; onChoice?: (c: Choice) => void; onDone?: () => void;
   /** 🔊 이 장면 동안 흐를 곡. null = 평소 곡 그대로 (tone으로 정한 곡도 쓰지 않는다) */
@@ -563,6 +563,7 @@ function m08(ctx: StoryCtx) {
   const beside: [number, number] = [mx + side, my];
   const farX = Math.min(16, Math.max(3, mx + side * 5));
   const solved = (reward: number) => ctx.walk(BONG, beside[0], beside[1], side > 0 ? 'left' : 'right', () => ctx.play({
+    bg: 'unsentLetters',
     script: { lines: [
       { who: 'narr', text: '깨봉이가 쏟아진 봉투 하나를 물어다 내 발치에 내려놓는다. 주둥이로 한 번 밀고는, 한 걸음 물러나 앉는다.', sfx: 'sfx_paper' },
       narr('해마다 다른 필체로 쓴 편지들. 내용은 전부 같다.'),
@@ -586,6 +587,7 @@ function m08(ctx: StoryCtx) {
       onDone: () => ctx.walk(BONG, farX, my, side > 0 ? 'left' : 'right', () =>
         // 🧩 P-11: 마당과 폐지 더미를 한 줄로 반씩 가르면, 더미 한가운데서 봉투가 나온다
         ctx.puzzle('P-11', (reward) => ctx.play({
+          bg: 'unsentLetters',
           script: { lines: [
             narr('줄을 따라 폐지 더미를 반으로 가르자, 한가운데서 봉투 뭉치가 쏟아진다. 우표도, 주소도 없다.'),
           ] },
