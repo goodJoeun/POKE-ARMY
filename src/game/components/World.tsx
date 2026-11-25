@@ -561,6 +561,11 @@ function atNightGlyphs(day: number): boolean {
   if (day === 9) return p.map === "lounge";
   return false;
 }
+
+function canFindNightGlyphs(st: ReturnType<typeof useGame.getState>): boolean {
+  return !!st.patrol && st.clues.length > 0 && atNightGlyphs(st.day) &&
+    !(st.clues.includes("C-11") && (st.day === 5 || st.clues.includes("C-15")));
+}
 /** 야간 근무 중 별빛(지라치)이 떠 있는 곳 */
 const STAR_POS: Record<"watch" | "guard", [MapId, number, number]> = {
   watch: ["room1", 7.5, 2.4],
@@ -4325,6 +4330,9 @@ export default function World() {
       const holdHint = due ? "⏰ 집합 시간 — 일정부터" : "🍚 먼저 분대와 식사";
       const free = !hold && (isFreeTimeEvening(m) || isMealTime(m));
       const opts: MenuOption[] = [];
+      if ((id === "board2" || id === "tv") && canFindNightGlyphs(st)) {
+        opts.push({ label: "🔦 손전등 끄기", onSelect: () => libraryLightsOut(storyCtx, false) });
+      }
       const q = st.questStepAt({ spot: id });
       if (q) {
         opts.push({
@@ -5542,8 +5550,7 @@ export default function World() {
         const st = useGame.getState();
         if (
           !(
-            st.clues.length > 0 &&
-            atNightGlyphs(st.day) &&
+            canFindNightGlyphs(st) &&
             libraryLightsOut(storyCtxRef.current, false)
           )
         ) {
@@ -6080,20 +6087,13 @@ export default function World() {
       }
       // 📖 5·9일차 밤 순찰: 글자들이 떠 있는 곳(5일차 2층 게시판 · 9일차 휴게실)에 다가가면 안내
       if (
-        st.patrol &&
-        atNightGlyphs(st.day) &&
-        st.clues.length > 0 &&
-        libHint.current !== st.day &&
-        !(
-          st.clues.includes("C-11") &&
-          (st.day === 5 || st.clues.includes("C-15"))
-        )
+        canFindNightGlyphs(st) && libHint.current !== st.day
       ) {
         libHint.current = st.day;
         st.toast(
           st.day === 5
-            ? "📌 2층 게시판. 손전등 빛 속에서 공지문의 글자들이 종이를 떠나 떠오른다… [L] 손전등 끄기"
-            : "📺 휴게실. TV는 꺼져 있는데, 검은 화면 앞에 무언가 둥둥 떠 있다… [L] 손전등 끄기",
+            ? "📌 2층 게시판. 공지문의 글자들이 떠오른다… 게시판에서 ‘손전등 끄기’ (L)"
+            : "📺 꺼진 TV 앞에 무언가 떠 있다… TV에서 ‘손전등 끄기’ (L)",
           "alert",
         );
       }
