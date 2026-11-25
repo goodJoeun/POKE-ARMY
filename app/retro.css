@@ -679,6 +679,9 @@ canvas { image-rendering: pixelated; }
 .first-dream .speaker { position: static; display: inline-block; border-radius: 3px; padding: 2px 8px; }
 .first-dream .choice, .first-dream .choice-num { color: #ece8f4; text-shadow: none; }
 .first-dream .choice:is(:hover,:focus-visible) { background: #414359; }
+@media (pointer: coarse) {
+  .first-dream .choice { min-height: 44px; }
+}
 .mirror-scene { z-index: 40; }
 .mirror-scene .mirror-frame {
   position: absolute; left: 50%; top: 32%; translate: -50% -50%;
