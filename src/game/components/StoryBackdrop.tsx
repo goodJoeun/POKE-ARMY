@@ -25,7 +25,7 @@ export function StoryBackdrop({ bg }: { bg: StoryBg }) {
           <MonsterCanvas look={buddy} size={96} dir="up" cap={cap} />
         </div>
       )}
-      {bg === 'library' && (
+      {(bg === 'library' || bg === 'patrolBoard') && (
         <div className="story-bg-unown">
           {Array.from({ length: 6 }, (_, i) => <span key={i} style={{ animationDelay: `${i * 0.35}s` }}><UnownLetter index={i} /></span>)}
         </div>

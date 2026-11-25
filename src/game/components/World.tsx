@@ -179,6 +179,7 @@ type Overlay =
   | {
       type: "puzzle";
       id: string;
+      bg?: StoryBg;
       onSolved: (reward: number) => void;
       onFail?: () => void;
       /** "나중에 풀기"로 닫았을 때 (없으면 그냥 닫힌다) */
@@ -2041,9 +2042,9 @@ export default function World() {
         setOverlay({ type: "resist", opts, onDone: done });
       },
       flash: () => setFlash(true),
-      puzzle: (id, solved, failed) => {
+      puzzle: (id, solved, failed, bg) => {
         keys.current = {};
-        setOverlay({ type: "puzzle", id, onSolved: solved, onFail: failed });
+        setOverlay({ type: "puzzle", id, onSolved: solved, onFail: failed, bg });
       },
     }),
     [setOverlay, placeAt, entityOf],
@@ -2407,7 +2408,7 @@ export default function World() {
   }, [setOverlay, placeAt]);
 
   const sceneBackground = overlay?.type === "dialogue" ? overlay.bg
-    : overlay?.type === "puzzle" ? puzzleBackdrop[overlay.id] : undefined;
+    : overlay?.type === "puzzle" ? (overlay.bg ?? puzzleBackdrop[overlay.id]) : undefined;
 
   const storyCtxRef = useRef(storyCtx);
   /** 짧은 연출 중(사람이 걸어 나가는 동안 등)에는 조작을 잠시 막는다 */

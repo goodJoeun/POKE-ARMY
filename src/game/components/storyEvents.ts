@@ -28,7 +28,7 @@ import type { BgmMood } from '../engine/audio';
 import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding, missionReady } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
-export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate' | 'mailbox' | 'datedMailbox';
+export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate' | 'mailbox' | 'datedMailbox' | 'patrolBoard';
 export interface StoryScene {
   script: DialogueScript; bg?: StoryBg; onChoice?: (c: Choice) => void; onDone?: () => void;
   /** 🔊 이 장면 동안 흐를 곡. null = 평소 곡 그대로 (tone으로 정한 곡도 쓰지 않는다) */
@@ -60,7 +60,7 @@ export interface StoryCtx {
   resist: (o: ResistOpts, done: (ok: boolean) => void) => void;
   flash: () => void;
   /** 🧩 두뇌 퍼즐을 띄운다. 풀면 solved(되살아날 기억). 미루고 닫으면 아무 일도 없다 (다시 와서 풀 수 있다) */
-  puzzle: (id: string, solved: (reward: number) => void, failed?: () => void) => void;
+  puzzle: (id: string, solved: (reward: number) => void, failed?: () => void, bg?: StoryBg) => void;
 }
 
 const G = () => useGame.getState();
@@ -298,8 +298,9 @@ export function libraryLightsOut(ctx: StoryCtx, byDay: boolean) {
   const natu = extraSpeaker('librarian');
   if (!second) {
     // 🧩 P-10: 밤 순찰 중 2층 복도 게시판 (놓쳤으면 낮에 도서관에서 네이티오가 불을 꺼 준다)
+    const bg = byDay ? 'library' : 'patrolBoard';
     ctx.play({
-      bg: 'library',
+      bg,
       script: {
         custom: natu,
         lines: byDay
@@ -315,7 +316,7 @@ export function libraryLightsOut(ctx: StoryCtx, byDay: boolean) {
           ],
       },
       onDone: () => ctx.puzzle('P-10', (reward) => ctx.play({
-        bg: 'library',
+        bg,
         script: {
           custom: natu,
           lines: [
@@ -326,7 +327,7 @@ export function libraryLightsOut(ctx: StoryCtx, byDay: boolean) {
           ],
         },
         onDone: () => { const s2 = G(); s2.findClue('C-11', reward); s2.gainStar(3); },
-      })),
+      }), undefined, bg),
     });
     return true;
   }

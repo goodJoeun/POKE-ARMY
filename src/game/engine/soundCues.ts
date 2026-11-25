@@ -133,6 +133,7 @@ export function sceneMood(h: SceneHint | null): BgmMood | null {
       case 'roof': return 'bgm_13_rooftop_stars';
       case 'parade': return 'bgm_03_dream_star_hill';
       case 'archive':
+      case 'patrolBoard':
       case 'library': return 'bgm_09_mystery_clues';
       case 'radio': return 'bgm_12_unease';
     }
