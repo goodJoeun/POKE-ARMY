@@ -3138,6 +3138,7 @@ export default function World() {
               ? "🍚 일과를 마친 그대로 분대와 병영식당으로 왔다. 식판을 받아 1분대 줄에 앉았다."
               : "🍚 분대와 함께 병영식당으로 왔다. 식판을 받아 1분대 줄에 앉았다.",
             "info",
+            "routine",
           );
           return;
         }
@@ -3272,7 +3273,7 @@ export default function World() {
           enterDir: "down",
           arrive: { x: 7.5, y: 5.5, dir: "down" },
         } as unknown as Door;
-        s2.toast("🏠 분대와 함께 생활관으로 돌아왔다.", "info");
+        s2.toast("🏠 분대와 함께 생활관으로 돌아왔다.", "info", "routine");
       },
     });
   };

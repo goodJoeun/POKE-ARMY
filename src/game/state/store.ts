@@ -6,7 +6,7 @@ import type {
 } from '../types';
 import { BRANCHES, FACILITY_NAME, RANKS, STORE_NAME, TOTAL_DAYS, rankIdxForDay, seasonForDay } from '../data/branches';
 import { pickSpecies, topArchetype } from '../data/monsters';
-import { NPC_IDS, NPC_SKINS, SOLDIER_IDS, birthdayNpcs, currentSquadLeader, npcPresent, arriveDay, leaveDay } from '../data/npcs';
+import { NPC_IDS, NPC_SKINS, SOLDIER_IDS, birthdayNpcs, npcPresent, arriveDay, leaveDay } from '../data/npcs';
 import { buildSchedule, mealFromWork } from '../data/schedule';
 import { DIALOGUES } from '../data/dialogues';
 import { QUESTS, QUEST_CHAINS, chainOf } from '../data/quests';
@@ -27,7 +27,10 @@ export interface Toast {
   id: number;
   text: string;
   tone: 'info' | 'good' | 'bad' | 'alert';
+  waitForDisplay?: boolean;
 }
+type ToastPriority = 'normal' | 'routine';
+export const toastDuration = (tone: Toast['tone']) => tone === 'alert' ? 5000 : 3800;
 
 interface GradeRecord {
   day: number;
@@ -236,7 +239,7 @@ interface Store extends Persist {
   answerRollcall: (choice: number) => boolean;
   closeRollcall: () => void;
   applyEffects: (e: Effects, label?: string, silent?: boolean) => string;
-  toast: (text: string, tone?: Toast['tone']) => void;
+  toast: (text: string, tone?: Toast['tone'], priority?: ToastPriority) => void;
   dismissToast: (id: number) => void;
   log: (text: string) => void;
   spend: (mins: number) => void;
@@ -383,39 +386,40 @@ export const useGame = create<Store>((set, get) => ({
     const day = s.day;
     const prevRank = rankIdxForDay(day - 1);
     const rank = rankIdxForDay(day);
-    const logs: string[] = [];
+    const logs: { text: string; priority: ToastPriority }[] = [];
+    const addLog = (text: string, priority: ToastPriority = 'normal') => logs.push({ text, priority });
     const st = { ...s.stats };
     const b = BRANCHES[s.branch];
     // 🌟 인간이었던 기억은 매일 조금씩 흐려진다 (스토리가 시작된 뒤부터)
     let memory = s.memory;
     if (s.clues.length > 0 && day >= 2) {
       memory = Math.max(0, memory - MEMORY_DECAY);
-      logs.push(`🌟 인간이었던 기억이 조금 흐려졌다… (기억 ${memory})`);
+      addLog(`🌟 인간이었던 기억이 조금 흐려졌다… (기억 ${memory})`, 'routine');
     }
     // 도착/전역 알림
     for (const id of SOLDIER_IDS) {
       const sk = NPC_SKINS[s.branch][id];
-      if (arriveDay(id) === day && day > 1) logs.push(`📦 새 후임 ${sk.name}(${sk.species})이(가) 전입 왔다.`);
-      if (leaveDay(id) === day) logs.push(`🎉 ${sk.name} 선임이 전역했다.`);
+      if (arriveDay(id) === day && day > 1) addLog(`📦 새 후임 ${sk.name}(${sk.species})이(가) 전입 왔다.`);
+      if (leaveDay(id) === day) addLog(`🎉 ${sk.name} 선임이 전역했다.`);
     }
     // 군기 해이: 높을수록 조금씩 풀린다 → 꾸준히 관리해야 유지되는 균형점이 생긴다
     if (day > 1) {
       const slack = Math.max(0, Math.round((st.discipline - 40) * 0.1 * 10) / 10);
       if (slack >= 0.5) {
         st.discipline = Math.max(0, st.discipline - slack);
-        logs.push('🫠 하루가 지나며 긴장이 조금 풀렸다.');
+        addLog('🫠 하루가 지나며 긴장이 조금 풀렸다.', 'routine');
       }
     }
     const promoted = day > 1 && rank > prevRank;
-    if (promoted) logs.push(`🎖️ ${RANKS[rank]}으로 진급했다!`);
-    if (day === 7) logs.push('🪖 생활관 분대장 임무를 맡게 됐다.');
+    if (promoted) addLog(`🎖️ ${RANKS[rank]}으로 진급했다!`);
+    if (day === 7) addLog('🪖 생활관 분대장 임무를 맡게 됐다.');
     // 의뢰인이나 남은 단계의 상대가 전역(전출)해 부대에 없으면 그 퀘스트는 사라진다
     const quests = s.quests.filter((q) => {
       const d = QUESTS[q.id];
       if (!d) return false;
       const gone = [d.giver, ...d.steps.slice(q.step).map((x) => x.npc)].find((n) => n && !npcPresent(n, day));
       if (!gone) return true;
-      logs.push(fixJosa(`📋 ${NPC_SKINS[s.branch][gone].name}이(가) 전역해서 「${d.title}」 퀘스트가 사라졌다.`));
+      addLog(fixJosa(`📋 ${NPC_SKINS[s.branch][gone].name}이(가) 전역해서 「${d.title}」 퀘스트가 사라졌다.`));
       return false;
     });
     teleportToBed(s.branch);
@@ -431,7 +435,7 @@ export const useGame = create<Store>((set, get) => ({
       patrol: null,
       quests,
       memory,
-      dayLog: logs,
+      dayLog: logs.map((entry) => entry.text),
       stats: st,
       dayStart: { stats: { ...st }, affinity: { ...s.affinity } },
       scene: promoted ? 'promotion' : 'world',
@@ -440,7 +444,7 @@ export const useGame = create<Store>((set, get) => ({
      
       busy: false,
     });
-    for (const l of logs) get().toast(l, 'info');
+    for (const entry of logs) get().toast(entry.text, 'info', entry.priority);
     if (day === TOTAL_DAYS) get().toast(`🎊 전역일 아침이다! ${b.name} 생활 마지막 날.`, 'good');
     get().checkSuspicions();
     get().save();
@@ -485,7 +489,7 @@ export const useGame = create<Store>((set, get) => ({
     const ann = (key: string, at: number, text: string, tone: Toast['tone'] = 'info', until = Infinity) => {
       if (minute >= at && !get().announced.includes(key)) {
         set({ announced: [...get().announced, key] });
-        if (minute < until) get().toast(text, tone);
+        if (minute < until) get().toast(text, tone, tone === 'alert' ? 'normal' : 'routine');
       }
     };
     if (s.day < TOTAL_DAYS) {
@@ -554,7 +558,7 @@ export const useGame = create<Store>((set, get) => ({
     if (now.eventBegun || now.currentEvent()?.id !== ev.id) return;
     // 전입 첫날 아침 점호는 늦잠 탓에 맨 끝자리에 늦게 합류한다
     const late = s.day === 1 && ev.kind === 'rollcall_am';
-    get().toast(late ? `🏃 헐레벌떡 도착! ${ev.label} 대열 맨 끝에 섰다` : `✅ 집합 완료! ${ev.label} 시작`, late ? 'info' : 'good');
+    get().toast(late ? `🏃 헐레벌떡 도착! ${ev.label} 대열 맨 끝에 섰다` : `✅ 집합 완료! ${ev.label} 시작`, late ? 'info' : 'good', 'routine');
     get().beginEvent(late);
   },
 
@@ -643,8 +647,6 @@ export const useGame = create<Store>((set, get) => ({
     if (s.work) set({ work: null });
     const minute = Math.max(s.minute, ev.end);
     set({ minute, eventIdx: s.eventIdx + 1, eventBegun: false, rollcall: null, busy: false });
-    // 내가 분대장인 날은 점호가 끝나면 분대를 인솔해 아침을 먹으러 간다 (World) → 여기서는 건너뛴 것으로 알리지 않는다
-    if (ev.kind === 'rollcall_am' && s.day < TOTAL_DAYS && currentSquadLeader(s.day) !== 'me') get().toast('🍳 아침 식사와 청소를 마쳤다.', 'info');
     const next = get().currentEvent();
     if (!next) {
       set({ scene: 'dayEnd' });
@@ -658,7 +660,7 @@ export const useGame = create<Store>((set, get) => ({
     // 시간이 넘어갔으니 그 시각의 알림(식사 시간 등)을 처리하고, 다음 목적지를 알려 준다
     get().tick(0);
     if (!get().eventBegun && get().currentEvent()?.id === next.id && next.spot && next.kind !== 'farewell')
-      get().toast(`📍 다음 일정: ${fmtClock(next.start)} ${next.label} — ${buildMapSpotLabel(get().branch, next.spot)}에 가면 시작`, 'info');
+      get().toast(`📍 다음 일정: ${fmtClock(next.start)} ${next.label} — ${buildMapSpotLabel(get().branch, next.spot)}에 가면 시작`, 'info', 'routine');
     get().save();
   },
 
@@ -744,15 +746,19 @@ export const useGame = create<Store>((set, get) => ({
     const summary = parts.join(' · ');
     if (!silent && summary) {
       const negative = Object.values(e).some((v) => typeof v === 'number' && v < 0);
-      get().toast(`${label ? `[${label}] ` : ''}${summary}`, negative && parts.every((p) => p.includes('-')) ? 'bad' : 'good');
+      get().toast(`${label ? `[${label}] ` : ''}${summary}`, negative && parts.every((p) => p.includes('-')) ? 'bad' : 'good', 'routine');
     }
     return summary;
   },
 
-  toast: (text, tone = 'info') => {
+  toast: (text, tone = 'info', priority = 'normal') => {
+    const compact = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+    if (compact && priority === 'routine') return;
     const id = toastId++;
-    set({ toasts: [...get().toasts.slice(-4), { id, text: fixJosa(text), tone }] });
-    setTimeout(() => get().dismissToast(id), tone === 'alert' ? 5000 : 3800);
+    const pending = get().toasts;
+    const previous = compact ? pending.filter(t => t.tone === 'alert' || t.waitForDisplay).slice(-4) : pending.slice(-4);
+    set({ toasts: [...previous, { id, text: fixJosa(text), tone, waitForDisplay: compact }] });
+    if (!compact) setTimeout(() => get().dismissToast(id), toastDuration(tone));
   },
 
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
@@ -1003,7 +1009,7 @@ export const useGame = create<Store>((set, get) => ({
     const fresh = pool.filter((t) => t !== lastPatrolText[spot]);
     const text = (fresh.length ? fresh : pool)[Math.floor(Math.random() * (fresh.length || pool.length))];
     lastPatrolText[spot] = text;
-    get().toast(`🔦 (${done.length}/${PATROL_SPOTS.length}) ${text}`, 'info');
+    get().toast(`🔦 (${done.length}/${PATROL_SPOTS.length}) ${text}`, 'info', 'routine');
     if (done.length >= PATROL_SPOTS.length) get().toast('✅ 순찰 완료! 막사 1층 지휘통제실 당직사관에게 보고하자.', 'good');
   },
 
