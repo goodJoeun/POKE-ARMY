@@ -1,4 +1,5 @@
 'use client';
+import PuzzleInstrument from './PuzzleInstrument';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGame } from '../state/store';
 import { useSettings } from '../state/settings';
@@ -493,6 +494,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
             {def.prompt.map((p, i) => <p key={i}>{p}</p>)}
           </div>
         </div>
+        {id === 'P-12' && <PuzzleInstrument kind="dial" frequency={nums.length === 3 && nums.every(Boolean) ? Number(nums[0] + nums[1] + '.' + nums[2]) : undefined} />}
         {def.notes && (
           <div className="pz-notes">
             {def.notes.map((n, i) => <div key={i}>{n}</div>)}
@@ -536,6 +538,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
         {input.type === 'ring' && (
           <>
             <div className="pz-ring" aria-live="polite" aria-label={`▼ 자리부터 시계 방향: ${ring.map((t) => (t.endsWith('!') ? `${t.slice(0, -1)}(뒤집힘)` : t)).join(' ')}`}>
+              {(id === 'P-10' || id === 'P-18') && <PuzzleInstrument kind="ring" />}
               <span className="pz-ring-mark">▼</span>
               {ring.map((t, i) => {
                 const a = (-90 + i * (360 / ring.length)) * (Math.PI / 180);

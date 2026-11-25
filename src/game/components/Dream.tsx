@@ -4,6 +4,7 @@ import { useGame } from '../state/store';
 import { TEXT_SPEED, useSettings } from '../state/settings';
 import { fmt } from '../engine/text';
 import { DREAMS, DREAM_FADED, type DreamLine } from '../data/story';
+import SceneryCanvas from './SceneryCanvas';
 import PuzzleBox from './PuzzleBox';
 import { setBgmMood, type CueId } from '../engine/audio';
 import { useLineSound } from '../engine/soundCues';
@@ -80,11 +81,11 @@ export default function Dream() {
   useEffect(() => {
     const c = ref.current!;
     const g = c.getContext('2d')!;
-    const stars = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random() * 0.7, r: Math.random() * 1.6 + 0.4, p: Math.random() * 6 }));
     let raf = 0;
     const draw = (now: number) => {
       const t = now / 1000;
-      const w = (c.width = c.clientWidth), h = (c.height = c.clientHeight);
+      const w = c.clientWidth, h = c.clientHeight;
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
       if (sceneRef.current === 'room') {
         // 소등한 생활관: 어둠 속 침상과 베개 밑 별 조각
         g.fillStyle = '#0a0c18'; g.fillRect(0, 0, w, h);
@@ -97,28 +98,16 @@ export default function Dream() {
         g.fillStyle = glow; g.beginPath(); g.arc(gx, gy, 80, 0, Math.PI * 2); g.fill();
         star(g, gx, gy, 9, '#fff6c0');
       } else {
-        // 별의 언덕
-        const sky = g.createLinearGradient(0, 0, 0, h);
-        sky.addColorStop(0, '#070a1e'); sky.addColorStop(0.7, '#1a2350'); sky.addColorStop(1, '#2a2050');
-        g.fillStyle = sky; g.fillRect(0, 0, w, h);
-        for (const st of stars) {
-          g.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 1.5 + st.p));
-          g.fillStyle = '#ffffff';
-          g.beginPath(); g.arc(st.x * w, st.y * h, st.r, 0, Math.PI * 2); g.fill();
+        g.clearRect(0, 0, w, h);
+        // A brief meteor crosses the ridge once per cycle.
+        const flight = (t % 9) / 0.85;
+        if (flight < 1) {
+          g.globalAlpha = Math.sin(flight * Math.PI) * 0.8;
+          const mx = w * (0.12 + flight * 0.22), my = h * (0.12 + flight * 0.1);
+          g.strokeStyle = '#f5d6bc'; g.lineWidth = 2;
+          g.beginPath(); g.moveTo(mx, my); g.lineTo(mx - w * 0.035, my - h * 0.016); g.stroke();
+          g.globalAlpha = 1;
         }
-        g.globalAlpha = 1;
-        // 별똥별
-        const sx = ((t * 0.18) % 1.4) * w, sy = h * 0.12 + ((t * 0.18) % 1.4) * h * 0.18;
-        g.strokeStyle = 'rgba(255,255,220,0.7)'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx - 70, sy - 18); g.stroke();
-        // 멀리 떠 있는 내 방 창문 (날이 갈수록 멀어진다)
-        const far = Math.min(1, (useGame.getState().day - 1) / 11);
-        const ww = 70 - far * 30, wx = w * 0.78, wy = h * 0.22 + far * 30;
-        g.fillStyle = '#ffd890'; g.fillRect(wx - ww / 2, wy - ww * 0.6, ww, ww * 1.2);
-        g.fillStyle = '#5a4030'; g.fillRect(wx - 2, wy - ww * 0.6, 4, ww * 1.2); g.fillRect(wx - ww / 2, wy - 2, ww, 4);
-        // 언덕
-        g.fillStyle = '#10142a';
-        g.beginPath(); g.moveTo(0, h); g.quadraticCurveTo(w * 0.4, h * 0.55, w, h * 0.78); g.lineTo(w, h); g.fill();
         // 빛 (지라치의 목소리)
         const ox = w * 0.42, oy = h * 0.38 + Math.sin(t * 1.6) * 8;
         const f = fxRef.current;
@@ -166,13 +155,14 @@ export default function Dream() {
   const speaker = line.who === 'voice' ? '??? (빛)' : line.who === 'jirachi' ? '지라치' : line.who === 'mom' ? '엄마 (아주 먼 곳에서)' : line.who === 'me' ? s.name : '';
   return (
     <div className="dream-scene" onClick={advance}>
-      <canvas ref={ref} className="dream-canvas" />
+      {!inRoom && <SceneryCanvas scene="hill" day={s.day} />}
+      <canvas ref={ref} className="dream-canvas" aria-hidden="true" />
       {fx === 'flash' && <div className="dream-flash" />}
       {revealed && line.scene === 'hill' && (
         <div className="dream-jirachi" key="jirachi"><span><MonsterCanvas look={JIRACHI} size={150} /></span></div>
       )}
       <div className="dream-title">{line.scene === 'room' ? `DAY ${s.day} · 소등` : '꿈 · 별의 언덕'}</div>
-      <div className="dialogue-wrap dream-box">
+      <div className="dialogue-wrap hill-dialogue">
         <div className="dialogue">
           <div className="dialogue-body">
             {speaker ? <div className="speaker">{speaker}</div> : <div className="speaker narr">　</div>}

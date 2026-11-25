@@ -156,6 +156,14 @@ kbd {
 .title-foot { font-size: 11px; }
 .intro-text, .reality-text, .wake-text { font-size: 16px; }
 .wake-text .scream { font-family: 'Galmuri14', sans-serif; }
+.barracks-wake .scenery-canvas { transition: opacity 900ms ease-out; }
+.barracks-wake[data-stage="0"] .scenery-canvas { opacity: 0; }
+.barracks-wake[data-stage="1"] .scenery-canvas { opacity: 0.25; }
+.barracks-wake[data-stage="5"]::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 82% 104%, #131e2be8 0%, #131e2bbe 21%, transparent 58%); }
+.barracks-wake .wake-text { position: absolute; z-index: 1; bottom: 5%; width: min(720px, calc(100% - 32px)); max-width: none; min-height: 0; padding: 12px 20px; color: #f4edd9; background: #17232ef2; border: 2px solid #889b98; box-shadow: 0 0 0 3px #263440; border-radius: 5px; }
+.barracks-wake .wake-text p { margin: 0 0 5px; }
+.barracks-wake .wake-text .hud-dim { color: #c4d3cf; }
+@media (prefers-reduced-motion: reduce) { .barracks-wake .scenery-canvas { transition: none; } }
 .quiz-q { font-family: 'Galmuri14', sans-serif; font-size: 22px; }
 .quiz-progress span { border-radius: 0; height: 8px; border: 2px solid #101828; }
 .branch-card.b-army { box-shadow: inset 0 0 0 2px var(--win-bg), inset 0 0 0 4px #e87858, 0 4px 0 rgba(0, 0, 0, 0.35); border-color: var(--win-frame); }
@@ -353,13 +361,16 @@ canvas { image-rendering: pixelated; }
 @keyframes evoGlow { 50% { background: #f8f8f8; color: #283048; text-shadow: none; } }
 /* ───── 📖 스토리 장면 배경 · 저항 게이지 · 엔딩 ───── */
 .story-bg { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
-.story-bg canvas { width: 100%; height: 100%; display: block; }
+.story-bg > canvas, .scenery-canvas { width: 100%; height: 100%; display: block; }
+.scenery-canvas { position: absolute; inset: 0; image-rendering: pixelated; }
 .story-bg-actors { position: absolute; display: flex; gap: 6px; }
 .story-bg-actors.roof { left: 50%; top: 52%; transform: translateX(-50%); }
-.story-bg-actors.parade { left: 50%; top: 30%; transform: translateX(-50%); }
+.story-bg-actors.parade { left: 50%; bottom: 41%; transform: translateX(-50%); }
+.parade-star-art { display: block; width: clamp(68px, 16vh, 120px); height: auto; }
 .story-bg-actors .jirachi { animation: storyFloat 2.4s ease-in-out infinite; filter: drop-shadow(0 0 18px rgba(255,240,170,0.9)); }
 @keyframes storyFloat { 50% { transform: translateY(-10px); } }
 .story-bg-unown { position: absolute; left: 50%; top: 28%; transform: translateX(-50%); display: flex; gap: 4px; }
+.story-bg-unown canvas { display: block; width: clamp(30px, 5vw, 54px); height: auto; }
 .story-bg-unown span { opacity: 0; animation: unownIn 1.2s ease-out forwards; filter: drop-shadow(0 0 6px rgba(200,220,255,0.6)); }
 @keyframes unownIn { from { opacity: 0; transform: translateY(-30px) scale(0.6); } to { opacity: 1; transform: none; } }
 .resist .resist-meter i { background: linear-gradient(90deg, #8a6ae8, #e05ab8); }
@@ -458,10 +469,10 @@ canvas { image-rendering: pixelated; }
 .dream-scene { position: fixed; inset: 0; z-index: 20; background: #070a1e; cursor: pointer; }
 .dream-canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .dream-title { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); color: #fff6dc; font-family: 'Galmuri14', sans-serif; font-size: 18px; text-shadow: 0 2px 0 #000; letter-spacing: 2px; }
-.dream-box { background: none; }
-.dream-box .dialogue { background: rgba(16, 20, 48, 0.92); color: #f2f0ff; box-shadow: inset 0 0 0 2px #283048, inset 0 0 0 4px #a8b8f0, 0 4px 0 rgba(0, 0, 0, 0.4); }
-.dream-box .dialogue-text, .dream-box .dialogue-text.narr { color: #f2f0ff; text-shadow: 1px 1px 0 #000; }
-.dream-box .speaker { background: #f0c040; color: #283048; text-shadow: none; }
+.dream-box, .hill-dialogue { background: none; }
+:is(.dream-box, .hill-dialogue) .dialogue { background: rgba(16, 20, 48, 0.92); color: #f2f0ff; box-shadow: inset 0 0 0 2px #283048, inset 0 0 0 4px #a8b8f0, 0 4px 0 rgba(0, 0, 0, 0.4); }
+:is(.dream-box, .hill-dialogue) .dialogue-text, :is(.dream-box, .hill-dialogue) .dialogue-text.narr { color: #f2f0ff; text-shadow: 1px 1px 0 #000; }
+:is(.dream-box, .hill-dialogue) .speaker { background: #f0c040; color: #283048; text-shadow: none; }
 
 /* ───── 기억의 실마리 · 스토리 탭 ───── */
 .nb-clues { display: flex; flex-direction: column; gap: 6px; }
@@ -553,6 +564,9 @@ canvas { image-rendering: pixelated; }
 }
 .pz-ring { position: relative; width: 230px; height: 230px; margin: 0 auto; border-radius: 12px; background: radial-gradient(circle at 50% 54%, #1c2448 0%, #0a0c18 75%); }
 .pz-ring-mark { position: absolute; left: 50%; top: 0; transform: translateX(-50%); color: #ffe890; font-size: 14px; text-shadow: none; }
+.pz-orbit { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; }
+.pz-ring:has(.pz-orbit) .pz-ring-goal { color: #e0dcca; }
+.pz-tuning-scale { display: block; width: 100%; height: auto; border-radius: 3px; }
 .pz-unown {
   position: absolute; width: 42px; height: 42px; margin: -21px 0 0 -21px; display: grid; place-items: center; border-radius: 50%;
   background: #e8e8f0; color: #181820; border: 3px solid #181820; font-family: 'Galmuri14', sans-serif; font-size: 20px; text-shadow: none;
@@ -643,9 +657,44 @@ canvas { image-rendering: pixelated; }
 @media (max-width: 600px) { .notice-title { font-size: 20px; } .notice { padding: 20px 18px 16px; } }
 
 /* ───────── 화장실 거울: 내 모습을 처음 보는 장면 (부대 화면 위에 뜬다) ───────── */
+.intro-scene, .mirror-scene { justify-content: flex-end; padding-bottom: clamp(12px, 4vh, 36px); }
+.bedtime-caption, .mirror-scene .wake-text {
+  position: relative; width: min(690px, 100%); max-width: none; min-height: 0;
+  padding: 12px 20px; text-align: left; color: #f3efdf; background: #16212ff5;
+  border: 2px solid #94a5aa; border-radius: 5px; box-shadow: 0 0 0 3px #243442;
+}
+.bedtime-caption .intro-text { min-height: 0; max-width: none; }
+.bedtime-caption .intro-text .dim { opacity: .77; }
+.bedtime-caption .hud-dim, .mirror-scene .wake-text .hud-dim { text-align: right; }
+.first-dream .scenery-canvas { transition: opacity 1.1s ease; }
+.first-dream.whiteout .scenery-canvas { opacity: 0; }
+.first-dream .dream-progress {
+  position: absolute; top: 38%; margin: 0; padding: 4px 10px;
+  color: #eee6dc; background: #24233bdc; border: 1px solid #88879d;
+}
+.first-dream .dream-box {
+  overflow-y: auto; max-height: 60%; color: #f1e9dc; background: #191d35f5;
+  border-color: #40435b; box-shadow: inset 0 0 0 2px #9b99b8, 0 3px 0 #111628;
+}
+.first-dream .speaker { position: static; display: inline-block; border-radius: 3px; padding: 2px 8px; }
+.first-dream .choice, .first-dream .choice-num { color: #ece8f4; text-shadow: none; }
+.first-dream .choice:is(:hover,:focus-visible) { background: #414359; }
 .mirror-scene { z-index: 40; }
-.mirror-scene.stage-0 { background: radial-gradient(circle at 50% 40%, #3a4858 0%, #10141c 70%); }
-.mirror-frame { padding: 14px 22px 4px; border: 6px solid #c8d0d8; border-radius: 14px 14px 6px 6px; background: linear-gradient(160deg, rgba(255,255,255,0.28), rgba(160,190,210,0.12) 45%, rgba(255,255,255,0.2)); box-shadow: 0 6px 0 rgba(0,0,0,0.35), inset 0 0 0 2px rgba(255,255,255,0.5); }
+.mirror-scene .mirror-frame {
+  position: absolute; left: 50%; top: 32%; translate: -50% -50%;
+}
+.mirror-frame canvas { display: block; width: min(24vh, 35vw, 166px) !important; height: min(24vh, 35vw, 166px) !important; }
+.mirror-scene.stage-0 .mirror-frame canvas { filter: brightness(0) blur(2px); opacity: .55; }
+.mirror-frame .sparkle { inset: -4%; }
+.mirror-scene .wake-text p { margin: 2px 0 6px; }
+.mirror-scene .transform-info { position: relative; overflow-y: auto; max-height: 58%; }
+@media (max-height: 480px) {
+  .first-dream .dream-box { bottom: 8px; max-height: 61%; min-height: 0; padding: 8px 14px; }
+  .first-dream .dream-progress { top: 5%; left: 6%; }
+  .mirror-scene .transform-info { max-height: 60%; }
+  .bedtime-caption .intro-text p { margin: 2px 0; }
+}
+@media (prefers-reduced-motion: reduce) { .first-dream .scenery-canvas { transition: none; } }
 
 /* 퍼즐 그림: 분리수거장 마당 */
 .pz-yard { width: min(330px, 100%); height: auto; flex: none; margin: 0 auto; display: block; }

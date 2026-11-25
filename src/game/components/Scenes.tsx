@@ -1,4 +1,5 @@
 'use client';
+import SceneryCanvas from './SceneryCanvas';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Archetype, BranchId, NpcId } from '../types';
 import { useGame, presentNpcs, fmtDelta } from '../state/store';
@@ -69,14 +70,13 @@ export function Intro() {
   });
   return (
     <div className="scene intro-scene" onClick={next}>
-      <div className="intro-room">
-        <div className="moon" />
-        <div className="bed-human">🛏️</div>
+      <SceneryCanvas scene="bedtime" />
+      <div className="bedtime-caption">
+        <div className="intro-text">
+          {lines.slice(0, i + 1).map((l, k) => <p key={k} className={k === i ? 'fade-in' : 'dim'}>{l}</p>)}
+        </div>
+        <div className="hud-dim">클릭 또는 Enter</div>
       </div>
-      <div className="intro-text">
-        {lines.slice(0, i + 1).map((l, k) => <p key={k} className={k === i ? 'fade-in' : 'dim'}>{l}</p>)}
-      </div>
-      <div className="hud-dim">클릭 또는 Enter</div>
     </div>
   );
 }
@@ -168,9 +168,8 @@ export function Quiz() {
 
   const bright = phase === 'closing' && idx === closing.length - 1;
   return (
-    <div className={`scene dream-scene ${bright ? 'whiteout' : ''}`} onClick={() => phase !== 'q' && advance()}>
-      <div className="dream-particles" />
-      <div className={`dream-orb ${phase === 'q' ? 'asking' : ''}`}><span>?</span></div>
+    <div className={`scene dream-scene first-dream ${bright ? 'whiteout' : ''}`} onClick={() => phase !== 'q' && advance()}>
+      <SceneryCanvas scene="dreamWater" />
       {(phase === 'q' || phase === 'react') && <div className="dream-progress">질문 {qi + 1} / {PERSONALITY_QUIZ.length}</div>}
       <div className="dream-box" onClick={(e) => { if (phase === 'q') e.stopPropagation(); }}>
         {line.who === 'voice' && <div className="speaker">???</div>}
@@ -218,7 +217,8 @@ export function Transform() {
     return () => window.removeEventListener('keydown', onKey);
   });
   return (
-    <div className="scene transform-scene stage-0" onClick={next}>
+    <div className="scene transform-scene barracks-wake" data-stage={stage} onClick={next}>
+      <SceneryCanvas scene="wakingBarracks" />
       <div className="wake-text">
         <p key={stage} className="fade-in">{lines[stage]}</p>
         <div className="hud-dim">클릭 또는 Enter</div>
@@ -266,6 +266,7 @@ export function MirrorReveal({ onDone }: { onDone: () => void }) {
   const shakeOn = useSettings((st) => st.screenShake);
   return (
     <div className={`scene transform-scene mirror-scene ${stage >= 1 ? 'stage-2' : 'stage-0'} ${stage === 2 && shakeOn ? 'shake' : ''}`} onClick={() => stage < last && next()}>
+      <SceneryCanvas scene="washroom" />
       <div className={`transform-reveal mirror-frame ${stage === 1 ? 'peek' : ''}`}>
         {stage >= last && <div className="sparkle" />}
         <MonsterCanvas look={sp.look} size={220} cap={stage >= 1 ? b.cap : null} silhouette={stage === 0 ? '#1a1a24' : undefined} />

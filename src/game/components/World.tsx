@@ -155,6 +155,14 @@ interface ExtraRt extends NpcRt {
   routeIdx: number;
 }
 
+const puzzleBackdrop: Partial<Record<string, StoryBg>> = {
+  "P-13": "archive",
+  "P-21": "parade",
+  "P-10": "library",
+  "P-18": "library",
+  "P-12": "radio",
+};
+
 type Overlay =
   | {
       type: "dialogue";
@@ -2396,6 +2404,9 @@ export default function World() {
     }, 400);
     return () => clearInterval(iv);
   }, [setOverlay, placeAt]);
+
+  const sceneBackground = overlay?.type === "dialogue" ? overlay.bg
+    : overlay?.type === "puzzle" ? puzzleBackdrop[overlay.id] : undefined;
 
   const storyCtxRef = useRef(storyCtx);
   /** 짧은 연출 중(사람이 걸어 나가는 동안 등)에는 조작을 잠시 막는다 */
@@ -7863,16 +7874,14 @@ export default function World() {
         </div>
       )}
       <TouchPad keys={keys} />
+      {sceneBackground && <StoryBackdrop bg={sceneBackground} />}
       {overlay?.type === "dialogue" && (
-        <>
-          {overlay.bg && <StoryBackdrop bg={overlay.bg} />}
-          <DialogueBox
-            key={overlay.nonce ?? JSON.stringify(overlay.script.lines[0])}
-            script={overlay.script}
-            onChoice={overlay.onChoice}
-            onClose={closeOverlay}
-          />
-        </>
+        <DialogueBox
+          key={overlay.nonce ?? JSON.stringify(overlay.script.lines[0])}
+          script={overlay.script}
+          onChoice={overlay.onChoice}
+          onClose={closeOverlay}
+        />
       )}
       {overlay?.type === "resist" && (
         <ResistMeter
