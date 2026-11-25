@@ -28,7 +28,7 @@ import type { BgmMood } from '../engine/audio';
 import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding, missionReady } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
-export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio';
+export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk';
 export interface StoryScene {
   script: DialogueScript; bg?: StoryBg; onChoice?: (c: Choice) => void; onDone?: () => void;
   /** 🔊 이 장면 동안 흐를 곡. null = 평소 곡 그대로 (tone으로 정한 곡도 쓰지 않는다) */

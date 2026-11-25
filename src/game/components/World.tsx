@@ -2779,6 +2779,7 @@ export default function World() {
       setOverlay({
         type: "dialogue",
         script: nightScene(st.day, "watch", "근무자"),
+        bg: st.day === 2 ? "watchDesk" : undefined,
         onChoice: (c) => {
           if (c.effects) useGame.getState().applyEffects(c.effects, "야간 근무");
         },

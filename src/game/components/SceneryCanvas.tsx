@@ -8,9 +8,10 @@ import { wakingBarracks } from '../engine/scenery/barracks';
 import { bedtime } from '../engine/scenery/bedtime';
 import { dreamWater } from '../engine/scenery/dreamWater';
 import { washroom } from '../engine/scenery/washroom';
+import { watchDesk } from '../engine/scenery/watchDesk';
 import { rect, wash } from '../engine/scenery/pixels';
 
-const paintings = { hill: dreamHill, roof, library, radio, archive, parade, wakingBarracks, bedtime, dreamWater, washroom };
+const paintings = { hill: dreamHill, roof, library, radio, archive, parade, wakingBarracks, bedtime, dreamWater, washroom, watchDesk };
 
 export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof paintings; day?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
