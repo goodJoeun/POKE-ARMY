@@ -29,7 +29,7 @@ function ZoomRow() {
   const step = (dir: 1 | -1) => set('mapZoom', stepMapZoom(zoom, dir));
   return (
     <div className="set-row">
-      <div><b>맵 확대</b><div className="hud-dim">부대 맵에서 마우스 휠 또는 +/- 키로도 조절</div></div>
+      <div><b>맵 확대</b><div className="hud-dim">지도에서 두 손가락을 벌리거나 오므려 조절 · 부대 맵에서는 휠 또는 +/-</div></div>
       <div className="seg">
         <button onClick={() => step(-1)} disabled={zoom <= MAP_ZOOM_MIN}>－ 축소</button>
         <button className="on" onClick={() => set('mapZoom', 1)} title="기본 배율로">{Math.round(zoom * 100)}%</button>

@@ -47,6 +47,7 @@ import {
   smallTalkPool,
 } from "../data/dialogues";
 import { ITEMS } from "../data/items";
+import { attachMapPinch } from "../engine/mapPinch";
 import { QUESTS } from "../data/quests";
 import { isFreeTimeEvening, isMealTime, mealFromWork } from "../data/schedule";
 import {
@@ -5615,6 +5616,7 @@ export default function World() {
       if (next !== cur) useSettings.getState().set("mapZoom", next);
     };
     canvas.addEventListener("wheel", onWheel, { passive: false });
+    const pinch = attachMapPinch(canvas, () => !!overlayRef.current || useSettings.getState().open);
 
     // NPC 경로 설정: 같은 맵이면 바로, 다른 맵이면 문을 거쳐서 (야외가 허브)
     const route = (n: NpcRt, target: Pos) => {
@@ -6929,7 +6931,7 @@ export default function World() {
       const zoomUnit = 16 / (TILE * dpr);
       setMapZoomUnit(zoomUnit / baseZoom);
       const targetZoom =
-        Math.max(
+        pinch.preview !== null ? baseZoom * pinch.preview : Math.max(
           1,
           Math.round((baseZoom * useSettings.getState().mapZoom) / zoomUnit),
         ) * zoomUnit;
@@ -7844,6 +7846,7 @@ export default function World() {
       cancelAnimationFrame(raf);
       ro.disconnect();
       canvas.removeEventListener("wheel", onWheel);
+      pinch.dispose();
     };
   }, [world, look, b.cap, npcTarget, findInteractable, extraDefs]);
 

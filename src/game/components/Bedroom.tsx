@@ -10,6 +10,7 @@ import TouchPad from './TouchPad';
 import type { BranchId, Line } from '../types';
 import { BRANCHES } from '../data/branches';
 import { playSfx } from '../engine/audio';
+import { attachMapPinch } from '../engine/mapPinch';
 
 /**
  * 오프닝: 입대 전날 밤, 주인공의 방 (2D 휴대용 게임기 시절 느낌).
@@ -285,6 +286,7 @@ export default function Bedroom() {
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(wrapRef.current!);
+    const pinch = attachMapPinch(canvas, () => !!overlayRef.current || sleepingRef.current || useSettings.getState().open);
 
     const roomStatic = renderRoomStatic(W, H);
     const low = document.createElement('canvas');
@@ -345,8 +347,11 @@ export default function Bedroom() {
 
       // ── 정수 배율로 확대 ──
       const W2 = w * dpr, H2 = h * dpr;
-      const scale = Math.max(1, Math.floor(Math.min(W2 / low.width, (H2 - 60 * dpr) / low.height)));
-      const ox = Math.floor((W2 - low.width * scale) / 2), oy = Math.floor((H2 - low.height * scale) / 2 + 10 * dpr);
+      const baseScale = Math.max(1, Math.floor(Math.min(W2 / low.width, (H2 - 60 * dpr) / low.height)));
+      const scale = baseScale * (pinch.preview ?? useSettings.getState().mapZoom);
+      const roomW = low.width * scale, roomH = low.height * scale;
+      const ox = Math.floor(roomW <= W2 ? (W2 - roomW) / 2 : Math.max(W2 - roomW, Math.min(0, W2 / 2 - cx * scale)));
+      const oy = Math.floor(roomH <= H2 ? (H2 - roomH) / 2 + 10 * dpr : Math.max(H2 - roomH, Math.min(0, H2 / 2 - footY * scale)));
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.fillStyle = '#0e0c12';
       g.fillRect(0, 0, W2, H2);
@@ -362,7 +367,7 @@ export default function Bedroom() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); pinch.dispose(); };
   }, [facing]);
 
   const closeOverlay = useCallback(() => {
