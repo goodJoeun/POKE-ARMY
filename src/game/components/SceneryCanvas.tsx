@@ -6,6 +6,11 @@ import { archive } from '../engine/scenery/archive';
 import { parade } from '../engine/scenery/parade';
 import { wakingBarracks } from '../engine/scenery/barracks';
 import { bedtime } from '../engine/scenery/bedtime';
+import { hdSize } from '../engine/scenery/hd';
+import { hdPaintings } from '../engine/scenery/hdPaintings';
+import { radioSignalHd } from '../engine/scenery/radioHd';
+import { archiveDust } from '../engine/scenery/archiveHd';
+import { gateMistHd } from '../engine/scenery/fogGateHd';
 import { dreamWater } from '../engine/scenery/dreamWater';
 import { washroom } from '../engine/scenery/washroom';
 import { watchDesk } from '../engine/scenery/watchDesk';
@@ -20,6 +25,16 @@ import { quizCounter, quizGate, quizParty, quizProject, quizTrip, quizWeekend } 
 
 const paintings = { hill: dreamHill, lightsOut, roof, library, radio, archive, parade, wakingBarracks, bedtime, dreamWater, washroom, watchDesk, fogGate, mailbox, datedMailbox, patrolBoard, paperYard, unsentLetters, pendulumHall, emptyDutyHall, quizTrip, quizProject, quizParty, quizCounter, quizWeekend, quizGate };
 
+type Painter = (typeof paintings)[keyof typeof paintings];
+/** 실제로 그리는 그림: 고해상도판이 있는 장면은 그쪽을 (지금은 모든 장면), 없으면 예전 그림을 */
+const hdPainters: Partial<Record<keyof typeof paintings, Painter>> = hdPaintings;
+
+// 개발용 디버그 핸들: 그림을 이름으로 꺼내 임의의 크기로 그려 볼 수 있다 (__scenery = 예전 그림, __sceneryHd = 고해상도)
+if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).__scenery = paintings;
+  (window as unknown as Record<string, unknown>).__sceneryHd = hdPaintings;
+}
+
 export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof paintings; day?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -31,10 +46,11 @@ export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof 
       const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
       if (!aspect) return;
       // Keep square art pixels across screen shapes, with enough room for the receiver on phones.
-      const art = artSize(canvas.clientWidth, canvas.clientHeight);
+      const hd = hdPainters[scene];
+      const art = (hd ? hdSize : artSize)(canvas.clientWidth, canvas.clientHeight);
       canvas.width = art.w;
       canvas.height = art.h;
-      paintings[scene](g, canvas.width, canvas.height, day);
+      (hd ?? paintings[scene])(g, canvas.width, canvas.height, day);
       if (still) {
         still.width = canvas.width;
         still.height = canvas.height;
@@ -47,8 +63,10 @@ export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof 
     document.fonts?.ready.then(() => { if (alive) paint(); });
     const observer = new ResizeObserver(paint);
     observer.observe(canvas);
+    const hd = !!hdPainters[scene];
     // The radio refreshes only its phosphor trace.
     const signal = () => {
+      if (hd) { radioSignalHd(g, canvas.width, canvas.height, Math.floor(performance.now() / 125)); return; }
       g.save();
       g.translate(Math.round(canvas.width / 2), Math.round(canvas.height * 0.66) - 6);
       const scale = receiverScale(canvas.width);
@@ -76,9 +94,14 @@ export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof 
         const t = performance.now() / 1000, w = still.width, h = still.height;
         g.drawImage(still, 0, 0);
         if (scene === 'fogGate') {
-          gateMist(g, w, h, t);
+          (hd ? gateMistHd : gateMist)(g, w, h, t);
         } else if (scene === 'parade') {
-          wash(g, w / 2, h * 0.49, 16 + 3 * Math.sin(t * 1.5), '#fff0ad46');
+          // 고해상도 그림은 캔버스가 두 배라 빛도 그만큼 크게 (화면에서 보이는 크기는 같다)
+          const r = hd ? (30 + 5 * Math.sin(t * 1.5)) * Math.min(h / 480, w / 420) : 16 + 3 * Math.sin(t * 1.5);
+          wash(g, w / 2, h * 0.49, r, '#fff0ad46');
+        } else if (hd) {
+          // 기록 보관실: 블라인드 사이로 들어온 빛줄기 안에서만 먼지가 떠다닌다
+          archiveDust(g, w, h, t);
         } else {
           for (let i = 0; i < 24; i++) {
             const x = (i * 41 + t * (1 + i % 3)) % (w * 0.58);

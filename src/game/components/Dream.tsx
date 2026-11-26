@@ -10,8 +10,8 @@ import Menu from './Menu';
 import { setBgmMood, type CueId } from '../engine/audio';
 import { useLineSound } from '../engine/soundCues';
 import MonsterCanvas from './MonsterCanvas';
-import { artSize } from '../engine/scenery/pixels';
-import { lightsOutGlint } from '../engine/scenery/lightsOut';
+import { hdSize } from '../engine/scenery/hd';
+import { lightsOutGlintHd } from '../engine/scenery/lightsOutHd';
 import type { MonsterLook } from '../types';
 
 const JIRACHI = { sprite: 'jirachi', body: '#f8f4d0', belly: '#ffffff', accent: '#f2d050', shape: 'round', ears: 'tuft', tail: 'none', eyes: 'sleepy', mouth: 'smile' } as MonsterLook;
@@ -113,17 +113,19 @@ export default function Dream() {
       if (sceneRef.current === 'room') {
         // 소등한 생활관: 침상 그림(lightsOut) 위에, 베개 밑 별 조각의 반짝임만 그린다
         g.clearRect(0, 0, w, h);
-        const art = artSize(w, h), k = w / art.w; // 그림 한 픽셀 = 화면 k픽셀
-        const [ax, ay] = lightsOutGlint(art.w, art.h);
+        // 침상 그림은 고해상도라 그림 한 픽셀이 작다: 반짝임은 예전과 같은 화면 크기로 (도트 한 칸 = 그림 두 칸)
+        const art = hdSize(c.clientWidth, c.clientHeight), k = w / art.w; // 그림 한 픽셀 = 화면 k픽셀
+        const q = 2 * k;
+        const [ax, ay] = lightsOutGlintHd(art.w, art.h);
         const gx = (ax + 0.5) * k, gy = (ay + 0.5) * k;
         const pulse = 0.6 + Math.sin(t * 3) * 0.4;
-        const glow = g.createRadialGradient(gx, gy, 0, gx, gy, (14 + 12 * pulse) * k);
+        const glow = g.createRadialGradient(gx, gy, 0, gx, gy, (14 + 12 * pulse) * q);
         glow.addColorStop(0, 'rgba(255,240,170,0.9)'); glow.addColorStop(0.35, 'rgba(255,226,140,0.35)'); glow.addColorStop(1, 'rgba(255,226,140,0)');
-        g.fillStyle = glow; g.fillRect(gx - 30 * k, gy - 30 * k, 60 * k, 60 * k);
-        // 도트 반짝임: 그림과 같은 크기의 픽셀로, 빛살이 늘었다 줄었다 한다
+        g.fillStyle = glow; g.fillRect(gx - 30 * q, gy - 30 * q, 60 * q, 60 * q);
+        // 도트 반짝임: 빛살이 늘었다 줄었다 한다
         const dot = (dx: number, dy: number, color: string) => {
           g.fillStyle = color;
-          g.fillRect(Math.round((ax + dx) * k), Math.round((ay + dy) * k), Math.ceil(k), Math.ceil(k));
+          g.fillRect(Math.round(gx + (dx - 0.5) * q), Math.round(gy + (dy - 0.5) * q), Math.ceil(q), Math.ceil(q));
         };
         const arm = 2 + Math.round(pulse * 2);
         for (let i = 1; i <= arm; i++) for (const [dx, dy] of [[i, 0], [-i, 0], [0, i], [0, -i]]) dot(dx, dy, i === arm ? '#ffe9a0' : '#fff6cf');
