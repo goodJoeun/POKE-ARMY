@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { MonsterLook } from '../types';
-import { drawMonster, type CapType, type Dir } from '../engine/drawMonster';
+import { drawMonster, drawUnknownSelf, type CapType, type Dir } from '../engine/drawMonster';
 import { onSpritesLoaded } from '../engine/sprites';
 
 interface Props {
@@ -15,9 +15,11 @@ interface Props {
   sleeping?: boolean;
   /** 실루엣 색 (예: '#2a2a3a') */
   silhouette?: string;
+  /** 1일차 거울을 보기 전의 나: 포켓몬 대신 물음표를 그린다 */
+  unknown?: boolean;
 }
 
-export default function MonsterCanvas({ look, size = 96, dir = 'down', cap = null, animate = true, walking = false, className, sleeping, silhouette }: Props) {
+export default function MonsterCanvas({ look, size = 96, dir = 'down', cap = null, animate = true, walking = false, className, sleeping, silhouette, unknown }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   // 이미지가 늦게 로드되면 정적 캔버스도 다시 그린다
   const [tick, setTick] = useState(0);
@@ -38,7 +40,8 @@ export default function MonsterCanvas({ look, size = 96, dir = 'down', cap = nul
       g.clearRect(0, 0, size, size);
       // 그림이 캔버스 밖으로 나가 머리·날개가 잘리지 않게 가장자리 안쪽 상자에 맞춘다
       const pad = Math.max(2, size * 0.03);
-      drawMonster(g, look, size / 2, size * 0.94, size * 0.82, {
+      if (unknown) drawUnknownSelf(g, size / 2, size * 0.94, size * 0.82, { t, walking, sleeping });
+      else drawMonster(g, look, size / 2, size * 0.94, size * 0.82, {
         dir, t, cap, walking, sleeping, silhouette,
         fit: { left: pad, top: pad, right: size - pad, bottom: size - pad * 0.5 },
       });
@@ -46,6 +49,6 @@ export default function MonsterCanvas({ look, size = 96, dir = 'down', cap = nul
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  }, [look, size, dir, cap, animate, walking, sleeping, silhouette, tick]);
+  }, [look, size, dir, cap, animate, walking, sleeping, silhouette, unknown, tick]);
   return <canvas ref={ref} className={className} style={{ width: size, height: size }} />;
 }

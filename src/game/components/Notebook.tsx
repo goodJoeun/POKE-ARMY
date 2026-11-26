@@ -10,6 +10,7 @@ import { buildSchedule } from '../data/schedule';
 import { fmtTime } from '../data/branches';
 import MonsterCanvas from './MonsterCanvas';
 import { npcCap } from '../engine/speakers';
+import { selfUnseen } from '../data/errands';
 import { CLUES } from '../data/story';
 import { PUZZLES } from '../data/puzzles';
 import { SUSPICIONS, suspicionLeads, suspicionState } from '../data/suspicions';
@@ -21,6 +22,8 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('me');
   const sp = findSpecies(s.speciesId);
   const b = BRANCHES[s.branch];
+  // 1일차 화장실 거울을 보기 전에는 내가 무슨 포켓몬인지 모른다
+  const unseen = selfUnseen(s);
   // 좁은 화면에선 탭이 한 줄로 옆으로 밀린다 → 고른 탭이 가려지지 않게 보이는 자리로 당겨 온다
   const tabsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -49,11 +52,17 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
         <div className="nb-body">
           {tab === 'me' && sp && (
             <div className="nb-me">
-              <MonsterCanvas look={sp.look} size={140} cap={b.cap} />
+              <MonsterCanvas look={sp.look} size={140} cap={unseen ? null : b.cap} unknown={unseen} />
               <div>
                 <h3>{RANKS[rankIdxForDay(s.day)]} {s.name}</h3>
-                <p><b>{sp.name}</b> ({sp.type} 타입) — {sp.desc}</p>
-                <p>성격: <b>{ARCHETYPE_INFO[s.archetype].name}</b> · {ARCHETYPE_INFO[s.archetype].perk}</p>
+                {unseen ? (
+                  <p><b>???</b> — 모포 밖으로 나온 손부터 이상했다. 화장실 거울에서 내 모습을 확인하자.</p>
+                ) : (
+                  <>
+                    <p><b>{sp.name}</b> ({sp.type} 타입) — {sp.desc}</p>
+                    <p>성격: <b>{ARCHETYPE_INFO[s.archetype].name}</b> · {ARCHETYPE_INFO[s.archetype].perk}</p>
+                  </>
+                )}
                 <p>소속: {b.name} {b.unit}</p>
                 <p>전역까지: D-{TOTAL_DAYS - s.day} (게임 내 {TOTAL_DAYS}일 = 실제 {b.months}개월)</p>
               </div>
@@ -162,6 +171,11 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
                 <div key={c.id} className="clue-card">
                   <div><b>🔍 {c.title}</b> <span className="hud-dim">· {c.place}</span></div>
                   <div className="clue-text">{c.text}</div>
+                  {c.id === 'C-13' && (s.flags.calledMinhyeok || s.day < TOTAL_DAYS) && (
+                    <div className="clue-text">{s.flags.calledMinhyeok
+                      ? '이름을 불렀더니 병장님이 명찰 뒷면에 직접 적으셨다. 강민혁.'
+                      : '전역 전에 2생활관 병장님을 다시 뵈면, 점호에서 빠진 그 이름을 내가 불러 드리자.'}</div>
+                  )}
                 </div>
               ) : (
                 <div key={c.id} className="clue-card locked"><b>❓ ???</b> <span className="hud-dim">· {c.chapter}장</span></div>

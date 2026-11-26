@@ -409,3 +409,54 @@ export function drawMonster(g: CanvasRenderingContext2D, look: MonsterLook, cx: 
     g.globalAlpha = 1;
   }
 }
+
+/** 물음표 도트 (8×11). 1일차 화장실 거울을 보기 전, 내 모습 대신 그린다 */
+const UNKNOWN_SELF = [
+  '..####..',
+  '.######.',
+  '##....##',
+  '......##',
+  '.....##.',
+  '....##..',
+  '...##...',
+  '...##...',
+  '........',
+  '...##...',
+  '...##...',
+];
+
+/**
+ * 아직 거울로 확인하지 못한 내 모습: 포켓몬 대신 물음표를 (cx, baseY) 발 위치 기준으로 그린다.
+ * size는 drawMonster와 같은 기준(대략적인 전체 높이)이다.
+ */
+export function drawUnknownSelf(g: CanvasRenderingContext2D, cx: number, baseY: number, size: number, o: Pick<DrawOpts, 't' | 'walking' | 'shadow' | 'sleeping'> = {}) {
+  const t = o.t ?? 0;
+  const rows = UNKNOWN_SELF.length, cols = UNKNOWN_SELF[0].length;
+  // 외곽선 1칸씩을 더한 높이가 size의 약 85%가 되도록 (정수 픽셀로 또렷하게)
+  const p = Math.max(1, Math.round((size * 0.85) / (rows + 2)));
+  const hop = o.walking ? (Math.sin(t * 12) > 0 ? size * 0.06 : 0) : Math.round(Math.sin(t * 2.5) * p * 0.5);
+  if (o.shadow !== false) ellipse(g, cx, baseY - size * 0.02, size * 0.22, size * 0.05, 'rgba(0,0,0,0.22)');
+  const x0 = Math.round(cx - (cols * p) / 2);
+  const y0 = Math.round(baseY - hop - (rows + 1) * p);
+  const on = (x: number, y: number) => y >= 0 && y < rows && x >= 0 && x < cols && UNKNOWN_SELF[y][x] === '#';
+  g.save();
+  // 외곽선 → 몸통 순서로 칠한다
+  g.fillStyle = '#26263a';
+  for (let y = -1; y <= rows; y++) for (let x = -1; x <= cols; x++) {
+    if (on(x, y)) continue;
+    if (on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1)) g.fillRect(x0 + x * p, y0 + y * p, p, p);
+  }
+  g.fillStyle = '#f4f0e2';
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    if (on(x, y)) g.fillRect(x0 + x * p, y0 + y * p, p, p);
+  }
+  g.restore();
+  if (o.sleeping) {
+    g.fillStyle = '#4a5a8a';
+    g.font = `bold ${Math.round(size * 0.18)}px sans-serif`;
+    const zz = (t * 0.8) % 1;
+    g.globalAlpha = 1 - zz;
+    g.fillText('z', cx + (cols * p) / 2, y0 - zz * size * 0.3);
+    g.globalAlpha = 1;
+  }
+}

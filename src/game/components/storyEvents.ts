@@ -25,7 +25,7 @@ import { DUTY_BOARD, ORDERS } from '../data/orders';
 import { npcDisplayName } from '../data/npcs';
 import { MAP_NAMES } from '../engine/map';
 import type { BgmMood } from '../engine/audio';
-import { STORY_MISSIONS, missionState, sergeantJoins, storyEnding, type StoryEnding, missionReady } from '../data/story';
+import { RETURN_DAYS, STORY_MISSIONS, choseToReturn, missionState, storyEnding, type StoryEnding, missionReady } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
 export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate' | 'mailbox' | 'datedMailbox' | 'patrolBoard' | 'paperYard' | 'unsentLetters' | 'pendulumHall' | 'emptyDutyHall';
@@ -269,7 +269,7 @@ function d01(ctx: StoryCtx, retry = false) {
           me('"…입대 전날 밤, 별똥별에 빈 소원 때문이야."'),
           say('buddy', '……'),
           say('buddy', '나도… 그날 밤 별을 봤어.'),
-          say('buddy', '엄마 곁을 떠나기 싫다고 빌었어. 그거 하나는 확실히 기억나.'),
+          say('buddy', '엄마한텐 잘 다녀오겠다고 했는데, 막상 창문을 닫으려니까 겁나더라. 가서 나 혼자만 아니었으면 좋겠다고 빌었어.'),
           narr(`(${josa(buddyName(), '이', '가')} 주머니에서 꺼낸 별 조각이, 내 것과 똑같이 반짝인다.)`),
           say('buddy', '이거, 네가 가져. 너라면 끝까지 갈 것 같아.'),
           say('buddy', '…아, 그리고. 2층 계단 옆 옥상 문이 열려 있더라. 나중에 별 보러 가자.'),
@@ -714,7 +714,7 @@ function m11(ctx: StoryCtx) {
         me('"병장님. 이 사진… 병장님이시죠?"'),
         say('npc', '……'),
         say('npc', '…오랜만에… 그 얼굴을 보는군.'),
-        say('npc', '강민혁. 그게… 내 이름이었다. 거의 다 잊었지만.'),
+        say('npc', '사진 뒤에 뭐라고 썼었는데… 읽을 수가 없군. 내 글씨가 맞긴 한데.'),
         narr('병장이 관물대 깊숙한 곳에서 찢어진 일기장을 꺼낸다.'),
         narr('낱장이 다섯 조각으로 찢겨 뒤섞여 있다.'),
       ],
@@ -728,7 +728,8 @@ function m11(ctx: StoryCtx) {
         narr('『나는 겁이 났다. 돌아가면, 다시 가야 하니까. 그래서 아무 말도 못 했다.』'),
         say('npc', '지휘통제실 일지에 날짜를 적은 것도, 분리수거장에 편지를 둔 것도 나다. …다음 사람에게 주려고.'),
         say('npc', '너는… 가라. 내 몫까지.'),
-        narr('일기장 사이에 별 조각 하나가 끼워져 있다.'),
+        narr('마지막 장에 사람 이름 하나가 또박또박 적혀 있다. 「강민혁」. 일기장 사이에서 별 조각이 떨어진다.'),
+        me('(다음에 병장님을 뵈면 이 이름으로 불러 드려야겠다.)'),
       ],
     },
     onDone: () => { const s = G(); s.findClue('C-13', reward); s.gainStar(4); withReport(ctx, 'M-11'); },
@@ -744,11 +745,11 @@ export function roofOptions(ctx: StoryCtx): MenuOption[] {
   const withBuddy = (then: () => void) => { if (npcPresent('buddy', s.day)) ctx.place('buddy', 'hq2', 21.5, 1.5, 'up'); then(); };
   if (isOpen('D-02')) opts.push({ label: '🌌 동기와 별 보기 (추리 정리 2)', hint: ev ? '' : '19:00~21:20', disabled: !ev, onSelect: () => withBuddy(() => d02(ctx)) });
   // (별에게 대답한 뒤에는 되돌릴 수 없다: 엔딩이 이미 정해졌다)
-  if (flag('m13') && !awaitingOrder('M-13') && !flag('buddyBack') && !flag('f01')) {
-    const visited = ['m13_laundry', 'm13_cyber', 'm13_court'].filter(flag).length;
+  if (s.day < TOTAL_DAYS && flag('m13') && !awaitingOrder('M-13') && !flag('buddyBack')) {
+    const memories = buddyMemoryCount();
     opts.push({
-      label: '💭 동기와 옥상에 오르기 (잊혀 가는 이름)', hint: visited < 3 ? `먼저 추억의 장소 ${visited}/3` : !freeNow() ? '점심·개인정비 시간' : '',
-      disabled: visited < 3 || !freeNow() || !ctx.near('buddy', 3.5), onSelect: () => m13Roof(ctx),
+      label: '💭 동기와 옥상에 오르기 (잊혀 가는 이름)', hint: memories < 2 ? `함께한 추억 ${memories}/2` : !freeNow() ? '점심·개인정비 시간' : !ctx.near('buddy', 3.5) ? '동기가 곁에 있어야 한다' : '',
+      disabled: memories < 2 || !freeNow() || !ctx.near('buddy', 3.5), onSelect: () => m13Roof(ctx),
     });
   }
   if (isOpen('D-03')) opts.push({ label: '🌌 돌아가는 방법 (추리 정리 3)', hint: ev ? '' : '19:00~21:20', disabled: !ev, onSelect: () => withBuddy(() => d03(ctx)) });
@@ -876,11 +877,11 @@ const M13_SPOT: Partial<Record<SpotId, { key: string; lines: () => Line[]; bonus
   admin: {
     key: 'm13_laundry',
     lines: () => [say('buddy', '이 명찰… 준서. 이준서.'), say('buddy', '…이준서. 이거, 내 이름이야.')],
-    bonus: () => (G().doneQuests.includes('q_buddy_laundry') ? [say('buddy', '여기서 같이 빨래 갰잖아. 네가 각 잡는 거 알려 줬어. 손바닥으로 탁탁.')] : null),
+    bonus: () => (G().doneQuests.includes('q_buddy_laundry') ? [say('buddy', '세탁실에서 같이 빨래 갰잖아. 네가 각 잡는 거 알려 줬어. 손바닥으로 탁탁.')] : null),
   },
   cyber: {
     key: 'm13_cyber',
-    lines: () => [narr('싸지방 구석 자리. 둘이 나란히 앉던 컴퓨터.'), say('buddy', '여기… 와 본 적 있는 것 같아.')],
+    lines: () => [narr('싸지방 구석에 나란히 앉는다. 동기가 한쪽 이어폰을 건넨다.'), say('buddy', '나 혼자 듣기엔 아까워서. …이 노래, 이제 네가 기억해 줘.')],
     bonus: () => (G().doneQuests.includes('q_buddy_result') ? [say('buddy', '맞다, 합격 발표! 우리 둘 다 붙었잖아. 소리 질렀다가 혼났지…!')] : null),
   },
   court: {
@@ -889,16 +890,27 @@ const M13_SPOT: Partial<Record<SpotId, { key: string; lines: () => Line[]; bonus
     bonus: () => (G().doneQuests.includes('q_junior_court') ? [say('buddy', '후임이랑 셋이서 했을 때, 네가 에어볼 세 번 연속 던졌어. 하하.')] : null),
   },
 };
+function buddyMemoryCount(currentVisit?: string): number {
+  const s = G();
+  return [
+    ['m13_laundry', 'q_buddy_laundry'], ['m13_cyber', 'q_buddy_result'], ['m13_court', 'q_junior_court'],
+  ].filter(([visit, quest]) => visit === currentVisit || s.flags[visit] || s.doneQuests.includes(quest)).length;
+}
+
 function m13Spot(ctx: StoryCtx, spot: SpotId) {
   const def = M13_SPOT[spot]!;
   const bonus = def.bonus();
   G().spend(15);
   const scene = (reward = 0) => ctx.play({
-    script: { npc: 'buddy', lines: [...def.lines(), ...(bonus ?? [])] },
+    script: { npc: 'buddy', lines: [
+      ...def.lines(), ...(bonus ?? []),
+      say('buddy', buddyMemoryCount(def.key) >= 2
+        ? '…별 보던 난간도 생각났어. 오늘 자유 시간에 나랑 옥상에 가 줄래? 거기서 꼭 해 보고 싶은 말이 있어.'
+        : '네 얼굴이 조금 익숙해졌어. 우리 둘이 또 어디서 시간을 보냈더라?'),
+    ] },
     onDone: () => { setFlag(def.key); G().applyEffects({ memory: Math.max(bonus ? 5 : 2, reward), affinity: { buddy: 2 } }, '잊혀 가는 이름'); },
   });
   if (spot !== 'admin') { scene(); return; }
-  const sceneAdmin = scene;
   // 🧩 P-19: 그날의 명찰을 이번엔 동기와 나눠 맞춘다
   ctx.play({
     script: { npc: 'buddy', lines: [
@@ -906,7 +918,7 @@ function m13Spot(ctx: StoryCtx, spot: SpotId) {
       narr('명찰의 실밥이 다시 풀려 있다. 동기가 조각 몇 개를 집어 들고 한참 들여다본다.'),
       say('buddy', '…이거, 전에 같이 맞췄던 것 같은데. 절반은 제가 해 볼게요.'),
     ] },
-    onDone: () => ctx.puzzle('P-19', (reward) => { sceneAdmin(reward); G().toast('💭 동기와 함께했던 곳을 마저 되짚어 보자: 싸지방 → 농구장 → 막사 옥상', 'info'); }),
+    onDone: () => ctx.puzzle('P-19', scene),
   });
 }
 function m13Roof(ctx: StoryCtx) {
@@ -915,7 +927,9 @@ function m13Roof(ctx: StoryCtx) {
     bg: 'roof',
     script: { npc: 'buddy', lines: [
       narr('옥상. 처음 별을 보러 왔던 그 난간.'),
+      me('"준서야. 이준서."'),
       say('buddy', '…{me}.'),
+      say('buddy', '내가 잊고 있는 동안에도 계속 내 이름 불렀어?'),
       say('buddy', '미안. 잠깐 잊었어. 이제 안 잊어.'),
       narr('동기가 마지막까지 꼭 쥐고 있던 별 조각을 내 손바닥에 올려놓는다.'),
       say('buddy', '내 것까지 가져가. 그리고… 같이 가자. 이번엔 진짜로.'),
@@ -982,8 +996,18 @@ export function slipperBoss(ctx: StoryCtx, onEnd: () => void, tries = 0) {
   let wins = 0;
   const round3 = () => {
     // 🧩 P-20c: 주어진 대답은 모두 오답. 내 이름을 직접 써야 한다
-    ctx.play({ script: { custom: slipperSpeaker(true), lines: [say('npc', '그럼 그냥… 자. 푹 자. 아무도 안 깨울게…'), say('npc', '어차피 넌 이름도 없는 병사잖아. 마지막이야. 넌 누구지?'), narr('[3라운드: 대답하라]')] }, onDone: () =>
-      ctx.puzzle('P-20c', () => { wins++; finish(); }, () => finish()) });
+    const writeName = () => ctx.puzzle('P-20c', () => { wins++; finish(); }, () => finish());
+    if (flag('return_11')) { writeName(); return; }
+    if (flag('stay_11')) { finish(); return; }
+    ctx.play({ script: {
+      custom: slipperSpeaker(true),
+      lines: [say('npc', '여기선 아무도 널 깨우지 않아. 이름 쓰는 칸도 그냥 비워 둬.'), narr('진자 아래 근무일지가 펼쳐져 있다. 펜은 내 손에 있다.')],
+      choices: [
+        { text: '펜을 쥔다. 내 이름은 내가 쓸게.', grade: 'good', reply: [me('손끝이 떨린다. 그래도 내가 쓸 거야.')] },
+        { text: '일지를 덮고 따뜻한 꿈에 머문다.', grade: 'ok', reply: [narr('빈 줄 위로 표지가 덮인다.')] },
+      ],
+    }, onChoice: c => setFlag(c.grade === 'good' ? 'return_11' : 'stay_11'),
+    onDone: () => flag('return_11') ? writeName() : finish() });
   };
   const finish = () => {
     const s2 = G();
@@ -1049,43 +1073,60 @@ export function slipperBoss(ctx: StoryCtx, onEnd: () => void, tries = 0) {
   });
 }
 
+/** 창문 앞에서 떠올리는 건 플레이어가 실제로 택한 밤의 장면들이다. */
+function windowMemories(end: StoryEnding, complete: boolean): Line[] {
+  const { flags, memory } = G();
+  const returning = choseToReturn(flags);
+  const echoes = returning
+    ? ['엄마가 내 손을 꼭 쥐던 감촉이 돌아온다.', '수첩에 눌러 쓴 한 줄이 떠오른다. 돌아가면 다시 입대해야 한다.', '근무일지 앞에서 내 이름을 쓰려고 꽉 쥐었던 펜이 떠오른다.']
+    : ['엄마가 손을 내밀었을 때 나는 눈을 감았다.', '수첩을 덮었던 날, 두려운 이유는 빈 종이 사이에 그대로 남았다.', '이름 칸을 비워 두고 덮었던 근무일지가 떠오른다.'];
+  const recalled = RETURN_DAYS.flatMap((day, i) => {
+    const remember = returning ? flags[`return_${day}`] && !flags[`unconfirmedReturn_${day}`] : flags[`stay_${day}`];
+    return remember ? [echoes[i]] : [];
+  }).slice(0, 2);
+  const lines = recalled.length ? [narr(recalled.join(' '))] : [];
+  if (end !== 'bad') return [...lines, me('(눈을 뜨면 거기서 아침을 맞자. 아직 겁은 나지만.)')];
+  if (!complete && flags.b01lost) lines.push(me('(슬리퍼가 가져간 별 조각. 빈칸을 만지니 그날 새벽 초소에서 들었던 진자 소리가 떠오른다.)'));
+  if (memory <= 0) lines.push(me('(저 방에 살던 사람 얼굴이… 어떻게 생겼더라? 내 얼굴인데.)'));
+  if (!returning) lines.push(me('(내일 눈을 뜬 내 모습은 떠오르지 않는다. 손을 거두고 익숙한 생활관 쪽을 본다.)'));
+  return lines;
+}
+
 /** F-01 별이 지기 전에 — 전역일, 연병장 구령대 */
 export function finalStar(ctx: StoryCtx) {
   const s = G();
   // 말 없는 병장이 곁에 서는 건 함께 돌아가는 진 엔딩 길에서만 (동기가 이름을 되찾았을 때)
-  const sgJoin = sergeantJoins(s) && flag('buddyBack');
-  const sgName = extrasForDay(s.branch, s.day).find((d) => d.id === 'room2a')?.name ?? '말 없는 병장';
   const buddyHere = npcPresent('buddy', s.day);
+  const handover = buddyHere && !flag('buddyBack') && !s.stars.includes(7);
+  const end = storyEnding(handover ? { ...s, stars: [...s.stars, 7] } : s);
+  const sgJoin = end === 'rescue';
+  const sgName = extrasForDay(s.branch, s.day).find((d) => d.id === 'room2a')?.name ?? '말 없는 병장';
   // 🌙 동기가 끝내 이름을 되찾지 못했다면(M-13 미완): 품고 있던 일곱 번째 조각을, 왜 쥐고 있는지도 모른 채 건넨다.
   //    조각은 일곱 개가 되지만 동기는 함께 돌아가지 못한다 → 노멀 엔딩으로 가는 길
-  const handover = buddyHere && !flag('buddyBack') && !s.stars.includes(7);
   if (buddyHere) ctx.place('buddy', 'outdoor', 19.5, 19.5, 'up');
   if (sgJoin) ctx.place('x:room2a', 'outdoor', 21.5, 19.5, 'up');
   ctx.flash();
   const ask = (done: boolean) => {
-    const cur = G();
-    const enough = cur.stars.length >= 7 && cur.memory > 0;
     ctx.play({
       bg: 'parade',
       script: {
         custom: jirachiSpeaker(true),
         lines: [
           narr(done ? '창문 너머로 입대 전날 밤의 내 방이 보인다. 책상 위에는 입영통지서가 그대로 놓여 있다.' : '창문은 끝내 채워지지 않았다. 빈자리 너머는 안개뿐이다.'),
-          say('npc', '소원을 거둘래? 돌아가면 넌 내일 아침, 진짜 훈련소에 가야 해.'),
-          say('npc', '여기 남으면, 다신 아무 데도 안 가도 돼.'),
+          ...(end === 'rescue' ? [] : windowMemories(end, done)),
+          say('npc', '별이 지기 전에, 누구에게 한마디 남길래?'),
         ],
         choices: [
-          { text: '"소원을 거둘게. …가기 싫었던 거 맞아. 그래도 내 발로 갈래."', grade: 'good', reply: [say('npc', enough ? '…응. 그 말 듣고 싶었어.' : '…미안. 그 마음이면 충분한데, 별빛이 모자라…')] },
-          { text: '"…여기 남을래."', grade: 'bad', reply: [say('npc', '…그래. 그럼 푹 자.')] },
+          { text: '동기에게. "내 옆에 있어 줘서 고마워."', grade: 'ok', reply: [narr('옆에서 내 소매를 꼭 잡는다.')] },
+          { text: '엄마에게. "나, 엄마 목소리 들었어."', grade: 'ok', reply: [narr('창틀 너머로 이불을 여미는 소리가 난다.')] },
         ],
       },
-      onChoice: (c) => {
-        const end: StoryEnding = storyEnding(G(), c.grade === 'good');
+      onChoice: () => {
         setFlag(`end_${end}`);
         setFlag('f01');
-        G().log(end === 'true' ? '🌠 소원을 거뒀다. 함께.' : end === 'normal' ? '🌠 소원을 거뒀다. …혼자서.' : '🌠 별이 졌다.');
+        G().log(end === 'bad' ? '🌠 별이 졌다.' : end === 'normal' ? '🌠 소원을 거뒀다. …혼자서.' : '🌠 소원을 거뒀다. 함께.');
       },
-      onDone: () => G().toast('🎖️ 이제 위병소 정문으로 가자. 전역이다.', 'info'),
+      onDone: () => G().toast('위병소 정문에서 마지막 인사를 하자.', 'info'),
     });
   };
   /** 지라치가 조각을 세고, 첫날 밤의 창문을 내민다 (동기가 조각을 건넸다면 그 뒤에) */
@@ -1143,31 +1184,35 @@ function ammoFarewell(): Line[] {
 export function endingLines(end: StoryEnding): Line[] {
   const s = G();
   const sgName = extrasForDay(s.branch, s.day).find((d) => d.id === 'room2a')?.name ?? '병장';
-  if (end === 'true') {
-    const sg = sergeantJoins(s);
+  if (end === 'true' || end === 'rescue') {
+    const sg = end === 'rescue';
     return [
       narr('별빛이 우리를 감싼다.'),
-      ...(sg ? [narr(`${josa(sgName, '이', '가')} 처음으로 웃는다.`), narr('"…고맙다. 이번엔, 나도 간다."')] : []),
+      ...(sg ? [me('"강민혁 병장님!"'), narr(`${josa(sgName, '이', '가')} 첫날 점호 때처럼 손을 든다. 이번엔 대답이 돌아온다.`), narr('"병장 강민혁. …예, 여기 있습니다."')] : []),
       ...cairnFarewell(),
       ...ammoFarewell(),
       narr('(암전)'),
       narr('훈련소 생활관. 새벽. 낯선 천장.'),
       me('(…돌아왔다.)'),
       narr('옆 침상에서 누군가 몸을 일으킨다.'),
-      narr('"…야. 너, 맞지?"'),
+      narr(sg ? '"…야. 너, 맞지?"' : '"…{me}." 옥상에서 겨우 떠올렸던 내 이름을, 이번에는 망설이지 않고 부른다.'),
       me(`"…준서야."`),
       ...(sg ? [narr('복도 라디오: "10년간 의식이 없던 강민혁 씨가 오늘 새벽 깨어났습니다—"')] : []),
       narr('조교: "기상! 기상!!"'),
       me('(가기 싫었다. 그래도, 이제 간다.)'),
-      narr('🌠 진 엔딩 「같은 날, 같은 별 아래」 — 준서와 함께'),
+      narr(sg ? '🌠 진 엔딩 「같은 날, 같은 별 아래」 — 강민혁 귀환 후일담' : '🌠 진 엔딩 「같은 날, 같은 별 아래」 — 준서와 함께'),
     ];
   }
   if (end === 'normal') {
     return [
-      narr('"…친구는, 아직 대답을 못 찾았나 봐."'),
+      narr('별빛 너머에서 동기가 손을 든다. 내 이름을 부르려는 듯 입술이 움직이다 멈춘다.'),
       ...cairnFarewell(),
       ...ammoFarewell(),
       narr('훈련소 첫날 밤. 옆 침상은 비어 있다.'),
+      ...(s.flags.m13 ? [me(buddyMemoryCount() >= 2
+        ? '(같이 웃던 일까지 기억해 냈는데. 떠나기 전에 둘이서 그 옥상에 한 번만 더 가 볼걸.)'
+        : s.flags.m13_cyber ? '(한쪽씩 나눠 끼던 이어폰. 노래는 기억났어도 저 애한테 내 이름은 끝내 돌아오지 않았다.)'
+        : '(내 얼굴은 낯이 익는데 이름이 생각 안 난다고 했다. 그때 우리 둘이 다니던 곳을 좀 더 같이 걸어 볼걸.)')] : []),
       narr('창밖, 별똥별 하나가 떨어진다.'),
       me('(준서야. 꼭 와라.)'),
       narr('🌙 노멀 엔딩 「혼자 돌아온 밤」'),
@@ -1178,6 +1223,7 @@ export function endingLines(end: StoryEnding): Line[] {
     narr('다음 날 아침, 1생활관.'),
     narr('분대장: "오늘 신병 전입 온다. 다들 잘해 줘라."'),
     narr('문이 열리고 — 내 얼굴을 한 신병이 들어온다.'),
+    narr('분대장의 손가락이 빈 줄에서 멈춘다. "거기, 이름이 뭐였지?" 내가 먼저 손을 든다.'),
     ...(s.clues.includes('C-16') ? [narr('같은 시각, 분리수거장 구석의 돌탑에 이끼 없는 돌 하나가 얹혔다. 백여덟.')] : []),
     ...(s.clues.includes('C-17') ? [narr('탄약 수불 대장 금요일 줄, 비어 있던 두 번째 서명 칸에 내 이름이 적혔다.')] : []),
     me('……'),
@@ -1227,7 +1273,7 @@ export function storySpotOptions(spot: SpotId, ctx: StoryCtx): MenuOption[] {
   // 잊혀 가는 이름: 동기와 함께 추억의 장소
   const m13 = M13_SPOT[spot];
   // (행정보급관에게 분실물함 정리를 지시받은 뒤부터: 호출 전에 그 자리에 가도 장면이 시작되지 않는다)
-  if (m13 && flag('m13') && !awaitingOrder('M-13') && !flag('buddyBack') && !flag(m13.key)) {
+  if (m13 && s.day < TOTAL_DAYS && flag('m13') && !awaitingOrder('M-13') && !flag('buddyBack') && !flag(m13.key)) {
     const near = ctx.near('buddy', 3.5);
     opts.push({ label: '💭 동기와 추억 떠올리기', hint: !free ? '점심·개인정비 시간에' : !near ? '동기가 곁에 있어야 한다' : '📖 스토리', disabled: !free || !near, onSelect: () => m13Spot(tone(ctx, 'bgm_13_rooftop_stars'), spot) });
   }
@@ -1298,6 +1344,15 @@ export function storyExtraOptions(id: string, ctx: StoryCtx): MenuOption[] {
         }),
       });
     } });
+  }
+  if (id === 'room2a' && s.day < 12 && s.clues.includes('C-13') && !flag('calledMinhyeok')) {
+    opts.push({ label: '일기에서 읽은 이름을 부른다', onSelect: () => ctx.play({
+      script: { custom: extraSpeaker('room2a'), lines: [
+        me('"강민혁 병장님."'), narr('병장이 점호 때처럼 손을 들려다 말고 나를 본다.'),
+        say('npc', '…나 부른 거냐?'), me('"예. 자꾸 불러 드리면 잊을 수가 없잖습니까."'),
+        narr('병장이 주머니에서 낡은 명찰을 꺼내더니, 빈 뒷면에 이름 석 자를 쓴다.'),
+      ] }, onDone: () => { setFlag('calledMinhyeok'); G().log('강민혁 병장님의 이름을 불렀다.'); },
+    }) });
   }
   if (id === 'room2a' && isOpen('M-11')) {
     opts.push({ label: '🖼️ 단체 사진 이야기를 꺼낸다', hint: free ? '📖 스토리' : '점심·개인정비 시간에', disabled: !free, onSelect: () => m11(tone(ctx, 'bgm_13_rooftop_stars')) });

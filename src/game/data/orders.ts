@@ -223,16 +223,16 @@ export const ORDERS: Record<string, OrderDef> = {
     ],
   },
   'M-13': {
-    mission: 'M-13', giver: 'sgm', orderAt: ADMIN_SGM, reportAt: ADMIN_SGM, brief: '동기와 함께 행정반 분실물함 정리하기',
+    mission: 'M-13', giver: 'sgm', orderAt: ADMIN_SGM, reportAt: ADMIN_SGM, brief: '동기와 추억 두 가지를 되짚고 막사 옥상에 다녀오기',
     order: [
-      say('sgm', '모레 전역이지? 전역자는 가기 전에 행정반 분실물함을 정리하는 게 전통이다.'),
-      say('sgm', '주인 없는 건 버려라. 동기도 데려가고. 요즘 그 녀석 좀 멍하더라.'),
+      say('sgm', '동기 좀 데리고 바람 쐬고 와라. 둘이 잘 알던 곳이면 좋겠구나.'),
+      say('sgm', '분실물함에 명찰도 있고, 싸지방이나 농구장도 좋지. 옥상 문은 열어 둘게.'),
       me('(분실물함. …동기가 그 명찰을 거기 맡겼다고 했었다.)'),
     ],
     report: [
-      me('"분실물함 정리 마쳤습니다."'),
-      say('sgm', '수고했다. 그런데 그 낡은 명찰은 왜 안 버렸냐?'),
-      me('"주인이 있습니다."'),
+      me('"동기와 다녀왔습니다."'),
+      say('sgm', '얼굴이 폈네. 둘이 무슨 얘길 그렇게 했어?'),
+      me('"서로 이름을 좀 불렀습니다."'),
     ],
   },
 };

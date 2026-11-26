@@ -43,7 +43,7 @@ export const CLUES: ClueDef[] = [
   { id: 'C-16', chapter: 2, title: '백여덟 개의 돌', place: '분리수거장 구석 돌탑', text: '돌아오지 못한 사람들의 소원이 돌이 되어 쌓였다. 자리는 백여덟, 돌은 백일곱. 비어 있는 한 자리는 "다음에 남는 사람"의 것이다.' },
   { id: 'C-11', chapter: 2, title: '불 꺼진 서가', place: '도서관 (밤)', text: '글자들이 모여 말했다. "별이 지기 전에."' },
   { id: 'C-12', chapter: 3, title: '단체 사진', place: '기록 보관실', text: '해마다 같은 자리에 같은 얼굴. 10년 전 사진 속 이병은 2분대의 말 없는 병장이었다.' },
-  { id: 'C-13', chapter: 3, title: '병장의 일기', place: '2생활관', text: '"별 조각 일곱 개… 마지막 밤… 나는 겁이 나서 거두지 못했다."' },
+  { id: 'C-13', chapter: 3, title: '병장의 일기', place: '2생활관', text: '"별 조각 일곱 개… 마지막 밤… 나는 겁이 나서 거두지 못했다." 마지막 장에 남은 서명은 강민혁.' },
   { id: 'C-17', chapter: 3, title: '2인 1조', place: '탄약고', text: '수불 대장에 기록 없이 빈 상자 하나. 그날 금요일 줄의 두 번째 서명 칸도 비어 있다. 인식표의 이름은 한도윤. 군견은 오늘도 문만 본다.' },
   { id: 'C-14', chapter: 3, title: '진자 자국', place: '탄약고·격납고·부두', text: '잠긴 상자 주변의 둥근 자국. 누군가 별 조각을 숨기고 있었다. 자국은 분리수거장 쓰레기통까지 이어졌다.' },
   { id: 'C-15', chapter: 3, title: '소원을 거둬라', place: '도서관 (밤)', text: '글자들이 끝까지 모였다. "소원을 거둬라."' },
@@ -88,7 +88,7 @@ export const STORY_MISSIONS: StoryMission[] = [
   { id: 'M-02', chapter: 1, title: '거울 속의 나', hint: '막사 화장실에서 세면하기', from: 2, clue: 'C-02', spot: 'wc1' },
   { id: 'M-03', chapter: 1, title: '생일자 명단', hint: '막사 복도 게시판의 "이번 달 생일자" 보기', from: 3, clue: 'C-03', spot: 'board1' },
   { id: 'M-04', chapter: 1, title: '낡은 책 한 권', hint: '막사 2층 도서관의 관리병 네이티오에게 말 걸기', from: 3, clue: 'C-08', spot: 'library' },
-  { id: 'N-01', chapter: 1, title: '안개 너머', hint: '3일차 밤 야간 위병소 근무 때, 위병소 정문 밖으로 나가 보기', from: 3, nightFrom: 3, clue: 'C-04', spot: 'gate' },
+  { id: 'N-01', chapter: 1, title: '안개 너머', hint: '3일차 밤 야간 위병소 근무 때, 위병소 정문 밖으로 나가 보기', hintLate: '개인정비 시간에 위병소 정문으로 가서 안개 너머 길을 걸어 보기', from: 3, nightFrom: 3, clue: 'C-04', spot: 'gate' },
   // ── 2장 「이상한 부대」 (4~6일차)
   { id: 'M-05', chapter: 2, title: '보낸 날짜가 없는 편지', hint: '막사 2층 싸지방에서 인터넷 편지 확인 (점심·개인정비 시간)', from: 4, clue: 'C-05', spot: 'cyber' },
   { id: 'M-06', chapter: 2, title: '낯선 명찰', hint: '동기에게 "같이 빨래하러 가자"고 말 걸기 (점심·개인정비 시간)', from: 4, clue: 'C-06' },
@@ -109,7 +109,7 @@ export const STORY_MISSIONS: StoryMission[] = [
   { id: 'M-12', chapter: 3, title: '진자 자국', hint: `${'탄약고·격납고·부두'}의 잠긴 상자 살펴보기 → 자국 따라가기`, from: 9, clue: 'C-14', spot: 'ammo' },
   { id: 'N-04', chapter: 3, title: '소원을 거둬라', hint: '9일차 밤 순찰 때 2층 휴게실 TV를 조사해 ‘손전등 끄기’ 선택 (L)', hintLate: '도서관 관리병 네이티오에게 말 걸기', from: 9, nightFrom: 9, clue: 'C-15', spot: 'tv' },
   // ── 4장 「별이 지기 전에」 (10~12일차)
-  { id: 'M-13', chapter: 4, title: '잊혀 가는 이름', hint: '동기와 함께 행정반 분실물함 → 싸지방 → 농구장 → 막사 옥상 (점심·개인정비 시간)', from: 10, flag: 'buddyBack' },
+  { id: 'M-13', chapter: 4, title: '잊혀 가는 이름', hint: '행정반 분실물함·싸지방·농구장에서 함께한 추억 두 가지를 되찾고 동기와 막사 옥상으로 (점심·개인정비 시간)', from: 10, flag: 'buddyBack' },
   { id: 'D-03', chapter: 4, title: '추리 정리 3 「돌아가는 방법」', hint: '19:00~21:20, 막사 옥상에서 동기와', from: 10, flag: 'd03', needClues: ['C-11', 'C-13', 'C-14', 'C-15'] },
   { id: 'B-01', chapter: 4, title: '꿈을 먹는 자', hint: '11일차 밤 야간 위병소 근무, 초소에서', from: 11, nightFrom: 11, flag: 'b01' },
   { id: 'F-01', chapter: 4, title: '별이 지기 전에', hint: '전역일, 연병장 구령대에 내려온 별에게', from: 12, flag: 'f01', spot: 'parade' },
@@ -156,14 +156,16 @@ export function chapterDone(n: number, s: { clues: string[]; flags: Record<strin
 }
 
 // ───────── 엔딩 ─────────
-export type StoryEnding = 'true' | 'normal' | 'bad';
-/** 마지막 밤 선택 → 엔딩. 남겠다 · 별 조각 7개 미만 · 기억 0 이면 배드 */
-export function storyEnding(s: { stars: number[]; memory: number; flags: Record<string, boolean> }, giveBack: boolean): StoryEnding {
-  if (!giveBack || s.stars.length < 7 || s.memory <= 0) return 'bad';
-  return s.flags.buddyBack ? 'true' : 'normal';
+export type StoryEnding = 'true' | 'rescue' | 'normal' | 'bad';
+export const RETURN_DAYS = [4, 8, 11] as const;
+export function choseToReturn(flags: Record<string, boolean>): boolean {
+  return RETURN_DAYS.filter(day => flags[`return_${day}`]).length >= 2;
 }
-/** 진 엔딩에서 말 없는 병장도 함께 돌아가는지 */
-export const sergeantJoins = (s: { clues: string[]; memory: number }) => s.clues.includes('C-13') && s.memory >= 60;
+export function storyEnding(s: { stars: number[]; clues: string[]; memory: number; flags: Record<string, boolean> }): StoryEnding {
+  if (s.stars.length < 7 || s.memory <= 0 || !choseToReturn(s.flags)) return 'bad';
+  if (!s.flags.buddyBack) return 'normal';
+  return s.clues.includes('C-13') && s.flags.calledMinhyeok ? 'rescue' : 'true';
+}
 
 // ───────── 꿈: 별의 언덕 ─────────
 export type DreamWho = 'narr' | 'voice' | 'mom' | 'me' | 'jirachi';
@@ -241,7 +243,8 @@ export const DREAMS: Record<number, DreamScript> = {
     hill: [
       { who: 'narr', text: '오늘은 언덕에 발자국이 둘이다.' },
       { who: 'voice', text: '친구가 생겼네. 다행이다.' },
-      { who: 'voice', text: '혼자 끌려온 줄 알았지? 같은 밤에, 같은 별을 본 애가 있었어.' },
+      { who: 'voice', text: '같은 밤, 다른 창문에서 나를 본 애가 있었어. 그 애는 가기 싫다고 빌지 않았어.' },
+      { who: 'voice', text: '「가더라도 나만 혼자가 아니었으면 좋겠다.」 그래서 너희 침상을 나란히 놓았어.' },
       { who: 'me', text: '…그 애도 돌아갈 수 있어?' },
       { who: 'voice', text: '돌아가려면 자기 이름을 알아야 해. 여기선 이름부터 잊거든.' },
       { who: 'voice', text: '그다음엔 왜 돌아가야 하는지를 잊어. …옆에서 자꾸 불러 줘.' },
@@ -273,7 +276,7 @@ export const DREAMS: Record<number, DreamScript> = {
       { who: 'voice', text: '겁이 나는 건 이상한 게 아니야.' },
       { who: 'voice', text: '그 병장도 겁이 났던 거야. 너만 그런 게 아니야.' },
       { who: 'me', text: '그분은… 여기 얼마나 있었던 거야?' },
-      { who: 'voice', text: '별이 열 번 졌어. 그 사람은 열 번 다 "다음에"라고 했어.' },
+      { who: 'voice', text: '별이 열 번 졌어. 그 사람은 열 번 다 "다음에"라고 했고, 난 열 번 다 내일을 미뤄 줬어.' },
       { who: 'voice', text: '…너는 몇 번째에 대답할 거야?' },
     ],
   },
@@ -308,10 +311,14 @@ export const DREAMS: Record<number, DreamScript> = {
       { who: 'me', text: '(…별이다. 그날 밤 창밖으로 떨어지던, 그 별.)' },
       { who: 'jirachi', text: '…안녕. 이 모습으로는 처음이지.' },
       { who: 'jirachi', text: '나는 지라치. 네 소원을 들어준 별이야.' },
-      { who: 'jirachi', text: '미안해. 가기 싫다길래, 대신 가게 해 주면 될 줄 알았어.' },
+      { who: 'jirachi', text: '십 년 전에도 소원을 들었어. 「내일이 안 왔으면 좋겠다.」 그 병장이 잠깐 쉬어 갈 곳으로 이 부대를 만들었어.' },
+      { who: 'jirachi', text: '전역 나팔이 울릴 때마다 하루를 더 줬어. 어느 아침 명단을 보니 이름 한 줄이 비었더라. 나도 그 이름을 기억할 수 없었어.' },
+      { who: 'me', text: '그래서 우리 둘을 같은 데로 보냈어?' },
+      { who: 'jirachi', text: '응. 한 사람이 잊어도 옆 사람이 불러 줄 수 있잖아. 혹시 그 병장 이름도 누가 다시 불러 줄까 싶었어.' },
+      { who: 'me', text: '그럼 처음부터 찾아 달라고 하지 그랬어.' },
+      { who: 'jirachi', text: '가기 싫다고 빈 너한테 또 누굴 위해 가 달라고 하기가 겁났어. …그래도 보내기 전에 물어봤어야 했어. 미안해.' },
       { who: 'jirachi', text: '돌아가면 여기 일은 꿈처럼 흐려질 거야. 남으면, 거기 일이 흐려지고.' },
-      { who: 'jirachi', text: '어느 쪽이든 하나는 놓아야 해. 이번엔 내가 아니라, 네 입으로 말해 줘.' },
-      { who: 'jirachi', text: '내일, 별이 져. 그때 다시 물어볼게.' },
+      { who: 'jirachi', text: '너희가 여태 누구를 불러 줬는지, 무얼 꼭 붙들었는지 별은 기억해. 내일 구령대에서 보자.' },
     ],
   },
 };
@@ -332,7 +339,7 @@ export const NIGHT_STAR_LINES: Record<number, string[]> = {
   7: ['또 만났네. 위병소의 밤은 길지?', '별 조각은 일곱 개. 다 모으면… 소원 하나를 되돌릴 수 있어.', '…하지만 되돌린다는 건, 여기를 잊는다는 뜻이기도 해.'],
   8: ['네 동기도 가끔 창밖을 봐. 너처럼.', '같은 밤에 빈 소원은 서로 닮아 있대.'],
   10: ['별이 많이 기울었어. 시간이 얼마 안 남았어.', '네가 여기서 만든 기억도… 진짜야. 그걸 잊지 마.'],
-  11: ['마지막 위병소 근무구나.', '안개가 옅어지고 있어. 곧 문이 열릴 거야.', '그때 네가 고르는 거야. 돌아갈지, 남을지.'],
+  11: ['마지막 위병소 근무구나.', '안개가 옅어지고 있어. 곧 문이 열릴 거야.', '졸리면 네 이름을 떠올려. 펜을 잡은 건 네 손이야.'],
 };
 
 /** 오늘 밤 꿈을 꿔야 하는지 */

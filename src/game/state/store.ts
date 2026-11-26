@@ -15,7 +15,7 @@ import { rollcallPool, type RollcallQuestion } from '../data/rollcall';
 import { fixJosa, fmt } from '../engine/text';
 import { teleport } from '../engine/runtime';
 import { extrasForDay } from '../data/extras';
-import { CLUES, CHAPTERS, DREAMS, MEMORY_DECAY, MEMORY_PER_CLUE, MEMORY_PER_DREAM, MEMORY_START, chapterDone, clueDef } from '../data/story';
+import { CLUES, CHAPTERS, DREAMS, MEMORY_DECAY, MEMORY_PER_CLUE, MEMORY_PER_DREAM, MEMORY_START, RETURN_DAYS, chapterDone, clueDef } from '../data/story';
 import { getWorld } from '../engine/map';
 import { SUSPICIONS, suspicionState } from '../data/suspicions';
 import { CANDY_START, NO_PROGRESS, puzzleDef, puzzleReward, type PuzzleProgress } from '../data/puzzles';
@@ -314,7 +314,7 @@ const initialPersist = (): Persist => ({
   quests: [],
   doneQuests: [],
   inventory: {},
-  flags: {},
+  flags: { returnChoices: true, returnHistoryKnown: true },
   tips: [],
   eventIdx: 0,
   eventBegun: false,
@@ -1050,6 +1050,22 @@ export const useGame = create<Store>((set, get) => ({
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return false;
       const data = JSON.parse(raw) as Persist;
+      // Saves made before these choices existed get credit for opportunities already past.
+      if (!data.flags?.returnChoices) {
+        data.flags = { ...data.flags, returnChoices: true };
+        for (const day of RETURN_DAYS) {
+          if (data.day > day || data.flags[`dream_${day}`]) data.flags[`return_${day}`] = true;
+        }
+        if (data.flags.end_true && data.clues?.includes('C-13') && data.memory >= 60) data.flags.end_rescue = true;
+      }
+      // Older saves may have received return credit for nights played before the choices existed.
+      // Keep that credit, but only narrate a specific gesture when its history is known.
+      if (!data.flags.returnHistoryKnown) {
+        for (const day of RETURN_DAYS) {
+          if (data.flags[`return_${day}`]) data.flags[`unconfirmedReturn_${day}`] = true;
+        }
+        data.flags.returnHistoryKnown = true;
+      }
       // 식사 상태는 끼니·시작 시각만 이어받는다. 저장할 때 이미 먹었으면 식사는 끝난 것으로
       const mc = data.mealCheck;
       const mealCheck = mc ? { meal: mc.meal, start: mc.start, done: !!data.daily?.includes(`meal_${mc.meal}`) } : null;

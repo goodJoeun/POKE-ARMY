@@ -6,12 +6,29 @@ import { fmt } from '../engine/text';
 import { DREAMS, DREAM_FADED, type DreamLine } from '../data/story';
 import SceneryCanvas from './SceneryCanvas';
 import PuzzleBox from './PuzzleBox';
+import Menu from './Menu';
 import { setBgmMood, type CueId } from '../engine/audio';
 import { useLineSound } from '../engine/soundCues';
 import MonsterCanvas from './MonsterCanvas';
 import type { MonsterLook } from '../types';
 
 const JIRACHI = { sprite: 'jirachi', body: '#f8f4d0', belly: '#ffffff', accent: '#f2d050', shape: 'round', ears: 'tuft', tail: 'none', eyes: 'sleepy', mouth: 'smile' } as MonsterLook;
+
+type NightChoice = { prompt: string; options: { label: string; reply: string; intent: 'return' | 'stay' }[] };
+const NIGHT_CHOICES: Partial<Record<number, NightChoice>> = {
+  4: { prompt: '병실 불빛 속에서 엄마가 손을 내민다.', options: [
+    { label: '엄마의 손을 마주 잡는다', reply: '엄마가 내 손가락을 꼭 쥔다. 저쪽에서도 내 손이 움직였나 보다.', intent: 'return' },
+    { label: '조금 더 자고 싶어 눈을 감는다', reply: '손끝에 닿던 온기가 멀어진다. 모포를 턱밑까지 끌어올린다.', intent: 'stay' },
+  ] },
+  8: { prompt: '빈 수첩 위에 연필이 놓여 있다.', options: [
+    { label: '돌아가기 두려운 이유를 한 줄 적는다', reply: '「눈을 뜨면 다시 입대해야 한다.」 다 쓰고 나니, 처음으로 그 문장을 끝까지 읽을 수 있다.', intent: 'return' },
+    { label: '오늘은 수첩을 덮는다', reply: '연필 자국 하나 없는 두 쪽이 포개진다. 오늘 밤은 그 얘길 꺼내고 싶지 않다.', intent: 'stay' },
+  ] },
+  11: { prompt: '꿈속 초소에 빈 근무일지가 펼쳐져 있다.', options: [
+    { label: '내 이름을 써 두고 눈을 뜬다', reply: '내 이름을 천천히 소리 내 읽는다. 창 너머에서 익숙한 목소리가 따라 읽는다.', intent: 'return' },
+    { label: '일지를 덮고 따뜻한 꿈에 머문다', reply: '이름 칸을 비워 둔 채 표지를 덮는다. 내일도 이 모포 속에서 깨고 싶다.', intent: 'stay' },
+  ] },
+};
 
 /**
  * 꿈: 별의 언덕 — 하루 끝(결산) 전에 보는 짧은 장면.
@@ -21,11 +38,13 @@ export default function Dream() {
   const s = useGame();
   const dream = DREAMS[s.day];
   // 기억이 30 이하면 꿈이 흐려진다 (첫날 꿈과 지라치가 이름을 밝히는 밤은 그대로)
-  const faded = s.memory <= 30 && s.day > 1 && s.day !== 11;
+  const faded = s.memory <= 30 && s.day > 1 && !NIGHT_CHOICES[s.day];
+  const [reply, setReply] = useState('');
   const lines = useMemo<(DreamLine & { scene: 'room' | 'hill' })[]>(() => [
     ...(dream?.room ?? []).map((l) => ({ ...l, scene: 'room' as const })),
     ...((faded ? DREAM_FADED : dream?.hill) ?? []).map((l) => ({ ...l, scene: 'hill' as const })),
-  ], [dream, faded]);
+    ...(reply ? [{ who: 'narr' as const, text: reply, scene: 'hill' as const }] : []),
+  ], [dream, faded, reply]);
   const [idx, setIdx] = useState(0);
   const [typed, setTyped] = useState(0);
   const ctx = { branch: s.branch, name: s.name, day: s.day };
@@ -57,14 +76,17 @@ export default function Dream() {
 
   // 🧩 P-01 첫 번째 조각: 첫날 밤, 언덕의 창문을 처음 본 직후에 조각을 끼운다
   const [puzzle, setPuzzle] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const decision = NIGHT_CHOICES[s.day];
   const puzzleAt = lines.findIndex((l) => l.scene === 'hill');
   const advance = useCallback(() => {
-    if (puzzle) return;
+    if (puzzle || choosing) return;
     if (typed < text.length) { setTyped(text.length); return; }
     if (s.day === 1 && idx === puzzleAt && !useGame.getState().puzzles['P-01']?.solved) { setPuzzle(true); return; }
     if (idx < lines.length - 1) setIdx(idx + 1);
+    else if (decision && !s.flags[`return_${s.day}`] && !s.flags[`stay_${s.day}`]) setChoosing(true);
     else useGame.getState().finishDream();
-  }, [puzzle, typed, text.length, idx, lines.length, s.day, puzzleAt]);
+  }, [puzzle, choosing, typed, text.length, idx, lines.length, s.day, s.flags, decision, puzzleAt]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -185,6 +207,18 @@ export default function Dream() {
             setIdx((i) => Math.min(i + 1, lines.length - 1));
           }}
         />
+      )}
+      {choosing && decision && (
+        <Menu title={decision.prompt} onClose={() => setChoosing(false)} options={decision.options.map(({ label, reply, intent }) => ({
+          label,
+          onSelect: () => {
+            s.storyFlag(`${intent}_${s.day}`);
+            s.log(label);
+            setReply(reply);
+            setIdx(lines.length);
+            setChoosing(false);
+          },
+        }))} />
       )}
     </div>
   );

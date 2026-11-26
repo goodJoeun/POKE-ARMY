@@ -76,7 +76,7 @@ import {
   type MapId,
   type WorldDef,
 } from "../engine/map";
-import { drawMonster, type CapType, type Dir } from "../engine/drawMonster";
+import { drawMonster, drawUnknownSelf, type CapType, type Dir } from "../engine/drawMonster";
 import { runtime } from "../engine/runtime";
 import { npcCap, type SpeakerInfo } from "../engine/speakers";
 import type {
@@ -107,7 +107,7 @@ import { WATCH_EXTRA, nightScene, workScene } from "../data/workScenes";
 import { breakfastTalk, mealTalk } from "../data/mealTalks";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
 import { SUSPICIONS, suspicionLeads } from "../data/suspicions";
-import { WAKE_TALK_AT, errandNow, mirrorPending, orderStage, reportStage, wakeTalkPending } from "../data/errands";
+import { WAKE_TALK_AT, errandNow, mirrorPending, orderStage, reportStage, selfUnseen, wakeTalkPending } from "../data/errands";
 import { SLEEPY_SEEN, WOKE_SENIOR, sleepySenior } from "../data/reveille";
 import { MirrorReveal } from "./Scenes";
 import {
@@ -1436,8 +1436,9 @@ export default function World() {
         lines: [
           {
             who: "me",
-            text: "(휴… 첫 점호는 어떻게든 넘겼다. 포켓몬 몸이라도 군대는 군대구나.)",
+            text: "(휴… 첫 점호는 어떻게든 넘겼다. 그런데 아까, 분대장이 명단 한 줄에서 멈췄다.)",
           },
+          { who: "narr", text: "맨 끝의 병장은 이름도 안 불렸는데 손을 들었다. 분대장은 빈 줄 옆에 동그라미를 쳤다. 인원은 맞았다." },
           {
             who: "me",
             text: "(유튜브에서 배운 대로만 하자. 집합은 무조건 5분 전, 대답은 크게, 모르면 솔직하게 물어보기!)",
@@ -1854,7 +1855,7 @@ export default function World() {
   useEffect(() => {
     const st = useGame.getState();
     if (
-      overlay ||
+      overlayRef.current ||
       rollcall ||
       cer.current ||
       st.day !== 1 ||
@@ -2444,7 +2445,7 @@ export default function World() {
     const st = useGame.getState();
     if (key === "roof") {
       // 옥상은 추리 정리 1을 마쳤거나, 옥상 일을 맡았을 때(이불 당번 등) 열린다
-      const roofOpen = st.flags.roof || st.flags["order_D-02"] || st.flags["order_D-03"];
+      const roofOpen = st.flags.roof || st.flags["order_D-02"] || st.flags["order_D-03"] || st.flags["order_M-13"];
       if (!roofOpen) {
         setOverlay({
           type: "dialogue",
@@ -7479,6 +7480,8 @@ export default function World() {
         meInBed.current &&
         (st.nightDuty?.phase === "sleep" || st.nightDuty?.phase === "woken");
       if (!meLying) meInBed.current = false;
+      // ❓ 1일차 화장실 거울을 보기 전: 내가 무슨 포켓몬이 됐는지 아직 모른다
+      const meUnseen = selfUnseen(st);
       if (meLying)
         ents.push({
           y: p.y,
@@ -7489,14 +7492,17 @@ export default function World() {
           y: p.y,
           draw: () => {
             const fx = fxOf("me", p.dir, p.x, p.y);
-            drawMonster(
-              g,
-              look,
-              p.x * TILE,
-              p.y * TILE + 12 + fx.dy - fx.hop,
-              36,
-              { dir: fx.dir, t, walking: p.moving, cap: b.cap },
-            );
+            if (meUnseen)
+              drawUnknownSelf(g, p.x * TILE, p.y * TILE + 12 + fx.dy - fx.hop, 36, { t, walking: p.moving });
+            else
+              drawMonster(
+                g,
+                look,
+                p.x * TILE,
+                p.y * TILE + 12 + fx.dy - fx.hop,
+                36,
+                { dir: fx.dir, t, walking: p.moving, cap: b.cap },
+              );
             if (myMeal.tray && !myMeal.eating)
               drawTray(
                 g,
