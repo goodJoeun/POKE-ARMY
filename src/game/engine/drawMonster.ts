@@ -32,7 +32,7 @@ export interface DrawOpts {
 
 /** 스프라이트의 실제 그림 영역 (투명 여백 제외). 이미지마다 한 번만 잰다 */
 const boxCache = new WeakMap<CanvasImageSource, { x: number; y: number; w: number; h: number }>();
-function contentBox(img: HTMLCanvasElement | HTMLImageElement, sw: number, sh: number) {
+export function contentBox(img: HTMLCanvasElement | HTMLImageElement, sw: number, sh: number) {
   const hit = boxCache.get(img);
   if (hit) return hit;
   let box = { x: 0, y: 0, w: sw, h: sh };

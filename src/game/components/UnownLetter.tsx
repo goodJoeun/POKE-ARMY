@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { getSprite, onSpritesLoaded } from '../engine/sprites';
+import { contentBox } from '../engine/drawMonster';
 import { type Point, line, rect } from '../engine/scenery/pixels';
 
 // Six silhouettes for installations without the optional battle sprites.
@@ -22,9 +23,11 @@ export default function UnownLetter({ index }: { index: number }) {
       g.clearRect(0, 0, 24, 24);
       const sprite = getSprite('unown', 'front');
       if (sprite) {
-        const scale = Math.min(23 / sprite.width, 23 / sprite.height);
+        // 전투 그림은 둘레가 투명해서 그대로 줄이면 글자가 콩알만 해진다: 실제 그림 영역만 잘라 칸을 채운다
+        const box = contentBox(sprite, sprite.width, sprite.height);
+        const scale = Math.min(23 / box.w, 23 / box.h);
         g.imageSmoothingEnabled = false;
-        g.drawImage(sprite, (24 - sprite.width * scale) / 2, (24 - sprite.height * scale) / 2, sprite.width * scale, sprite.height * scale);
+        g.drawImage(sprite, box.x, box.y, box.w, box.h, (24 - box.w * scale) / 2, (24 - box.h * scale) / 2, box.w * scale, box.h * scale);
         return;
       }
       const form = strokes[index];

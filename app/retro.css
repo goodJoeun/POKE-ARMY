@@ -376,8 +376,12 @@ canvas { image-rendering: pixelated; }
 .parade-star-art { display: block; width: clamp(68px, 16vh, 120px); height: auto; }
 .story-bg-actors .jirachi { animation: storyFloat 2.4s ease-in-out infinite; filter: drop-shadow(0 0 18px rgba(255,240,170,0.9)); }
 @keyframes storyFloat { 50% { transform: translateY(-10px); } }
-.story-bg-unown { position: absolute; left: 50%; top: 28%; transform: translateX(-50%); display: flex; gap: 4px; }
-.story-bg-unown canvas { display: block; width: clamp(30px, 5vw, 54px); height: auto; }
+/* 안농 여섯: 서가 사이 통로 위로 고르게 흩어져, 높낮이를 달리해 둥실둥실 떠 있다 */
+.story-bg-unown { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); display: flex; align-items: flex-start; gap: clamp(6px, 2.4vw, 26px); }
+.story-bg-unown canvas { display: block; width: clamp(38px, 6.5vw, 70px); height: auto; image-rendering: pixelated; animation: storyFloat 2.8s ease-in-out infinite; }
+.story-bg-unown span:nth-child(3n+2) { margin-top: clamp(16px, 4vh, 36px); }
+.story-bg-unown span:nth-child(3n) { margin-top: clamp(6px, 1.6vh, 14px); }
+.story-bg-unown span:nth-child(2n) canvas { animation-delay: -1.4s; }
 .story-bg-unown span { opacity: 0; animation: unownIn 1.2s ease-out forwards; filter: drop-shadow(0 0 6px rgba(200,220,255,0.6)); }
 @keyframes unownIn { from { opacity: 0; transform: translateY(-30px) scale(0.6); } to { opacity: 1; transform: none; } }
 .resist .resist-meter i { background: linear-gradient(90deg, #8a6ae8, #e05ab8); }
