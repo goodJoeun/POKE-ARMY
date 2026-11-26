@@ -16,7 +16,8 @@ export type BgmId =
 export type JingleId =
   | 'jingle_clue_found' | 'jingle_star_fragment' | 'jingle_quest_complete' | 'jingle_promotion' | 'jingle_heal'
   | 'jingle_day_end_sleep' | 'jingle_dream_enter' | 'jingle_late_scolded' | 'jingle_minigame_clear' | 'jingle_minigame_fail'
-  | 'jingle_reveille' | 'jingle_lights_out' | 'jingle_shock';
+  | 'jingle_reveille' | 'jingle_lights_out' | 'jingle_shock'
+  | 'jingle_evo_start' | 'jingle_evolution' | 'jingle_evo_success';
 export type SfxId =
   | 'sfx_cursor' | 'sfx_confirm' | 'sfx_cancel' | 'sfx_text_blip' | 'sfx_save' | 'sfx_alert' | 'sfx_bump' | 'sfx_footstep'
   | 'sfx_door' | 'sfx_door_iron' | 'sfx_whistle' | 'sfx_purchase' | 'sfx_pendulum_ticktock' | 'sfx_fog_whiteout' | 'sfx_star_twinkle' | 'sfx_stamina_empty'
@@ -89,6 +90,11 @@ const MIX: Record<CueId, Mix> = {
   jingle_reveille: { db: -2, hp: 30 },
   jingle_lights_out: { db: 0, hp: 30 },
   jingle_shock: { db: -2, hp: 30 },
+  // 진급(진화) 연출: 어나더 레드의 진화 음원
+  // (원본 음량이 제각각이라 다른 징글과 비슷하게 맞췄다: 시작음 · 곡은 작게 녹음돼 있고 성공음은 크다)
+  jingle_evo_start: { db: 3, hp: 30 },
+  jingle_evolution: { db: 3, hp: 30 },
+  jingle_evo_success: { db: -8, hp: 30 },
 };
 
 /** 쎄한 소리: 울리는 순간 BGM이 뚝 끊긴다 (쎄한 깨달음 · 심장 · 비명 · 진자 · 안개 · 잡음) */
@@ -337,6 +343,12 @@ export function releaseHush() {
   if (!ctx || hushEnd !== Infinity) return;
   hushEnd = ctx.currentTime + 1; // 아직 조용한 중이다 (정적이 시작된 시각은 그대로)
   hushUntil(ctx.currentTime);
+}
+
+/** 곧 울릴 소리를 미리 불러 둔다 (긴 음원이 제 박자에 나오게) */
+export function preloadCues(ids: CueId[]) {
+  if (!ensure()) return;
+  for (const id of ids) void load(CUE_FILE[id] ?? id).catch(() => undefined);
 }
 
 interface Shot { id: CueId; dur: number; src: AudioBufferSourceNode; gain: GainNode }

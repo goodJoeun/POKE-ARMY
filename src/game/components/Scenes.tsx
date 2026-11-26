@@ -20,7 +20,7 @@ import { fixJosa, fmt } from '../engine/text';
 const pj = (w: string, p: string) => fixJosa(w + p).slice(w.length);
 import type { Line } from '../types';
 import { RankBadge } from './Hud';
-import { playSfx, queueJingle, setBgmMood, type BgmMood } from '../engine/audio';
+import { fadeJingle, playJingle, playSfx, preloadCues, queueJingle, setBgmMood, type BgmMood } from '../engine/audio';
 import { useLineSound } from '../engine/soundCues';
 
 // ───────── 타이틀 ─────────
@@ -376,7 +376,7 @@ export function Promotion() {
     <div className="scene promo-scene">
       <h2>🎖️ 진급 신고</h2>
       <div className="promo-evo">
-        <div>축하합니다! {s.name}{pj(s.name, '은(는)')} <b>{RANKS[rank - 1]}</b>에서 <b>{RANKS[rank]}</b>{pj(RANKS[rank], '(으)로')} 진화했다!</div>
+        <div>축하합니다! {s.name}{pj(s.name, '은(는)')} 진화…는 안 했지만, <b>{RANKS[rank - 1]}</b>에서 <b>{RANKS[rank]}</b>{pj(RANKS[rank], '(으)로')} 진급했다!</div>
       </div>
       <div className="promo-badge"><RankBadge rankIdx={rank} size={60} /><div>{RANKS[rank - 1]} → <b>{RANKS[rank]}</b></div></div>
       <div className="promo-cpt">
@@ -401,15 +401,22 @@ export function Promotion() {
 }
 
 /**
- * 진급 = 진화: 클래식 포켓몬 진화 연출.
- * "…어라!?" → 하얗게 빛나며 크기가 바뀌는 깜빡임(점점 빨라짐) → 섬광 → "축하합니다! …진화했다!"
+ * 진급 = 진화: 클래식 포켓몬 진화 연출… 인 줄 알았는데.
+ * "……오잉!? ○○의 모습이……!" → 진화 곡과 함께 하얗게 빛나며 크기가 바뀌는 깜빡임(점점 빨라짐) → 섬광
+ * → 모습은 그대로다. "축하합니다! ○○은(는) 진화……는 안 했다." → "대신 ○○(으)로 진급했다!" (계급장만 바뀐다)
  * 깜빡이는 동안 B(Esc/Backspace)를 누르면… 진급은 멈출 수 없다.
  */
-const EVO_START = 1.6, EVO_END = 6.4, EVO_FLASH = 6.4, EVO_DONE = 7.4;
+const EVO_START = 1.6; // 깜빡임이 시작된다 (진화 곡)
+const EVO_FLASH = 8.6; // 섬광: 곡이 뚝 끊긴다
+const EVO_SAME = 9.8; // "축하합니다! ○○은(는) 진화……"
+const EVO_NOPE = 11.7; // "……는 안 했다."
+const EVO_RANK = 13.6; // "대신 ○○(으)로 진급했다!" 팡파르와 함께 계급장이 바뀐다
+const EVO_DONE = 14.4; // 여기부터 다음 화면으로 넘길 수 있다
+const EVO_END = EVO_FLASH;
 const EVO_TOGGLES = (() => {
   const out: number[] = [];
   let x = EVO_START, p = 0.62;
-  while (x < EVO_END) { out.push(x); x += p; p = Math.max(0.06, p * 0.84); }
+  while (x < EVO_END) { out.push(x); x += p; p = Math.max(0.06, p * 0.89); }
   return out;
 })();
 function Evolution({ name, look, cap, from, to, onDone }: {
@@ -427,27 +434,35 @@ function Evolution({ name, look, cap, from, to, onDone }: {
     return () => cancelAnimationFrame(raf);
   }, []);
   const done = t >= EVO_DONE;
-  // 🔊 진화 연출: "…어라!?" → 곡이 멎고, 깜빡일 때마다 점점 높아지는 소리 → 섬광 → 진급 팡파르와 함께 행진곡이 돌아온다
-  const togglesNow = EVO_TOGGLES.filter((x) => x <= t).length;
+  // 🔊 진화 연출 (어나더 레드의 진화 음원): "오잉!?" 곡이 멎고 진화 시작음 → 깜빡이는 동안 진화 곡 → 섬광과 함께 뚝
+  //    → 정적 속에 "진화……는 안 했다" → 진화 성공 팡파르와 함께 행진곡이 돌아온다
+  const started = t >= EVO_START;
   const flashed = t >= EVO_FLASH;
-  const cheered = t >= EVO_DONE - 0.4;
+  const nope = t >= EVO_NOPE;
+  const ranked = t >= EVO_RANK;
   useEffect(() => {
-    playSfx('sfx_alert', 0.9);
+    preloadCues(['jingle_evo_start', 'jingle_evolution', 'jingle_evo_success']);
     setBgmMood('none');
-    return () => setBgmMood(null);
+    void playJingle('jingle_evo_start');
+    return () => { setBgmMood(null); fadeJingle('jingle_evolution', 0.2); };
   }, []);
+  useEffect(() => { if (started) void playJingle('jingle_evolution'); }, [started]);
   useEffect(() => {
-    if (togglesNow > 0 && !flashed) playSfx('sfx_evo_pulse', 0.55, 0.8 + (togglesNow / EVO_TOGGLES.length) * 0.9 + (togglesNow % 2 ? 0.12 : 0));
-  }, [togglesNow, flashed]);
-  useEffect(() => { if (flashed) playSfx('sfx_flash', 1); }, [flashed]);
+    if (!flashed) return;
+    fadeJingle('jingle_evolution', 0.1);
+    playSfx('sfx_flash', 1);
+  }, [flashed]);
+  useEffect(() => { if (nope) playSfx('sfx_cancel', 0.9); }, [nope]);
   useEffect(() => {
-    if (!cheered) return;
-    queueJingle('jingle_promotion', 6);
+    if (!ranked) return;
+    void playJingle('jingle_evo_success');
     setBgmMood(null);
-  }, [cheered]);
+  }, [ranked]);
   const advance = useCallback(() => {
-    if (done) onDone();
-    else if (t < EVO_START) t0.current -= (EVO_START - t) * 1000; // 첫 멘트는 넘길 수 있다
+    if (done) { onDone(); return; }
+    // 첫 멘트와 섬광 뒤의 멘트는 넘길 수 있다 (깜빡이는 동안은 지켜볼 수밖에 없다)
+    const next = t < EVO_START ? EVO_START : t < EVO_SAME ? null : [EVO_NOPE, EVO_RANK, EVO_DONE].find((x) => x > t);
+    if (next) t0.current -= (next - t) * 1000;
   }, [done, t, onDone]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -466,12 +481,17 @@ function Evolution({ name, look, cap, from, to, onDone }: {
   const white = t >= EVO_START - 0.5 && t < EVO_FLASH + 0.15;
   const scale = flicking ? (toggles % 2 ? 1.2 : 0.86) : t >= EVO_FLASH ? 1 + Math.max(0, 0.15 - (t - EVO_FLASH) * 0.3) : 1;
   const flash = t >= EVO_FLASH ? Math.max(0, 1 - (t - EVO_FLASH) / 0.9) : 0;
-  const glow = flicking ? Math.min(1, (t - EVO_START) / (EVO_END - EVO_START)) : t >= EVO_FLASH ? Math.max(0, 1 - (t - EVO_FLASH) / 1.2) : 0;
-  const text = t < EVO_START ? `…어라!? ${name}의 모습이…!`
-    : t < EVO_FLASH ? (cancelTry > 0 ? '…진급은 멈출 수 없다! (B 버튼은 군대에서 통하지 않는다)' : `…어라!? ${name}의 모습이…!`)
-    : t < EVO_DONE - 0.4 ? '……!'
-    : fixJosa(`축하합니다! ${name}은(는) ${RANKS[from]}에서 ${RANKS[to]}(으)로 진화했다!`);
-  const shownRank = t >= EVO_FLASH ? to : from;
+  const glow = flicking ? Math.min(1, (t - EVO_START) / (EVO_END - EVO_START))
+    : ranked ? Math.max(0, 0.7 - (t - EVO_RANK) / 2)
+    : t >= EVO_FLASH ? Math.max(0, 1 - (t - EVO_FLASH) / 1.2) : 0;
+  // 본가의 진화 멘트 그대로… 인데 끝이 다르다
+  const text: string[] = t < EVO_START ? [`……오잉!? ${name}의 모습이……!`]
+    : t < EVO_FLASH ? [cancelTry > 0 ? '…진급은 멈출 수 없다! (B 버튼은 군대에서 통하지 않는다)' : `……오잉!? ${name}의 모습이……!`]
+    : t < EVO_SAME ? ['……!']
+    : t < EVO_NOPE ? [fixJosa(`축하합니다! ${name}은(는) 진화……`)]
+    : t < EVO_RANK ? [fixJosa(`축하합니다! ${name}은(는) 진화……는 안 했다.`)]
+    : [fixJosa(`${name}은(는) 진화……는 안 했다.`), fixJosa(`대신 ${RANKS[from]}에서 ${RANKS[to]}(으)로 진급했다!`)];
+  const shownRank = ranked ? to : from;
   return (
     <div className="evo-scene" onClick={advance}>
       <div className="evo-rays" style={{ opacity: glow }} />
@@ -483,14 +503,14 @@ function Evolution({ name, look, cap, from, to, onDone }: {
       <div className="evo-mon" style={{ transform: `scale(${scale})` }}>
         <MonsterCanvas look={look} size={200} cap={cap} silhouette={white ? '#ffffff' : undefined} />
       </div>
-      <div className={`evo-rank ${t >= EVO_FLASH ? 'new' : ''}`}>
+      <div className={`evo-rank ${ranked ? 'new' : ''}`}>
         <RankBadge rankIdx={shownRank} size={44} />
         <span>{RANKS[shownRank]}</span>
       </div>
       {flash > 0 && <div className="evo-flash" style={{ opacity: flash }} />}
       <div className="evo-text">
-        <div>{text}</div>
-        {(done || t < EVO_START) && <span className="next-indicator">▼</span>}
+        {text.map((line, i) => <div key={i}>{line}</div>)}
+        {(done || t < EVO_START || (t >= EVO_SAME && t < EVO_RANK)) && <span className="next-indicator">▼</span>}
       </div>
     </div>
   );

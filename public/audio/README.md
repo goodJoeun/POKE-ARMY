@@ -84,6 +84,18 @@ Safari 일부 버전은 ogg를 못 읽을 수 있어요. 그럴 땐 `wav/`(원�
 
 어떤 소리가 언제 나는지는 `src/game/components/BgmDirector.tsx`(상황별 곡 · 징글)와 `src/game/engine/soundCues.ts`(대사 · 알림 문구 → 효과음)에 있다.
 
+## 진급(진화) 연출의 음원 — 직접 만든 소리가 아니다
+
+진급 연출은 본가의 진화 장면을 그대로 흉내 내므로, 이 세 파일만은 포켓몬스터 어나더 레드(Pokémon Essentials 기반 팬 게임)의 `Audio` 폴더에 있는 진화 음원을 그대로 가져왔다. 위의 "원작 게임 곡을 쓰지 않았어요"의 예외다.
+
+| 파일 | 원본 | 쓰는 곳 |
+| --- | --- | --- |
+| jingle_evo_start | `Audio/ME/Evolution start.ogg` | "……오잉!? ○○의 모습이……!" |
+| jingle_evolution | `Audio/BGM/Evolution.ogg` | 하얗게 깜빡이는 동안 (섬광에서 뚝 끊긴다 · 40초 중 앞의 7초쯤만 쓴다) |
+| jingle_evo_success | `Audio/ME/Evolution success.ogg` | "대신 ○○(으)로 진급했다!" |
+
+원본 음량이 제각각이라 `engine/audio.ts`의 `MIX`에서 다른 징글과 비슷하게 맞췄다. `jingle_promotion`은 이제 쓰지 않는다.
+
 ## 쎄한 효과음과 정적
 
 `sfx_suspicion` · `sfx_heartbeat` · `jingle_shock` · `sfx_pendulum_ticktock` · `sfx_fog_whiteout` · `sfx_radio_static`이 울리면 BGM이 뚝 끊긴다 (`engine/audio.ts`의 `EERIE`). 대사에 붙은 소리면 그 줄이 떠 있는 동안, 걸어 다니다 울린 소리면 3.6초쯤 조용하다가 천천히 돌아온다.
