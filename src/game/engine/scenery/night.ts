@@ -42,36 +42,45 @@ function pine(g: Ink, x: number, y: number, h: number, color: string) {
   }
 }
 
+/** 꼭짓점이 다섯인 별 (반지름 r의 꼭짓점, 안쪽 오목점은 r × k) */
+function starPoints(r: number, k = 0.44): [number, number][] {
+  return Array.from({ length: 10 }, (_, i) => {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * k : r;
+    return [Math.cos(a) * rr, Math.sin(a) * rr] as [number, number];
+  });
+}
+
+/**
+ * 언덕 위에 떠 있는 별 모양 창문 (P-01 · P-21의 그 창문): 나무 틀 너머로 입대 전날 밤 내 방의 불빛 · 커튼 · 책상 스탠드가 보인다.
+ */
 function homeWindow(g: Ink, x: number, y: number, scale: number) {
   g.save();
   g.translate(Math.round(x), Math.round(y));
   g.scale(scale, scale);
-  wash(g, 0, 0, 48, '#ffd59b55');
-  // The open casements frame a glimpse of the desk and curtains in the player's room.
-  rect(g, '#342b49', -17, -21, 34, 41);
-  rect(g, '#b58775', -16, -21, 32, 39);
-  rect(g, '#5e424f', -14, -19, 28, 36);
-  rect(g, '#ffd291', -12, -17, 24, 32);
-  rect(g, '#ffeab6', -11, -16, 10, 25);
-  polygon(g, '#be786b', [[-12, -17], [-5, -17], [-7, -9], [-11, -3], [-9, 11], [-12, 12]]);
-  polygon(g, '#cd8874', [[12, -17], [7, -17], [7, -10], [11, -4], [9, 10], [12, 12]]);
-  rect(g, '#ac7565', -11, 10, 22, 4);
-  rect(g, '#a87860', 3, 5, 1, 5);
-  polygon(g, '#edaa6f', [[1, 2], [6, 2], [8, 6], [-1, 6]]);
-  rect(g, '#805754', -1, -17, 2, 32);
-  rect(g, '#9b6857', -12, -7, 24, 2);
-  for (const side of [-1, 1]) {
-    g.save(); g.scale(side, 1);
-    polygon(g, '#765062', [[17, -19], [26, -24], [26, 15], [17, 18]]);
-    polygon(g, '#d3ada1', [[18, -17], [24, -20], [24, 13], [18, 15]]);
-    polygon(g, '#8b8298', [[19, -14], [23, -16], [23, -7], [19, -5]]);
-    polygon(g, '#b49aa2', [[19, -3], [23, -5], [23, 11], [19, 12]]);
-    line(g, '#f3c899', 16, -20, 10, -5);
-    g.restore();
-  }
-  rect(g, '#805963', -20, 17, 40, 4);
-  rect(g, '#ffdfaa', -20, 16, 40, 1);
-  for (let i = 0; i < 7; i++) rect(g, '#c99c86', -16 + i * 5, 19, 2, 1);
+  wash(g, 0, 0, 52, '#ffd59b55');
+  const R = 25;
+  polygon(g, '#342b49', starPoints(R + 3));
+  polygon(g, '#b58775', starPoints(R + 1));
+  polygon(g, '#d9a98e', starPoints(R + 1).slice(0, 4));
+  polygon(g, '#5e424f', starPoints(R - 2));
+  // 창 너머 내 방: 틀 안쪽으로만 보이게 오려 낸다
+  g.save();
+  g.beginPath();
+  starPoints(R - 3).forEach(([px, py], i) => i ? g.lineTo(px, py) : g.moveTo(px, py));
+  g.closePath();
+  g.clip();
+  rect(g, '#ffd291', -R, -R, R * 2, R * 2);
+  rect(g, '#ffeab6', -9, -R, 10, R * 2);
+  polygon(g, '#be786b', [[-R, -R], [-6, -R], [-9, -6], [-13, 2], [-10, 14], [-R, 16]]);
+  polygon(g, '#cd8874', [[R, -R], [6, -R], [8, -6], [12, 2], [10, 14], [R, 16]]);
+  rect(g, '#ac7565', -R, 9, R * 2, R);
+  rect(g, '#a87860', 3, 3, 1, 6);
+  polygon(g, '#edaa6f', [[1, 0], [6, 0], [8, 4], [-1, 4]]);
+  wash(g, 4, 4, 9, '#fff3c870');
+  rect(g, '#805754', -1, -R, 2, R * 2);
+  rect(g, '#9b6857', -R, -5, R * 2, 2);
+  g.restore();
+  line(g, '#ffe4b0', -1, -R - 1, 1, 0);
   g.restore();
 }
 
