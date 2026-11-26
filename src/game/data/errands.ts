@@ -36,9 +36,12 @@ interface Progress {
   mealCheck: { done: boolean } | null;
 }
 
+/** 1일차, 화장실 거울을 보기 전: 내가 무슨 포켓몬이 됐는지 아직 모른다 → 내 모습은 물음표로 보인다 */
+export const selfUnseen = (s: { day: number; flags: Record<string, boolean> }) =>
+  s.day === 1 && !s.flags.sawSelf && !s.flags.tutorial;
 /** 전입 다음 날 아침(1일차): 분대장이 세수하고 오라고 했다 → 1층 화장실 세면대 거울에서 내 모습을 확인한다 */
 export const mirrorPending = (s: { day: number; flags: Record<string, boolean> }) =>
-  s.day === 1 && !!s.flags.wokeUp && !s.flags.sawSelf && !s.flags.tutorial;
+  !!s.flags.wokeUp && selfUnseen(s);
 /** 거울을 본 뒤: 생활관으로 돌아가면 맞선임이 정신 차리라고 한마디 한다 */
 export const wakeTalkPending = (s: { day: number; flags: Record<string, boolean> }) =>
   s.day === 1 && !!s.flags.sawSelf && !s.flags.wakeTalk && !s.flags.tutorial;

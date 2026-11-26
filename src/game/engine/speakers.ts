@@ -9,6 +9,8 @@ export interface SpeakerInfo {
   sub: string;
   look: MonsterLook | null;
   cap: CapType;
+  /** 아직 거울로 확인하지 못한 내 모습 (초상화를 물음표로) */
+  unknown?: boolean;
 }
 
 export function npcCap(branch: BranchId, id: NpcId): CapType {
@@ -26,12 +28,14 @@ export function npcSpeaker(branch: BranchId, id: NpcId, day: number): SpeakerInf
   };
 }
 
-export function playerSpeaker(branch: BranchId, speciesId: string, name: string, day: number): SpeakerInfo {
+/** unseen: 1일차 거울을 보기 전이라 내가 무슨 포켓몬인지 아직 모른다 */
+export function playerSpeaker(branch: BranchId, speciesId: string, name: string, day: number, unseen = false): SpeakerInfo {
   const sp = findSpecies(speciesId);
   return {
     name: `${RANKS[rankIdxForDay(day)]} ${name}`,
-    sub: sp ? `나 · ${sp.name}` : '나',
+    sub: unseen ? '나 · ???' : sp ? `나 · ${sp.name}` : '나',
     look: sp?.look ?? null,
-    cap: BRANCHES[branch].cap,
+    cap: unseen ? null : BRANCHES[branch].cap,
+    unknown: unseen,
   };
 }

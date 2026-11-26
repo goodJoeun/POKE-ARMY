@@ -6,6 +6,7 @@ import { TEXT_SPEED, useSettings } from '../state/settings';
 import { fmt } from '../engine/text';
 import { npcSpeaker, playerSpeaker, type SpeakerInfo } from '../engine/speakers';
 import MonsterCanvas from './MonsterCanvas';
+import { selfUnseen } from '../data/errands';
 import { playCue, playSfx } from '../engine/audio';
 import { lineCue, useLineSound } from '../engine/soundCues';
 
@@ -27,6 +28,7 @@ interface Props {
 
 export default function DialogueBox({ script, onChoice, onClose }: Props) {
   const { branch, name, day, speciesId } = useGame();
+  const unseen = useGame(selfUnseen);
   const ctx = { branch, name, day };
   const [lines, setLines] = useState<Line[]>(script.lines);
   const [idx, setIdx] = useState(0);
@@ -58,12 +60,12 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
   const speaker: SpeakerInfo | null = useMemo(() => {
     if (!line) return null;
     if (line.who === 'narr') return null;
-    if (line.who === 'me') return playerSpeaker(branch, speciesId, name, day);
+    if (line.who === 'me') return playerSpeaker(branch, speciesId, name, day, unseen);
     if (line.who === 'npc' && script.custom) return script.custom;
     const id = (line.who === 'npc' ? script.npc : line.who) as NpcId | undefined;
     if (!id) return null;
     return npcSpeaker(branch, id, day);
-  }, [line, branch, speciesId, name, day, script.npc, script.custom]);
+  }, [line, branch, speciesId, name, day, unseen, script.npc, script.custom]);
 
   const advance = useCallback(() => {
     if (phase === 'choices') return;
@@ -122,7 +124,7 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
       <div className="dialogue">
         {speaker?.look && (
           <div className="portrait">
-            <MonsterCanvas look={speaker.look} size={124} cap={speaker.cap} />
+            <MonsterCanvas look={speaker.look} size={124} cap={speaker.cap} unknown={speaker.unknown} />
           </div>
         )}
         <div className="dialogue-body">

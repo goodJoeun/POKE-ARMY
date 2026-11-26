@@ -76,7 +76,7 @@ import {
   type MapId,
   type WorldDef,
 } from "../engine/map";
-import { drawMonster, type CapType, type Dir } from "../engine/drawMonster";
+import { drawMonster, drawUnknownSelf, type CapType, type Dir } from "../engine/drawMonster";
 import { runtime } from "../engine/runtime";
 import { npcCap, type SpeakerInfo } from "../engine/speakers";
 import type {
@@ -107,7 +107,7 @@ import { WATCH_EXTRA, nightScene, workScene } from "../data/workScenes";
 import { breakfastTalk, mealTalk } from "../data/mealTalks";
 import { DUTY_BOARD, ORDERS } from "../data/orders";
 import { SUSPICIONS, suspicionLeads } from "../data/suspicions";
-import { WAKE_TALK_AT, errandNow, mirrorPending, orderStage, reportStage, wakeTalkPending } from "../data/errands";
+import { WAKE_TALK_AT, errandNow, mirrorPending, orderStage, reportStage, selfUnseen, wakeTalkPending } from "../data/errands";
 import { SLEEPY_SEEN, WOKE_SENIOR, sleepySenior } from "../data/reveille";
 import { MirrorReveal } from "./Scenes";
 import {
@@ -7480,6 +7480,8 @@ export default function World() {
         meInBed.current &&
         (st.nightDuty?.phase === "sleep" || st.nightDuty?.phase === "woken");
       if (!meLying) meInBed.current = false;
+      // ❓ 1일차 화장실 거울을 보기 전: 내가 무슨 포켓몬이 됐는지 아직 모른다
+      const meUnseen = selfUnseen(st);
       if (meLying)
         ents.push({
           y: p.y,
@@ -7490,14 +7492,17 @@ export default function World() {
           y: p.y,
           draw: () => {
             const fx = fxOf("me", p.dir, p.x, p.y);
-            drawMonster(
-              g,
-              look,
-              p.x * TILE,
-              p.y * TILE + 12 + fx.dy - fx.hop,
-              36,
-              { dir: fx.dir, t, walking: p.moving, cap: b.cap },
-            );
+            if (meUnseen)
+              drawUnknownSelf(g, p.x * TILE, p.y * TILE + 12 + fx.dy - fx.hop, 36, { t, walking: p.moving });
+            else
+              drawMonster(
+                g,
+                look,
+                p.x * TILE,
+                p.y * TILE + 12 + fx.dy - fx.hop,
+                36,
+                { dir: fx.dir, t, walking: p.moving, cap: b.cap },
+              );
             if (myMeal.tray && !myMeal.eating)
               drawTray(
                 g,
