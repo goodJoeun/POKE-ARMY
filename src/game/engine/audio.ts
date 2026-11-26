@@ -283,12 +283,17 @@ function rebuildAudio() {
     try { cur.src.stop(); } catch { /* 이미 끝남 */ }
   }
   jingleNow = null;
+  // 징글·정적 시각은 옛 오디오의 시계 기준이다 → 새 오디오(시계가 0부터)에선 지운다.
+  // 쎄한 줄이 떠 있어 붙잡던 정적만 새 오디오에서도 이어 간다
+  const held = hushEnd === Infinity;
   duckUntil = 0;
+  hushFrom = hushEnd = 0;
   ctx = null;
-  bgmBus = duckBus = sfxBus = null;
+  bgmBus = duckBus = hushBus = sfxBus = null;
   void old.close().catch(() => undefined);
   const c = ensure();
   if (!c) return;
+  if (held) holdHush();
   // 터치 없이 켜지지 않으면 다음 터치(unlockAudio)가 켠다
   void c.resume().then(() => { if (wanted) void startBgm(wanted.id, wanted.loop); }).catch(() => undefined);
 }
