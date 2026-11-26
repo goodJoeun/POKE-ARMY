@@ -151,6 +151,11 @@ export interface PuzzleDef {
   art?: 'mirrorClock' | 'pendulum' | 'digital' | 'yard';
   /** digital 그림에 띄울 숫자 */
   artText?: string;
+  /**
+   * 지문에 나오는 포켓몬 삽화 (art가 없는 퍼즐만). sprite = manifest 키, count = 같은 포켓몬 여러 마리.
+   * 한 마리면 크게, 여럿이면 작은 도트로 모아 세운다.
+   */
+  cast?: { sprite: string; count?: number }[];
   /** 제한 시간 (실패가 있는 자리에서만 쓴다) */
   timeLimitMs?: number;
   /** 한 번 틀리면 바로 실패 (실패가 있는 자리에서만 쓴다) */
@@ -193,6 +198,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     id: 'P-02',
     mission: 'M-02',
     title: '수건걸이 위의 아이앤트',
+    cast: [{ sprite: 'durant', count: 6 }],
     prompt: [
       '세면대 위 수건걸이 봉의 길이는 100cm. 그 위에 아이앤트 여섯 마리가 있다. 모두 1초에 1cm씩 걷는다.',
       '봉이 좁아서 두 마리가 마주치면 그 자리에서 둘 다 뒤로 돌아 왔던 방향으로 걷는다. 봉 끝에 닿은 아이앤트는 아래로 톡 떨어진다. (몸의 크기와 돌아서는 시간은 치지 않는다)',
@@ -269,6 +275,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     id: 'P-04',
     mission: 'M-04',
     title: '낡은 책 여섯 권',
+    cast: [{ sprite: 'xatu' }],
     prompt: [
       '서가 구석에 얇은 책 여섯 권이 뒤죽박죽 꽂혀 있다. 책등에 별이 하나, 둘, 셋 찍힌 책이 두 권씩이다.',
       '네이티오가 창밖의 해를 본 채 중얼거린다.',
@@ -371,6 +378,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     id: 'P-08',
     mission: 'M-07',
     title: '찢겨 나간 한 장',
+    cast: [{ sprite: 'porygon' }],
     prompt: [
       '지휘통제실 근무 일지에서 종이 한 장이 찢겨 나갔다. 이 일지는 첫 장의 앞면이 1쪽이고, 마지막 쪽까지 빠짐없이 쪽 번호가 붙어 있었다.',
       '상황실 단말기에 사는 폴리곤이 남아 있는 쪽 번호를 모두 더해 주었다. 정확히 1200. 일지가 원래 몇 쪽짜리였는지는 폴리곤도 모른다. 그 기록만 지워져 있다고 한다.',
@@ -501,6 +509,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     id: 'P-22',
     mission: 'S-01',
     title: '백여덟 개의 돌',
+    cast: [{ sprite: 'spiritomb' }],
     prompt: [
       '이끼 낀 돌탑. 무릎 높이부터 가슴 높이까지, 층층이 돌이 쌓여 있다. 돌마다 손톱으로 긁은 글씨가 있다. 「집」 「엄마」 「가고 싶다」.',
       '맨 아래 받침돌 옆에 누군가 새겨 둔 글이 있다.',
@@ -767,6 +776,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     id: 'P-20b',
     mission: 'B-01',
     title: '꿈을 먹는 자 · 2라운드',
+    cast: [{ sprite: 'hypno' }],
     prompt: [
       '슬리퍼가 달콤한 말 세 마디를 늘어놓는다.',
       '둘은 사실이다. 거짓은 어느 것인가? 기회는 한 번뿐이다.',
@@ -789,6 +799,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     id: 'P-20c',
     mission: 'B-01',
     title: '꿈을 먹는 자 · 3라운드',
+    cast: [{ sprite: 'hypno' }],
     prompt: [
       '슬리퍼: "마지막이야. 넌 누구지?"',
       '세 가지 대답이 눈앞에 떠 있다.',
@@ -922,6 +933,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '조리실',
     level: 1,
     title: '꽁치 세 마리',
+    cast: [{ sprite: 'munchlax' }, { sprite: 'magmar' }],
     prompt: [
       '취사 지원병 먹고자가 석쇠 앞에서 발을 동동 구른다. "간부 식당에 꽁치구이 세 마리가 급한데, 석쇠에는 두 마리밖에 안 올라갑니다!"',
       '석쇠 밑에서는 화구 담당 마그마가 불을 지킨다. 화력이 늘 똑같아서 꽁치 한 면을 익히는 데 정확히 5분이 걸리고, 앞뒤 두 면을 모두 익혀야 한다.',
@@ -940,6 +952,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '행정반',
     level: 1,
     title: '타입별 인원 보고',
+    cast: [{ sprite: 'smeargle' }],
     prompt: [
       '행정병이 인원 현황표를 채우다 머리를 싸맨다. "옆 중대 1생활관은 불꽃 타입과 물 타입 병사뿐인데, 총원을 안 적어 보냈어."',
       '전화로 물었더니 그 생활관의 두 병사가 이렇게만 대답했다고 한다.',
@@ -962,6 +975,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '도서관',
     level: 1,
     title: '진중문고의 캐터피',
+    cast: [{ sprite: 'caterpie' }],
     prompt: [
       '서가에 「병영생활 길라잡이」 세 권이 왼쪽부터 1권, 2권, 3권 순서로 꽂혀 있다. 책등이 앞을 보도록 똑바로 세워져 있다.',
       '책마다 본문 종이의 두께는 4cm이고, 표지는 앞뒤 각각 5mm다.',
@@ -999,6 +1013,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '정비실',
     level: 2,
     title: '스스로를 세는 자물쇠',
+    cast: [{ sprite: 'magnemite' }],
     prompt: [
       '정비실 공구함에 다섯 칸짜리 숫자 자물쇠가 걸려 있다. 레어코일 정비병이 만든 자물쇠라는데, 암호를 아는 그는 전역해 버렸다.',
       '자물쇠 옆에 쪽지 한 장만 붙어 있다.',
@@ -1029,6 +1044,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '매점',
     level: 2,
     title: '별사탕 저울',
+    cast: [{ sprite: 'pachirisu' }],
     prompt: [
       '매점병은 별사탕을 무게로 달아 판다. 가진 것은 양팔 저울 하나와 추 세 개뿐인데, 1g부터 13g까지 1g 단위의 어떤 주문이든 한 번에 달아 낸다. 수평이 맞으면 매점병의 볼 주머니에서 찌릿, 하고 작은 불꽃이 튄다.',
       '비결을 묻자 이렇게 말한다. "추는 양쪽 접시 어디에나 올릴 수 있지. 별사탕과 같은 접시에 올리면 그만큼 빼는 셈이고."',
@@ -1054,6 +1070,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '2층 세탁실',
     level: 2,
     title: '클레피의 고리 사슬',
+    cast: [{ sprite: 'klefki' }, { sprite: 'oddish' }],
     prompt: [
       '2층 세탁실 건조기는 클레피가 지킨다. 고리라면 사족을 못 쓰는 이 녀석은 건조기 삯으로 하루에 쇠고리 한 개를 받는다.',
       '선불도 외상도 받지 않는다. 매일 저녁, 그날까지 쓴 날수와 똑같은 개수의 고리가 클레피의 꾸러미에 걸려 있어야 한다. 전에 받은 고리를 거슬러 주기는 한다.',
@@ -1073,6 +1090,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '위병소 초소',
     level: 3,
     title: '두 머리의 두두',
+    cast: [{ sprite: 'doduo' }],
     prompt: [
       '초소 지붕에 두두 한 마리가 산다. 위병들 말로는, 이 녀석은 머리마다 거짓말하는 요일이 따로 있다.',
       '근무가 이어져 요일을 잊어버린 내가 "오늘 무슨 요일이냐?" 하고 묻자, 두 머리가 차례로 대답했다.',
@@ -1097,6 +1115,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '농구장',
     level: 3,
     title: '시합 뒤의 악수',
+    cast: [{ sprite: 'vulpix' }],
     prompt: [
       '농구장에서 불꽃조 · 물조 · 풀조 · 전기조, 타입별 2인 1조 네 팀이 시합을 마쳤다. 여덟 명은 수고했다며 악수를 나눴다. 자기 조 짝과 악수한 사람은 없고, 같은 상대와 두 번 악수한 사람도 없다.',
       '불꽃조 주장 식스테일 병장이 나머지 일곱 명에게 "몇 명과 악수했나?" 하고 물었더니, 일곱 명의 대답이 모두 달랐다.',
@@ -1115,6 +1134,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '휴게실',
     level: 3,
     title: '날쌩마 네 마리',
+    cast: [{ sprite: 'rapidash' }],
     prompt: [
       '휴게실 탁자에 가로세로 세 칸짜리 작은 장기판이 있다. 위쪽 두 귀퉁이에는 흰 날쌩마 말이, 아래쪽 두 귀퉁이에는 검은 날쌩마 말이 놓여 있다.',
       '날쌩마 말은 체스의 나이트처럼 뛴다. 한 방향으로 두 칸, 그 옆으로 한 칸. 한 칸에는 말 하나만 설 수 있고, 어느 색을 먼저 움직이든 순서는 자유다.',
@@ -1133,6 +1153,7 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     mission: '2층 정수기',
     level: 3,
     title: '물병 속의 꿀',
+    cast: [{ sprite: 'combee' }, { sprite: 'durant' }],
     prompt: [
       '정수기 옆에 둘레 24cm짜리 원통 유리 물병이 놓여 있다. 물병 안쪽 벽, 주둥이 테두리에서 4cm 아래에 세꿀버리가 흘린 꿀이 한 방울 묻어 있다.',
       '바깥쪽 벽에는 아이앤트 한 마리가 붙어 있다. 꿀의 정반대편이고, 테두리에서 1cm 아래다.',

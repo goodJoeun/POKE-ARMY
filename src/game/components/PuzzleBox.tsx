@@ -3,7 +3,29 @@ import PuzzleInstrument from './PuzzleInstrument';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGame } from '../state/store';
 import { useSettings } from '../state/settings';
-import { NO_PROGRESS, checkPuzzle, puzzleDef, puzzleReward, type PuzzleAnswer, QUICK_LEVELS } from '../data/puzzles';
+import { NO_PROGRESS, checkPuzzle, puzzleDef, puzzleReward, type PuzzleAnswer, type PuzzleDef, QUICK_LEVELS } from '../data/puzzles';
+import MonsterCanvas from './MonsterCanvas';
+import type { MonsterLook } from '../types';
+
+/** 삽화용 외형: 스프라이트만 쓴다 (그림이 없을 때만 보이는 단색 몬스터) */
+const castLook = (sprite: string): MonsterLook =>
+  ({ sprite, body: '#a8a8b8', belly: '#f2ead8', accent: '#a8a8b8', shape: 'round', ears: 'none', tail: 'none', eyes: 'dot', mouth: 'smile' });
+
+/**
+ * 지문에 나오는 포켓몬 삽화. 한 마리는 크게, 둘은 마주 보게, 셋 이상은 작은 도트로 줄지어 세운다.
+ */
+function PuzzleCast({ cast }: { cast: NonNullable<PuzzleDef['cast']> }) {
+  const actors = cast.flatMap((c) => Array.from({ length: c.count ?? 1 }, () => c.sprite));
+  const n = actors.length;
+  const size = n === 1 ? 140 : n === 2 ? 96 : 48;
+  return (
+    <div className={`pz-art pz-cast ${n === 2 ? 'pair' : n > 2 ? 'crowd' : ''}`} aria-hidden="true">
+      {actors.map((sprite, i) => (
+        <MonsterCanvas key={i} look={castLook(sprite)} size={size} dir={n === 2 && i === 0 ? 'right' : 'down'} />
+      ))}
+    </div>
+  );
+}
 
 interface Props {
   id: string;
@@ -490,6 +512,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
           {def.art === 'digital' && <div className="pz-digital" role="img" aria-label={`거울 속 전자시계에 보이는 숫자: ${def.artText}`}>{def.artText}</div>}
           {def.art === 'pendulum' && !solved && !failed && <div className="pz-pendulum" aria-hidden="true"><i /></div>}
           {def.art === 'yard' && <YardArt solved={solved} />}
+          {!def.art && def.cast && <PuzzleCast cast={def.cast} />}
           <div className="pz-prompt">
             {def.prompt.map((p, i) => <p key={i}>{p}</p>)}
           </div>
