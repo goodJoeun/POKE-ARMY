@@ -1608,7 +1608,10 @@ export default function World() {
         members.push(k);
         i++;
       }
-      place(ensure(duty), "outdoor", sp.x + 5.5, sp.y - 2.5, "left");
+      // 첫날만 당직사관이 구령대 옆에서 걸어 올라간다. 둘째 날부터는 점호 화면이 뜰 때 이미 구령대 위에 서 있다
+      const stage: [number, number] = [sp.x + 0.5, sp.y - 4.45];
+      if (st.day > 1) place(ensure(duty), "outdoor", stage[0], stage[1], "down");
+      else place(ensure(duty), "outdoor", sp.x + 5.5, sp.y - 2.5, "left");
       let ox = sp.x - 3.5;
       for (const id of ["cpt", "lt", "sgm"] as NpcId[]) {
         if (id === duty || !present.includes(id)) continue;
@@ -1617,7 +1620,7 @@ export default function World() {
       }
       if (nco) place(nco, "outdoor", sp.x + 4.5, sp.y - 3.4, "down");
       marks = {
-        stage: [sp.x + 0.5, sp.y - 4.45],
+        stage,
         leader: [0, 0],
         duty: [0, 0],
         aide: [0, 0],
