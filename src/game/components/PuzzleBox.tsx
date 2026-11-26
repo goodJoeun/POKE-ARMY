@@ -69,30 +69,34 @@ const TANGRAM_SLOTS = [
 const ROT_NAME = ['위', '오른쪽', '아래', '왼쪽'];
 
 /**
- * 일곱 조각 칠교. 자리(slot)마다 모양(kind)과 방향(rot)이 정해져 있다.
- * sym: 몇 번 돌리면 같은 모양이 되는지 (세모 4 · 평행사변형 2 · 네모 1)
+ * ⭐ 일곱 조각 별: 별 조각 일곱 개로 별 모양 창문을 완성한다 (P-21, 1일차 P-01에서 맨 위 꼭짓점을 끼워 둔 그 창문).
+ * 다섯 꼭짓점(같은 모양) + 가운데 오각형을 둘로 나눈 사다리꼴 · 세모. 자리(slot)마다 모양(kind)과 방향(rot)이 정해져 있다.
+ * 조각은 한 번 돌릴 때마다 72도(꼭짓점 하나만큼) 돈다. 다섯 번 돌리면 제자리.
  */
-type TanKind = 'large' | 'medium' | 'small' | 'square' | 'para';
-const TAN_SHAPE: Record<TanKind, { name: string; points: string; sym: number }> = {
-  large: { name: '큰 세모', points: '0,-1.2 2,0.8 -2,0.8', sym: 4 },
-  medium: { name: '가운데 세모', points: '1,1 -1,1 1,-1', sym: 4 },
-  small: { name: '작은 세모', points: '0,-0.6 1,0.4 -1,0.4', sym: 4 },
-  square: { name: '네모', points: '0,-1 1,0 0,1 -1,0', sym: 1 },
-  para: { name: '평행사변형', points: '-1.5,0.5 -0.5,-0.5 1.5,-0.5 0.5,0.5', sym: 2 },
+type TanKind = 'tip' | 'trap' | 'cap';
+const TAN_STEPS = 5;
+const TAN_DEG = 360 / TAN_STEPS;
+/** 손에 든 조각의 모양 (무게중심이 원점, 방향 0 = 별 안에 놓인 그대로) */
+const TAN_SHAPE: Record<TanKind, { name: string; points: string }> = {
+  tip: { name: '꼭짓점 조각', points: '0,-1.474 0.718,0.737 -0.718,0.737' },
+  trap: { name: '사다리꼴 조각', points: '-1.162,0.683 -0.718,-0.683 0.718,-0.683 1.162,0.683' },
+  cap: { name: '가운데 세모', points: '1.162,-0.282 0,0.563 -1.162,-0.282' },
 };
-const TAN7_SLOTS: { kind: TanKind; points: string; rot: number; cx: number; cy: number }[] = [
-  { kind: 'large', points: '0,0 4,0 2,2', rot: 2, cx: 2, cy: 0.75 },
-  { kind: 'large', points: '0,0 0,4 2,2', rot: 1, cx: 0.7, cy: 2.1 },
-  { kind: 'small', points: '4,0 4,2 3,1', rot: 3, cx: 3.65, cy: 1.1 },
-  { kind: 'square', points: '2,2 3,1 4,2 3,3', rot: 0, cx: 3, cy: 2.12 },
-  { kind: 'small', points: '2,2 3,3 1,3', rot: 0, cx: 2, cy: 2.8 },
-  { kind: 'para', points: '0,4 1,3 3,3 2,4', rot: 0, cx: 1.5, cy: 3.62 },
-  { kind: 'medium', points: '2,4 4,4 4,2', rot: 0, cx: 3.35, cy: 3.5 },
+/** 별 모양 창틀 (바깥 반지름 2, 안쪽 꼭짓점은 황금비만큼 안쪽) */
+const STAR_OUTLINE = '0,-2 0.449,-0.618 1.902,-0.618 0.727,0.236 1.176,1.618 0,0.764 -1.176,1.618 -0.727,0.236 -1.902,-0.618 -0.449,-0.618';
+const TAN7_SLOTS: { kind: TanKind; name: string; points: string; rot: number; cx: number; cy: number }[] = [
+  { kind: 'tip', name: '맨 위 꼭짓점', points: '0,-2 0.449,-0.618 -0.449,-0.618', rot: 0, cx: 0, cy: -0.95 },
+  { kind: 'tip', name: '오른쪽 위 꼭짓점', points: '1.902,-0.618 0.727,0.236 0.449,-0.618', rot: 1, cx: 1.026, cy: -0.2 },
+  { kind: 'tip', name: '오른쪽 아래 꼭짓점', points: '1.176,1.618 0,0.764 0.727,0.236', rot: 2, cx: 0.634, cy: 1.0 },
+  { kind: 'tip', name: '왼쪽 아래 꼭짓점', points: '-1.176,1.618 -0.727,0.236 0,0.764', rot: 3, cx: -0.634, cy: 1.0 },
+  { kind: 'tip', name: '왼쪽 위 꼭짓점', points: '-1.902,-0.618 -0.449,-0.618 -0.727,0.236', rot: 4, cx: -1.026, cy: -0.2 },
+  { kind: 'trap', name: '가운데 위', points: '-0.727,0.236 -0.449,-0.618 0.449,-0.618 0.727,0.236', rot: 0, cx: 0, cy: -0.06 },
+  { kind: 'cap', name: '가운데 아래', points: '0.727,0.236 0,0.764 -0.727,0.236', rot: 0, cx: 0, cy: 0.54 },
 ];
-/** 조각 일곱 개 (0번은 첫날 끼운 큰 세모). rot: 처음 손에 들었을 때의 방향 */
+/** 조각 일곱 개 (0번은 첫날 밤 맨 위 꼭짓점에 끼운 조각). rot: 처음 손에 들었을 때의 방향 */
 const TAN7_PIECES: { kind: TanKind; rot: number }[] = [
-  { kind: 'large', rot: 2 }, { kind: 'large', rot: 3 }, { kind: 'medium', rot: 2 }, { kind: 'small', rot: 1 },
-  { kind: 'small', rot: 2 }, { kind: 'square', rot: 0 }, { kind: 'para', rot: 1 },
+  { kind: 'tip', rot: 0 }, { kind: 'tip', rot: 2 }, { kind: 'tip', rot: 4 }, { kind: 'tip', rot: 1 },
+  { kind: 'tip', rot: 3 }, { kind: 'trap', rot: 3 }, { kind: 'cap', rot: 2 },
 ];
 
 function TangramWindow({ rot, placed, onSlot }: { rot: number; placed: number | null; onSlot: (i: number) => void }) {
@@ -411,8 +415,8 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
   const tanShort = input?.type === 'tangram7' && tanHave < 7 && tanLoose.length === 0;
   const tanPlace = useCallback((slot: number) => {
     if (solved || input?.type !== 'tangram7' || !TAN7_SLOTS[slot] || tSlots[slot] !== null || !tanLoose.includes(tSel)) return;
-    const sl = TAN7_SLOTS[slot], pc = TAN7_PIECES[tSel], sym = TAN_SHAPE[pc.kind].sym;
-    if (pc.kind !== sl.kind || tRot[tSel] % sym !== sl.rot % sym) { setBump(true); return; }
+    const sl = TAN7_SLOTS[slot], pc = TAN7_PIECES[tSel];
+    if (pc.kind !== sl.kind || tRot[tSel] % TAN_STEPS !== sl.rot) { setBump(true); return; }
     const next = tSlots.map((v, i) => (i === slot ? tSel : v));
     setTSlots(next);
     setBump(false);
@@ -420,7 +424,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
     if (rest.length) setTSel(rest[0]);
     if (next.every((v) => v !== null)) win();
   }, [solved, input, tSlots, tanLoose, tSel, tRot, win]);
-  const tanRotate = useCallback((d: number) => { if (!solved && tanLoose.includes(tSel)) { setTRot((r) => r.map((v, i) => (i === tSel ? (v + d + 4) % 4 : v))); setBump(false); } }, [solved, tanLoose, tSel]);
+  const tanRotate = useCallback((d: number) => { if (!solved && tanLoose.includes(tSel)) { setTRot((r) => r.map((v, i) => (i === tSel ? (v + d + TAN_STEPS) % TAN_STEPS : v))); setBump(false); } }, [solved, tanLoose, tSel]);
   const tanCycle = useCallback((d: number) => {
     if (solved || tanLoose.length === 0) return;
     const at = Math.max(0, tanLoose.indexOf(tSel));
@@ -735,12 +739,12 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
         {input.type === 'tangram7' && (
           <>
             <div className="pz-tangram">
-              <svg viewBox="-0.15 -0.15 4.3 4.3" className="pz-tan-frame" role="group" aria-label="일곱 조각의 자리가 그려진 창문 틀">
-                <rect x={0} y={0} width={4} height={4} fill="#141a38" stroke="#5a4030" strokeWidth={0.16} />
+              <svg viewBox="-2.25 -2.25 4.5 4.15" className="pz-tan-frame" role="group" aria-label="일곱 조각의 자리가 그려진 별 모양 창문 틀">
+                <polygon points={STAR_OUTLINE} fill="#141a38" stroke="#5a4030" strokeWidth={0.16} strokeLinejoin="round" />
                 {TAN7_SLOTS.map((sl, i) => (
                   <polygon
                     key={i} points={sl.points} className={`pz-tan-slot lined ${tSlots[i] !== null ? 'on' : ''}`}
-                    role="button" tabIndex={0} aria-label={`${i + 1}번 자리: ${TAN_SHAPE[sl.kind].name}${tSlots[i] !== null ? ' (끼움)' : ''}`}
+                    role="button" tabIndex={0} aria-label={`${i + 1}번 자리: ${sl.name} (${TAN_SHAPE[sl.kind].name})${tSlots[i] !== null ? ' (끼움)' : ''}`}
                     onClick={() => tanPlace(i)}
                   />
                 ))}
@@ -751,8 +755,8 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
                   {tanLoose.map((pi) => {
                     const sh = TAN_SHAPE[TAN7_PIECES[pi].kind];
                     return (
-                      <button key={pi} role="radio" aria-checked={tSel === pi} className={tSel === pi ? 'on' : ''} aria-label={`${sh.name}${sh.sym > 1 ? `, ${tRot[pi] * 90}도 돌림` : ''}`} onClick={() => { setTSel(pi); setBump(false); }}>
-                        <svg viewBox="-2.4 -2.4 4.8 4.8"><polygon points={sh.points} fill="#ffe890" stroke="#c89820" strokeWidth={0.12} style={{ transform: `rotate(${tRot[pi] * 90}deg)`, transition: 'transform 0.15s' }} /></svg>
+                      <button key={pi} role="radio" aria-checked={tSel === pi} className={tSel === pi ? 'on' : ''} aria-label={`${sh.name}, ${tRot[pi] * TAN_DEG}도 돌림`} onClick={() => { setTSel(pi); setBump(false); }}>
+                        <svg viewBox="-2.4 -2.4 4.8 4.8"><polygon points={sh.points} fill="#ffe890" stroke="#c89820" strokeWidth={0.12} style={{ transform: `rotate(${tRot[pi] * TAN_DEG}deg)`, transition: 'transform 0.15s' }} /></svg>
                       </button>
                     );
                   })}
@@ -764,13 +768,13 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
               <div className="pz-answer">
                 <button onClick={() => tanRotate(-1)}>↺ 돌리기 (Q)</button>
                 <button onClick={() => tanRotate(1)}>↻ 돌리기 (E)</button>
-                <span className="hud-dim">조각을 고르고(← →) 돌린 뒤, 자리를 누르거나 숫자키 1~7로 끼운다 · 별 조각 {tanHave}/7</span>
+                <span className="hud-dim">조각을 고르고(← →) 한 꼭짓점씩 돌린 뒤, 자리를 누르거나 숫자키 1~7로 끼운다 · 별 조각 {tanHave}/7</span>
               </div>
             )}
             {bump && !solved && <div className="pz-result wrong">…모양이나 방향이 맞지 않아 튕겨 나온다.</div>}
             {tanShort && !solved && (
               <div className="pz-result wrong">
-                <span>조각이 모자란다. 창문의 빈자리로 찬 바람이 샌다. <span className="hud-dim">(별 조각 {tanHave}/7)</span></span>
+                <span>조각이 모자란다. 별의 빈자리로 찬 바람이 샌다. <span className="hud-dim">(별 조각 {tanHave}/7)</span></span>
                 <button className="primary" onClick={() => (onFail ? onFail() : onClose())}>계속</button>
               </div>
             )}
