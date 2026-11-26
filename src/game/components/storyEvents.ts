@@ -25,7 +25,7 @@ import { DUTY_BOARD, ORDERS } from '../data/orders';
 import { npcDisplayName } from '../data/npcs';
 import { MAP_NAMES } from '../engine/map';
 import type { BgmMood } from '../engine/audio';
-import { STORY_MISSIONS, missionState, storyEnding, type StoryEnding, missionReady } from '../data/story';
+import { RETURN_DAYS, STORY_MISSIONS, choseToReturn, missionState, storyEnding, type StoryEnding, missionReady } from '../data/story';
 
 // ───────── 연결 (World가 넘겨준다) ─────────
 export type StoryBg = 'roof' | 'archive' | 'library' | 'parade' | 'radio' | 'watchDesk' | 'fogGate' | 'mailbox' | 'datedMailbox' | 'patrolBoard' | 'paperYard' | 'unsentLetters' | 'pendulumHall' | 'emptyDutyHall';
@@ -1073,6 +1073,25 @@ export function slipperBoss(ctx: StoryCtx, onEnd: () => void, tries = 0) {
   });
 }
 
+/** 창문 앞에서 떠올리는 건 플레이어가 실제로 택한 밤의 장면들이다. */
+function windowMemories(end: StoryEnding, complete: boolean): Line[] {
+  const { flags, memory } = G();
+  const returning = choseToReturn(flags);
+  const echoes = returning
+    ? ['엄마가 내 손을 꼭 쥐던 감촉이 돌아온다.', '수첩에 눌러 쓴 한 줄이 떠오른다. 돌아가면 다시 입대해야 한다.', '근무일지 앞에서 내 이름을 쓰려고 꽉 쥐었던 펜이 떠오른다.']
+    : ['엄마가 손을 내밀었을 때 나는 눈을 감았다.', '수첩을 덮었던 날, 두려운 이유는 빈 종이 사이에 그대로 남았다.', '이름 칸을 비워 두고 덮었던 근무일지가 떠오른다.'];
+  const recalled = RETURN_DAYS.flatMap((day, i) => {
+    const remember = returning ? flags[`return_${day}`] && !flags[`unconfirmedReturn_${day}`] : flags[`stay_${day}`];
+    return remember ? [echoes[i]] : [];
+  }).slice(0, 2);
+  const lines = recalled.length ? [narr(recalled.join(' '))] : [];
+  if (end !== 'bad') return [...lines, me('(눈을 뜨면 거기서 아침을 맞자. 아직 겁은 나지만.)')];
+  if (!complete && flags.b01lost) lines.push(me('(슬리퍼가 가져간 별 조각. 빈칸을 만지니 그날 새벽 초소에서 들었던 진자 소리가 떠오른다.)'));
+  if (memory <= 0) lines.push(me('(저 방에 살던 사람 얼굴이… 어떻게 생겼더라? 내 얼굴인데.)'));
+  if (!returning) lines.push(me('(내일 눈을 뜬 내 모습은 떠오르지 않는다. 손을 거두고 익숙한 생활관 쪽을 본다.)'));
+  return lines;
+}
+
 /** F-01 별이 지기 전에 — 전역일, 연병장 구령대 */
 export function finalStar(ctx: StoryCtx) {
   const s = G();
@@ -1094,7 +1113,7 @@ export function finalStar(ctx: StoryCtx) {
         custom: jirachiSpeaker(true),
         lines: [
           narr(done ? '창문 너머로 입대 전날 밤의 내 방이 보인다. 책상 위에는 입영통지서가 그대로 놓여 있다.' : '창문은 끝내 채워지지 않았다. 빈자리 너머는 안개뿐이다.'),
-          ...(end === 'bad' && done ? [narr('창문은 완성됐는데, 내 쪽에서는 손잡이가 보이지 않는다.')] : []),
+          ...(end === 'rescue' ? [] : windowMemories(end, done)),
           say('npc', '별이 지기 전에, 누구에게 한마디 남길래?'),
         ],
         choices: [
@@ -1176,7 +1195,7 @@ export function endingLines(end: StoryEnding): Line[] {
       narr('훈련소 생활관. 새벽. 낯선 천장.'),
       me('(…돌아왔다.)'),
       narr('옆 침상에서 누군가 몸을 일으킨다.'),
-      narr('"…야. 너, 맞지?"'),
+      narr(sg ? '"…야. 너, 맞지?"' : '"…{me}." 옥상에서 겨우 떠올렸던 내 이름을, 이번에는 망설이지 않고 부른다.'),
       me(`"…준서야."`),
       ...(sg ? [narr('복도 라디오: "10년간 의식이 없던 강민혁 씨가 오늘 새벽 깨어났습니다—"')] : []),
       narr('조교: "기상! 기상!!"'),
@@ -1186,10 +1205,14 @@ export function endingLines(end: StoryEnding): Line[] {
   }
   if (end === 'normal') {
     return [
-      narr('"…친구는, 아직 대답을 못 찾았나 봐."'),
+      narr('별빛 너머에서 동기가 손을 든다. 내 이름을 부르려는 듯 입술이 움직이다 멈춘다.'),
       ...cairnFarewell(),
       ...ammoFarewell(),
       narr('훈련소 첫날 밤. 옆 침상은 비어 있다.'),
+      ...(s.flags.m13 ? [me(buddyMemoryCount() >= 2
+        ? '(같이 웃던 일까지 기억해 냈는데. 떠나기 전에 둘이서 그 옥상에 한 번만 더 가 볼걸.)'
+        : s.flags.m13_cyber ? '(한쪽씩 나눠 끼던 이어폰. 노래는 기억났어도 저 애한테 내 이름은 끝내 돌아오지 않았다.)'
+        : '(내 얼굴은 낯이 익는데 이름이 생각 안 난다고 했다. 그때 우리 둘이 다니던 곳을 좀 더 같이 걸어 볼걸.)')] : []),
       narr('창밖, 별똥별 하나가 떨어진다.'),
       me('(준서야. 꼭 와라.)'),
       narr('🌙 노멀 엔딩 「혼자 돌아온 밤」'),

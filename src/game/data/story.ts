@@ -158,9 +158,11 @@ export function chapterDone(n: number, s: { clues: string[]; flags: Record<strin
 // ───────── 엔딩 ─────────
 export type StoryEnding = 'true' | 'rescue' | 'normal' | 'bad';
 export const RETURN_DAYS = [4, 8, 11] as const;
+export function choseToReturn(flags: Record<string, boolean>): boolean {
+  return RETURN_DAYS.filter(day => flags[`return_${day}`]).length >= 2;
+}
 export function storyEnding(s: { stars: number[]; clues: string[]; memory: number; flags: Record<string, boolean> }): StoryEnding {
-  const resolve = RETURN_DAYS.filter(day => s.flags[`return_${day}`]).length;
-  if (s.stars.length < 7 || s.memory <= 0 || resolve < 2) return 'bad';
+  if (s.stars.length < 7 || s.memory <= 0 || !choseToReturn(s.flags)) return 'bad';
   if (!s.flags.buddyBack) return 'normal';
   return s.clues.includes('C-13') && s.flags.calledMinhyeok ? 'rescue' : 'true';
 }
