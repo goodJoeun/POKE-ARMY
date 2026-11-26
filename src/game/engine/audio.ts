@@ -212,7 +212,21 @@ function ensure(): AudioContext | null {
 const PRELOAD: SfxId[] = ['sfx_text_blip', 'sfx_cursor', 'sfx_confirm', 'sfx_cancel', 'sfx_door', 'sfx_alert', 'sfx_bump'];
 let preloaded = false;
 
-/** 첫 사용자 입력에서 호출: 오디오를 깨우고, 대기 중이던 곡을 튼다 */
+/** 소리 없는 1샘플: iOS 사파리는 터치 안에서 소리를 하나 틀어야 오디오가 확실히 깨어난다 */
+function primeSilence(c: AudioContext) {
+  try {
+    const src = c.createBufferSource();
+    src.buffer = c.createBuffer(1, 1, c.sampleRate);
+    src.connect(c.destination);
+    src.start();
+  } catch { /* 무시 */ }
+}
+
+/**
+ * 화면을 누를 때마다 호출: 오디오를 깨우고, 대기 중이던 곡을 튼다.
+ * 첫 입력뿐 아니라 다른 앱에 다녀와서 멈춘 오디오도 여기서 다시 깨운다
+ * (iOS 사파리는 돌아온 뒤 터치 안에서만 다시 켜 주기도 한다).
+ */
 export function unlockAudio() {
   const c = ensure();
   if (!c) return;
@@ -220,8 +234,50 @@ export function unlockAudio() {
     if (!preloaded) { preloaded = true; for (const id of PRELOAD) void load(CUE_FILE[id] ?? id).catch(() => undefined); }
     if (wanted) void startBgm(wanted.id, wanted.loop);
   };
-  if (c.state === 'suspended') void c.resume().then(go).catch(() => undefined);
-  else go();
+  if (c.state === 'running') { if (!preloaded) go(); return; }
+  // 'suspended'만이 아니다: iOS 사파리는 다른 앱에 다녀오면 'interrupted'가 된다
+  primeSilence(c);
+  void c.resume().then(() => { go(); checkClock(); }).catch(() => undefined);
+}
+
+/**
+ * iOS 사파리: 다른 앱에 다녀온 뒤 'running'이라고 하면서 시계가 멈춰 소리가 안 나는 오디오가 있다.
+ * 돌아온 뒤 한 번, 시계가 흐르는지 보고 멈췄으면 오디오를 새로 만든다.
+ */
+let clockTimer = 0;
+let clockChecked = false;
+function checkClock() {
+  const c = ctx;
+  if (!c || clockTimer || clockChecked || c.state !== 'running') return;
+  const t0 = c.currentTime;
+  clockTimer = window.setTimeout(() => {
+    clockTimer = 0;
+    if (ctx !== c || c.state !== 'running' || document.hidden) return;
+    clockChecked = true;
+    if (c.currentTime - t0 < 0.1) rebuildAudio();
+  }, 600);
+}
+
+/** 멈춘 오디오를 버리고 새로 만든다. 디코딩해 둔 곡은 그대로 쓰고, 곡은 멈춘 자리부터 잇는다 */
+function rebuildAudio() {
+  const old = ctx;
+  if (!old) return;
+  if (current) {
+    const cur = current;
+    current = null;
+    const dur = cur.src.buffer?.duration ?? 1;
+    if (cur.loop) resumeAt[cur.id] = (cur.offset + (old.currentTime - cur.startedAt)) % dur;
+    try { cur.src.stop(); } catch { /* 이미 끝남 */ }
+  }
+  jingleNow = null;
+  duckUntil = 0;
+  ctx = null;
+  bgmBus = duckBus = sfxBus = null;
+  void old.close().catch(() => undefined);
+  const c = ensure();
+  if (!c) return;
+  // 터치 없이 켜지지 않으면 다음 터치(unlockAudio)가 켠다
+  void c.resume().then(() => { if (wanted) void startBgm(wanted.id, wanted.loop); }).catch(() => undefined);
 }
 
 function stopCurrent(fade = FADE) {
@@ -434,8 +490,15 @@ export function setSfxVolume(v: number) {
 /** 탭이 가려지면 멈추고, 돌아오면 이어서 */
 export function setAudioPaused(paused: boolean) {
   if (!ctx) return;
-  if (paused && ctx.state === 'running') void ctx.suspend();
-  else if (!paused && ctx.state === 'suspended') void ctx.resume();
+  if (paused) {
+    clockChecked = false;
+    if (ctx.state === 'running') void ctx.suspend();
+    return;
+  }
+  // 'suspended'만이 아니다: iOS 사파리는 다른 앱에 다녀오면 'interrupted'가 된다.
+  // 여기서 안 켜지면(터치가 필요하면) 다음 터치의 unlockAudio가 다시 켠다
+  if (ctx.state === 'running') checkClock();
+  else if (ctx.state !== 'closed') void ctx.resume().then(checkClock).catch(() => undefined);
 }
 
 /** 디버그: 최근에 울린 소리 (개발 모드에서 __audio.log()) */

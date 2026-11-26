@@ -92,10 +92,11 @@ export default function BgmDirector() {
     sync();
     const timer = window.setInterval(sync, 300);
 
-    // 첫 입력에서 오디오 깨우기 (브라우저 자동 재생 정책)
+    // 입력이 있을 때마다 오디오 깨우기 (브라우저 자동 재생 정책 · 다른 앱에 다녀온 뒤)
+    // 터치는 누르는 순간(pointerdown)이 아니라 손을 뗄 때(pointerup · touchend · click) 입력으로 인정된다
     const unlock = () => unlockAudio();
-    window.addEventListener('pointerdown', unlock, true);
-    window.addEventListener('keydown', unlock, true);
+    const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const;
+    for (const ev of UNLOCK_EVENTS) window.addEventListener(ev, unlock, { capture: true, passive: true });
 
     // 버튼 누르는 소리
     const onClick = (e: MouseEvent) => {
@@ -106,6 +107,8 @@ export default function BgmDirector() {
 
     const onVis = () => setAudioPaused(document.hidden);
     document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pageshow', onVis);
+    window.addEventListener('focus', onVis);
 
     let lastToast = useGame.getState().toasts.reduce((m, t) => Math.max(m, t.id), 0);
     let lastToastCue = 0;
@@ -169,10 +172,11 @@ export default function BgmDirector() {
 
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener('pointerdown', unlock, true);
-      window.removeEventListener('keydown', unlock, true);
+      for (const ev of UNLOCK_EVENTS) window.removeEventListener(ev, unlock, true);
       window.removeEventListener('click', onClick, true);
       document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pageshow', onVis);
+      window.removeEventListener('focus', onVis);
       unsub();
     };
   }, []);
