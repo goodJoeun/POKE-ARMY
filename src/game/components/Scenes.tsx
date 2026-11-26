@@ -12,7 +12,7 @@ import { NPC_IDS, NPC_SKINS } from '../data/npcs';
 import { npcCap, npcSpeaker } from '../engine/speakers';
 import MonsterCanvas from './MonsterCanvas';
 import { endingLines, promotionKeyLines } from './storyEvents';
-import type { StoryEnding } from '../data/story';
+import { storyEnding, type StoryEnding } from '../data/story';
 import { fixJosa, fmt } from '../engine/text';
 /** 단어 뒤에 붙일 조사만 골라 준다: pj('리뷰어', '은(는)') → '는' */
 const pj = (w: string, p: string) => fixJosa(w + p).slice(w.length);
@@ -452,7 +452,7 @@ function Evolution({ name, look, cap, from, to, onDone }: {
 function StoryEndingView({ end, unanswered, onDone }: { end: StoryEnding; unanswered: boolean; onDone: () => void }) {
   const s = useGame();
   const lines = useMemo(() => [
-    ...(unanswered ? [{ who: 'narr' as const, text: '구령대의 별은 끝내 대답을 듣지 못한 채, 저녁 하늘로 졌다.' }] : []),
+    ...(unanswered ? [{ who: 'narr' as const, text: '정문에서 뒤돌아보자, 구령대 위로 열이틀 동안 보았던 별이 떠 있다.' }] : []),
     ...endingLines(end),
   ], [end, unanswered]);
   const [i, setI] = useState(0);
@@ -516,7 +516,8 @@ export function Ending() {
   const b = BRANCHES[s.branch];
   const sp = findSpecies(s.speciesId)!;
   const storyEnd: StoryEnding | null = s.clues.length === 0 ? null
-    : s.flags.end_true ? 'true' : s.flags.end_normal ? 'normal' : 'bad';
+    : s.flags.end_rescue ? 'rescue' : s.flags.end_true ? 'true' : s.flags.end_normal ? 'normal'
+    : s.flags.end_bad ? 'bad' : storyEnding(s);
   const [stage, setStage] = useState(storyEnd ? -1 : 0);
   const present = presentNpcs(Math.min(s.day, TOTAL_DAYS));
   const avgAff = Math.round(NPC_IDS.reduce((a, id) => a + s.affinity[id], 0) / NPC_IDS.length);
@@ -558,7 +559,7 @@ export function Ending() {
           <span>기억의 실마리 {s.clues.length}개</span>
           <span>푼 퍼즐 {solvedPuzzles}개</span>
         </div>
-        <p className="hud-dim">별 조각 일곱 개를 모으고, 동기의 이름을 되찾아 주면 다른 아침을 맞을 수 있다.</p>
+        <p className="hud-dim">별 조각은 창을 열고, 현실을 붙든 기억은 그 창을 넘게 해 준다.</p>
         <p className="hud-dim">— 별이 다시 깨어날 때까지, 천 년. —</p>
         <button className="primary big" onClick={() => s.go('title')}>타이틀로</button>
       </div>
@@ -611,7 +612,7 @@ export function Ending() {
         <div className="reality-text">
           <p className="fade-in">모포를 걷고 손을 내려다본다. 사람의 손이다. 꼬리도, {lost} 없다.</p>
           <p className="fade-in d1">{sp.name}의 모습은 온데간데없다. 여기는 <b>훈련소</b>, 진짜 입대 첫 아침이다.</p>
-          {storyEnd === 'true' ? (
+          {storyEnd === 'true' || storyEnd === 'rescue' ? (
             <>
               <p className="fade-in d2">옆 침상의 준서가 말없이 주먹을 내민다. 나도 주먹을 맞댄다.</p>
               <p className="fade-in d3">"야, 관등성명 대는 법은 안 까먹었지?" "…꿈에서 열두 번은 댔다."</p>

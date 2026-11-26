@@ -6,12 +6,19 @@ import { fmt } from '../engine/text';
 import { DREAMS, DREAM_FADED, type DreamLine } from '../data/story';
 import SceneryCanvas from './SceneryCanvas';
 import PuzzleBox from './PuzzleBox';
+import Menu from './Menu';
 import { setBgmMood, type CueId } from '../engine/audio';
 import { useLineSound } from '../engine/soundCues';
 import MonsterCanvas from './MonsterCanvas';
 import type { MonsterLook } from '../types';
 
 const JIRACHI = { sprite: 'jirachi', body: '#f8f4d0', belly: '#ffffff', accent: '#f2d050', shape: 'round', ears: 'tuft', tail: 'none', eyes: 'sleepy', mouth: 'smile' } as MonsterLook;
+
+const NIGHT_CHOICES: Partial<Record<number, [string, string, string]>> = {
+  4: ['병실 불빛 속에서 엄마가 손을 내민다.', '엄마의 손을 마주 잡는다', '조금 더 자고 싶어 눈을 감는다'],
+  8: ['빈 수첩 위에 연필이 놓여 있다.', '돌아가기 두려운 이유를 한 줄 적는다', '오늘은 수첩을 덮는다'],
+  11: ['꿈속 초소에 빈 근무일지가 펼쳐져 있다.', '내 이름을 써 두고 눈을 뜬다', '일지를 덮고 따뜻한 꿈에 머문다'],
+};
 
 /**
  * 꿈: 별의 언덕 — 하루 끝(결산) 전에 보는 짧은 장면.
@@ -21,7 +28,7 @@ export default function Dream() {
   const s = useGame();
   const dream = DREAMS[s.day];
   // 기억이 30 이하면 꿈이 흐려진다 (첫날 꿈과 지라치가 이름을 밝히는 밤은 그대로)
-  const faded = s.memory <= 30 && s.day > 1 && s.day !== 11;
+  const faded = s.memory <= 30 && s.day > 1 && !NIGHT_CHOICES[s.day];
   const lines = useMemo<(DreamLine & { scene: 'room' | 'hill' })[]>(() => [
     ...(dream?.room ?? []).map((l) => ({ ...l, scene: 'room' as const })),
     ...((faded ? DREAM_FADED : dream?.hill) ?? []).map((l) => ({ ...l, scene: 'hill' as const })),
@@ -57,14 +64,17 @@ export default function Dream() {
 
   // 🧩 P-01 첫 번째 조각: 첫날 밤, 언덕의 창문을 처음 본 직후에 조각을 끼운다
   const [puzzle, setPuzzle] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const decision = NIGHT_CHOICES[s.day];
   const puzzleAt = lines.findIndex((l) => l.scene === 'hill');
   const advance = useCallback(() => {
-    if (puzzle) return;
+    if (puzzle || choosing) return;
     if (typed < text.length) { setTyped(text.length); return; }
     if (s.day === 1 && idx === puzzleAt && !useGame.getState().puzzles['P-01']?.solved) { setPuzzle(true); return; }
     if (idx < lines.length - 1) setIdx(idx + 1);
+    else if (decision && !s.flags[`return_${s.day}`] && !s.flags[`stay_${s.day}`]) setChoosing(true);
     else useGame.getState().finishDream();
-  }, [puzzle, typed, text.length, idx, lines.length, s.day, puzzleAt]);
+  }, [puzzle, choosing, typed, text.length, idx, lines.length, s.day, s.flags, decision, puzzleAt]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -185,6 +195,16 @@ export default function Dream() {
             setIdx((i) => Math.min(i + 1, lines.length - 1));
           }}
         />
+      )}
+      {choosing && decision && (
+        <Menu title={decision[0]} onClose={() => setChoosing(false)} options={decision.slice(1).map((label, i) => ({
+          label,
+          onSelect: () => {
+            s.storyFlag(`${i === 0 ? 'return' : 'stay'}_${s.day}`);
+            s.log(label);
+            s.finishDream();
+          },
+        }))} />
       )}
     </div>
   );

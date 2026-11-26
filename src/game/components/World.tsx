@@ -2445,7 +2445,7 @@ export default function World() {
     const st = useGame.getState();
     if (key === "roof") {
       // 옥상은 추리 정리 1을 마쳤거나, 옥상 일을 맡았을 때(이불 당번 등) 열린다
-      const roofOpen = st.flags.roof || st.flags["order_D-02"] || st.flags["order_D-03"];
+      const roofOpen = st.flags.roof || st.flags["order_D-02"] || st.flags["order_D-03"] || st.flags["order_M-13"];
       if (!roofOpen) {
         setOverlay({
           type: "dialogue",

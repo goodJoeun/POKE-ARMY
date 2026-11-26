@@ -109,7 +109,7 @@ export const STORY_MISSIONS: StoryMission[] = [
   { id: 'M-12', chapter: 3, title: '진자 자국', hint: `${'탄약고·격납고·부두'}의 잠긴 상자 살펴보기 → 자국 따라가기`, from: 9, clue: 'C-14', spot: 'ammo' },
   { id: 'N-04', chapter: 3, title: '소원을 거둬라', hint: '9일차 밤 순찰 때 2층 휴게실 TV를 조사해 ‘손전등 끄기’ 선택 (L)', hintLate: '도서관 관리병 네이티오에게 말 걸기', from: 9, nightFrom: 9, clue: 'C-15', spot: 'tv' },
   // ── 4장 「별이 지기 전에」 (10~12일차)
-  { id: 'M-13', chapter: 4, title: '잊혀 가는 이름', hint: '동기와 함께 행정반 분실물함 → 싸지방 → 농구장 → 막사 옥상 (점심·개인정비 시간)', from: 10, flag: 'buddyBack' },
+  { id: 'M-13', chapter: 4, title: '잊혀 가는 이름', hint: '행정반 분실물함·싸지방·농구장에서 함께한 추억 두 가지를 되찾고 동기와 막사 옥상으로 (점심·개인정비 시간)', from: 10, flag: 'buddyBack' },
   { id: 'D-03', chapter: 4, title: '추리 정리 3 「돌아가는 방법」', hint: '19:00~21:20, 막사 옥상에서 동기와', from: 10, flag: 'd03', needClues: ['C-11', 'C-13', 'C-14', 'C-15'] },
   { id: 'B-01', chapter: 4, title: '꿈을 먹는 자', hint: '11일차 밤 야간 위병소 근무, 초소에서', from: 11, nightFrom: 11, flag: 'b01' },
   { id: 'F-01', chapter: 4, title: '별이 지기 전에', hint: '전역일, 연병장 구령대에 내려온 별에게', from: 12, flag: 'f01', spot: 'parade' },
@@ -156,14 +156,14 @@ export function chapterDone(n: number, s: { clues: string[]; flags: Record<strin
 }
 
 // ───────── 엔딩 ─────────
-export type StoryEnding = 'true' | 'normal' | 'bad';
-/** 마지막 밤 선택 → 엔딩. 남겠다 · 별 조각 7개 미만 · 기억 0 이면 배드 */
-export function storyEnding(s: { stars: number[]; memory: number; flags: Record<string, boolean> }, giveBack: boolean): StoryEnding {
-  if (!giveBack || s.stars.length < 7 || s.memory <= 0) return 'bad';
-  return s.flags.buddyBack ? 'true' : 'normal';
+export type StoryEnding = 'true' | 'rescue' | 'normal' | 'bad';
+export const RETURN_DAYS = [4, 8, 11] as const;
+export function storyEnding(s: { stars: number[]; clues: string[]; memory: number; flags: Record<string, boolean> }): StoryEnding {
+  const resolve = RETURN_DAYS.filter(day => s.flags[`return_${day}`]).length;
+  if (s.stars.length < 7 || s.memory <= 0 || resolve < 2) return 'bad';
+  if (!s.flags.buddyBack) return 'normal';
+  return s.clues.includes('C-13') && s.flags.calledMinhyeok ? 'rescue' : 'true';
 }
-/** 진 엔딩에서 말 없는 병장도 함께 돌아가는지 */
-export const sergeantJoins = (s: { clues: string[]; memory: number }) => s.clues.includes('C-13') && s.memory >= 60;
 
 // ───────── 꿈: 별의 언덕 ─────────
 export type DreamWho = 'narr' | 'voice' | 'mom' | 'me' | 'jirachi';
@@ -337,7 +337,7 @@ export const NIGHT_STAR_LINES: Record<number, string[]> = {
   7: ['또 만났네. 위병소의 밤은 길지?', '별 조각은 일곱 개. 다 모으면… 소원 하나를 되돌릴 수 있어.', '…하지만 되돌린다는 건, 여기를 잊는다는 뜻이기도 해.'],
   8: ['네 동기도 가끔 창밖을 봐. 너처럼.', '같은 밤에 빈 소원은 서로 닮아 있대.'],
   10: ['별이 많이 기울었어. 시간이 얼마 안 남았어.', '네가 여기서 만든 기억도… 진짜야. 그걸 잊지 마.'],
-  11: ['마지막 위병소 근무구나.', '안개가 옅어지고 있어. 곧 문이 열릴 거야.', '그때 네가 고르는 거야. 돌아갈지, 남을지.'],
+  11: ['마지막 위병소 근무구나.', '안개가 옅어지고 있어. 곧 문이 열릴 거야.', '졸리면 네 이름을 떠올려. 펜을 잡은 건 네 손이야.'],
 };
 
 /** 오늘 밤 꿈을 꿔야 하는지 */
