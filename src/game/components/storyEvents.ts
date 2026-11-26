@@ -746,9 +746,7 @@ export function roofOptions(ctx: StoryCtx): MenuOption[] {
   if (isOpen('D-02')) opts.push({ label: '🌌 동기와 별 보기 (추리 정리 2)', hint: ev ? '' : '19:00~21:20', disabled: !ev, onSelect: () => withBuddy(() => d02(ctx)) });
   // (별에게 대답한 뒤에는 되돌릴 수 없다: 엔딩이 이미 정해졌다)
   if (s.day < TOTAL_DAYS && flag('m13') && !awaitingOrder('M-13') && !flag('buddyBack')) {
-    const memories = [
-      ['m13_laundry', 'q_buddy_laundry'], ['m13_cyber', 'q_buddy_result'], ['m13_court', 'q_junior_court'],
-    ].filter(([visit, quest]) => flag(visit) || s.doneQuests.includes(quest)).length;
+    const memories = buddyMemoryCount();
     opts.push({
       label: '💭 동기와 옥상에 오르기 (잊혀 가는 이름)', hint: memories < 2 ? `함께한 추억 ${memories}/2` : !freeNow() ? '점심·개인정비 시간' : !ctx.near('buddy', 3.5) ? '동기가 곁에 있어야 한다' : '',
       disabled: memories < 2 || !freeNow() || !ctx.near('buddy', 3.5), onSelect: () => m13Roof(ctx),
@@ -892,16 +890,27 @@ const M13_SPOT: Partial<Record<SpotId, { key: string; lines: () => Line[]; bonus
     bonus: () => (G().doneQuests.includes('q_junior_court') ? [say('buddy', '후임이랑 셋이서 했을 때, 네가 에어볼 세 번 연속 던졌어. 하하.')] : null),
   },
 };
+function buddyMemoryCount(currentVisit?: string): number {
+  const s = G();
+  return [
+    ['m13_laundry', 'q_buddy_laundry'], ['m13_cyber', 'q_buddy_result'], ['m13_court', 'q_junior_court'],
+  ].filter(([visit, quest]) => visit === currentVisit || s.flags[visit] || s.doneQuests.includes(quest)).length;
+}
+
 function m13Spot(ctx: StoryCtx, spot: SpotId) {
   const def = M13_SPOT[spot]!;
   const bonus = def.bonus();
   G().spend(15);
   const scene = (reward = 0) => ctx.play({
-    script: { npc: 'buddy', lines: [...def.lines(), ...(bonus ?? [])] },
+    script: { npc: 'buddy', lines: [
+      ...def.lines(), ...(bonus ?? []),
+      say('buddy', buddyMemoryCount(def.key) >= 2
+        ? '…별 보던 난간도 생각났어. 오늘 자유 시간에 나랑 옥상에 가 줄래? 거기서 꼭 해 보고 싶은 말이 있어.'
+        : '네 얼굴이 조금 익숙해졌어. 우리 둘이 또 어디서 시간을 보냈더라?'),
+    ] },
     onDone: () => { setFlag(def.key); G().applyEffects({ memory: Math.max(bonus ? 5 : 2, reward), affinity: { buddy: 2 } }, '잊혀 가는 이름'); },
   });
   if (spot !== 'admin') { scene(); return; }
-  const sceneAdmin = scene;
   // 🧩 P-19: 그날의 명찰을 이번엔 동기와 나눠 맞춘다
   ctx.play({
     script: { npc: 'buddy', lines: [
@@ -909,7 +918,7 @@ function m13Spot(ctx: StoryCtx, spot: SpotId) {
       narr('명찰의 실밥이 다시 풀려 있다. 동기가 조각 몇 개를 집어 들고 한참 들여다본다.'),
       say('buddy', '…이거, 전에 같이 맞췄던 것 같은데. 절반은 제가 해 볼게요.'),
     ] },
-    onDone: () => ctx.puzzle('P-19', (reward) => { sceneAdmin(reward); G().toast('💭 함께한 추억이 두 가지 떠오르면 동기와 옥상에 가자.', 'info'); }),
+    onDone: () => ctx.puzzle('P-19', scene),
   });
 }
 function m13Roof(ctx: StoryCtx) {
