@@ -1855,7 +1855,7 @@ export default function World() {
   useEffect(() => {
     const st = useGame.getState();
     if (
-      overlay ||
+      overlayRef.current ||
       rollcall ||
       cer.current ||
       st.day !== 1 ||
