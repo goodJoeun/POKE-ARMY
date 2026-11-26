@@ -83,19 +83,42 @@ export function wakingBarracks(g: Ink, w: number, h: number) {
   line(g, '#a0a68b', w * 0.16, bedY - 2, w * 0.07, 9, 2);
   rect(g, '#41575c', 0, bedY + 12, w * 0.39, 3);
   rect(g, '#354a50', w * 0.36, bedY + 14, 3, 18);
-  const quilt = (x: number) => h * 0.76 + Math.sin(x / w * 5.5 - 1) * h * 0.035 + Math.sin(x / w * 16) * 2;
+  // 베개에 누운 채 내려다본 내 모포: 저 끝에 두 발이 솟은 둔덕, 발에서 내 쪽으로 퍼지는 부드러운 주름,
+  // 턱밑에는 접어 내린 흰 홑이불. (가는 줄무늬를 늘어놓으면 무엇인지 읽히지 않는다)
+  const base = h * 0.8;
+  const bump = (x: number, at: number, half: number, tall: number) => {
+    const u = (x - at) / half;
+    return Math.abs(u) < 1 ? tall * (1 + Math.cos(u * Math.PI)) / 2 : 0;
+  };
+  const feetL = w * 0.44, feetR = w * 0.56, fw = Math.max(9, w * 0.055), fh = Math.max(7, h * 0.05);
+  const quilt = (x: number) => base - bump(x, feetL, fw, fh) - bump(x, feetR, fw, fh * 0.85)
+    - bump(x, w * 0.5, w * 0.3, h * 0.025) + Math.sin(x / w * 9) * 1.5;
+  const fold = Math.round(h - Math.max(10, h * 0.05)); // 홑이불 접힌 자락의 윗선
   for (let x = 0; x < w; x++) {
-    const y = quilt(x);
-    rect(g, '#9a9e80', x, y, 1, h - y);
-    rect(g, '#63776d', x, y + 2, 1, h - y);
+    const y = Math.round(quilt(x));
+    rect(g, '#a9ab8c', x, y, 1, 1);
+    rect(g, '#7f8f80', x, y + 1, 1, 2);
+    rect(g, '#63776d', x, y + 3, 1, h - y - 3);
   }
-  for (let i = 0; i < 11; i++) {
-    const x = i * w / 9 - 10, y = quilt(x) + 2;
-    polygon(g, '#49625e', [[x, y], [x + 4, y + 2], [x + w * 0.10, h], [x + w * 0.04, h]]);
-    line(g, '#879682', x + 2, y + 2, w * 0.06, h - y);
+  // 발끝에서 내 쪽으로 퍼지는 주름: 그늘 진 쪽과 빛 받는 쪽을 넓게
+  for (const [fx, spread] of [[feetL, -1], [feetL, -0.35], [feetR, 0.4], [feetR, 1.1]] as const) {
+    const top = quilt(fx) + 4, endX = fx + spread * w * 0.32;
+    polygon(g, '#4f645c88', [[fx - 2, top], [fx + 2, top], [endX + 9, fold], [endX - 6, fold]]);
+    polygon(g, '#8a9a8455', [[fx + 2, top], [fx + 4, top + 1], [endX + 16, fold], [endX + 9, fold]]);
   }
-  for (let i = 0; i < w * 1.5; i++) {
-    const x = rand() * w, y = quilt(x) + 3 + rand() * h * 0.28;
-    rect(g, '#b6ba992e', x, y, 2, 1);
+  // 창으로 든 아침 볕이 모포 왼쪽 위에 따뜻하게 걸린다
+  wash(g, w * 0.3, base + h * 0.04, w * 0.22, '#ffdfa82e');
+  for (let i = 0; i < w * 1.2; i++) {
+    const x = rand() * w, y = quilt(x) + 4 + rand() * (fold - quilt(x) - 4);
+    rect(g, '#b6ba9926', x, y, 2, 1);
   }
+  // 턱밑까지 덮은 홑이불의 접힌 자락
+  for (let x = 0; x < w; x++) {
+    const y = fold + Math.round(Math.sin(x / 23) * 1.5);
+    rect(g, '#3f5250', x, y - 2, 1, 2);
+    rect(g, '#d2d0b8', x, y, 1, h - y);
+    rect(g, '#f0ead4', x, y, 1, 1);
+  }
+  for (let x = 6; x < w; x += 17) rect(g, '#b4b39c', x, fold + 3, 5, 1);
+
 }
