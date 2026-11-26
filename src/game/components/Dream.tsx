@@ -10,6 +10,8 @@ import Menu from './Menu';
 import { setBgmMood, type CueId } from '../engine/audio';
 import { useLineSound } from '../engine/soundCues';
 import MonsterCanvas from './MonsterCanvas';
+import { artSize } from '../engine/scenery/pixels';
+import { lightsOutGlint } from '../engine/scenery/lightsOut';
 import type { MonsterLook } from '../types';
 
 const JIRACHI = { sprite: 'jirachi', body: '#f8f4d0', belly: '#ffffff', accent: '#f2d050', shape: 'round', ears: 'tuft', tail: 'none', eyes: 'sleepy', mouth: 'smile' } as MonsterLook;
@@ -109,16 +111,24 @@ export default function Dream() {
       const w = c.clientWidth, h = c.clientHeight;
       if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
       if (sceneRef.current === 'room') {
-        // 소등한 생활관: 어둠 속 침상과 베개 밑 별 조각
-        g.fillStyle = '#0a0c18'; g.fillRect(0, 0, w, h);
-        g.fillStyle = '#1a2030'; g.fillRect(w * 0.25, h * 0.52, w * 0.5, h * 0.2);
-        g.fillStyle = '#26304a'; g.fillRect(w * 0.27, h * 0.5, w * 0.16, h * 0.07);
+        // 소등한 생활관: 침상 그림(lightsOut) 위에, 베개 밑 별 조각의 반짝임만 그린다
+        g.clearRect(0, 0, w, h);
+        const art = artSize(w, h), k = w / art.w; // 그림 한 픽셀 = 화면 k픽셀
+        const [ax, ay] = lightsOutGlint(art.w, art.h);
+        const gx = (ax + 0.5) * k, gy = (ay + 0.5) * k;
         const pulse = 0.6 + Math.sin(t * 3) * 0.4;
-        const gx = w * 0.35, gy = h * 0.54;
-        const glow = g.createRadialGradient(gx, gy, 0, gx, gy, 60 * pulse + 20);
-        glow.addColorStop(0, 'rgba(255,240,170,0.95)'); glow.addColorStop(1, 'rgba(255,240,170,0)');
-        g.fillStyle = glow; g.beginPath(); g.arc(gx, gy, 80, 0, Math.PI * 2); g.fill();
-        star(g, gx, gy, 9, '#fff6c0');
+        const glow = g.createRadialGradient(gx, gy, 0, gx, gy, (14 + 12 * pulse) * k);
+        glow.addColorStop(0, 'rgba(255,240,170,0.9)'); glow.addColorStop(0.35, 'rgba(255,226,140,0.35)'); glow.addColorStop(1, 'rgba(255,226,140,0)');
+        g.fillStyle = glow; g.fillRect(gx - 30 * k, gy - 30 * k, 60 * k, 60 * k);
+        // 도트 반짝임: 그림과 같은 크기의 픽셀로, 빛살이 늘었다 줄었다 한다
+        const dot = (dx: number, dy: number, color: string) => {
+          g.fillStyle = color;
+          g.fillRect(Math.round((ax + dx) * k), Math.round((ay + dy) * k), Math.ceil(k), Math.ceil(k));
+        };
+        const arm = 2 + Math.round(pulse * 2);
+        for (let i = 1; i <= arm; i++) for (const [dx, dy] of [[i, 0], [-i, 0], [0, i], [0, -i]]) dot(dx, dy, i === arm ? '#ffe9a0' : '#fff6cf');
+        if (pulse > 0.55) for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) dot(dx, dy, '#ffe9a0');
+        dot(0, 0, '#ffffff');
       } else {
         g.clearRect(0, 0, w, h);
         // A brief meteor crosses the ridge once per cycle.
@@ -177,7 +187,7 @@ export default function Dream() {
   const speaker = line.who === 'voice' ? '??? (빛)' : line.who === 'jirachi' ? '지라치' : line.who === 'mom' ? '엄마 (아주 먼 곳에서)' : line.who === 'me' ? s.name : '';
   return (
     <div className="dream-scene" onClick={advance}>
-      {!inRoom && <SceneryCanvas scene="hill" day={s.day} />}
+      <SceneryCanvas key={inRoom ? 'room' : 'hill'} scene={inRoom ? 'lightsOut' : 'hill'} day={s.day} />
       <canvas ref={ref} className="dream-canvas" aria-hidden="true" />
       {fx === 'flash' && <div className="dream-flash" />}
       {revealed && line.scene === 'hill' && (

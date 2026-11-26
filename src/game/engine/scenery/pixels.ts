@@ -8,6 +8,13 @@ export function seeded(seed: number) {
   };
 }
 
+/** 삽화 캔버스의 그림 해상도: 화면 비율이 달라도 그림 픽셀은 정사각형으로, 휴대폰에서도 폭 210 이상 */
+export function artSize(cssW: number, cssH: number) {
+  const aspect = cssW / Math.max(1, cssH);
+  const w = Math.min(720, Math.max(210, Math.round(240 * aspect)));
+  return { w, h: Math.max(1, Math.round(w / aspect)) };
+}
+
 export function rect(g: Ink, color: string, x: number, y: number, w: number, h: number) {
   g.fillStyle = color;
   g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));

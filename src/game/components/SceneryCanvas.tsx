@@ -14,10 +14,11 @@ import { mailbox, datedMailbox } from '../engine/scenery/mailbox';
 import { patrolBoard } from '../engine/scenery/patrolBoard';
 import { paperYard, unsentLetters } from '../engine/scenery/paperYard';
 import { emptyDutyHall, pendulumHall } from '../engine/scenery/pendulumHall';
-import { rect, wash } from '../engine/scenery/pixels';
+import { artSize, rect, wash } from '../engine/scenery/pixels';
+import { lightsOut } from '../engine/scenery/lightsOut';
 import { quizCounter, quizGate, quizParty, quizProject, quizTrip, quizWeekend } from '../engine/scenery/quizVisions';
 
-const paintings = { hill: dreamHill, roof, library, radio, archive, parade, wakingBarracks, bedtime, dreamWater, washroom, watchDesk, fogGate, mailbox, datedMailbox, patrolBoard, paperYard, unsentLetters, pendulumHall, emptyDutyHall, quizTrip, quizProject, quizParty, quizCounter, quizWeekend, quizGate };
+const paintings = { hill: dreamHill, lightsOut, roof, library, radio, archive, parade, wakingBarracks, bedtime, dreamWater, washroom, watchDesk, fogGate, mailbox, datedMailbox, patrolBoard, paperYard, unsentLetters, pendulumHall, emptyDutyHall, quizTrip, quizProject, quizParty, quizCounter, quizWeekend, quizGate };
 
 export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof paintings; day?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -30,8 +31,9 @@ export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof 
       const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
       if (!aspect) return;
       // Keep square art pixels across screen shapes, with enough room for the receiver on phones.
-      canvas.width = Math.min(720, Math.max(210, Math.round(240 * aspect)));
-      canvas.height = Math.max(1, Math.round(canvas.width / aspect));
+      const art = artSize(canvas.clientWidth, canvas.clientHeight);
+      canvas.width = art.w;
+      canvas.height = art.h;
       paintings[scene](g, canvas.width, canvas.height, day);
       if (still) {
         still.width = canvas.width;
