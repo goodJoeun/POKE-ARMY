@@ -50,16 +50,19 @@ export function archive(g: Ink, w: number, h: number) {
   }
   rect(g, '#b1a080', 0, wall - 24, w, 2);
   rect(g, '#434538', 0, wall - 22, w, 3);
-  // Space for the shutters at left, then as many prints as the wall will hold.
+  // Space for the shutters at left, then as many whole prints as the wall will hold (none cut off at the edge),
+  // centred in the space. Tall phone walls get extra rows instead of a blank band under the prints.
   const shutter = Math.round(w * 0.12), s = Math.min(1.25, w / 260, h / 213);
-  const photoY = Math.round(h * 0.23), step = 66 * s;
-  for (let col = -Math.ceil(w / step); col < Math.ceil(w / step); col++) {
-    const x = cx - 31 * s + col * step;
-    if (x < shutter + 4 || x > w - 6) continue;
-    for (let row = 0; row < 2; row++) {
-      const y = photoY + (row - 0.5) * 44 * s;
-      const year = col * 2 + row, inset = Math.abs(year) % 3 * 1.6;
-      groupPrint(g, x + inset, y + inset, s - inset * 0.018, year);
+  const step = 66 * s, rowStep = 44 * s, pw = 62 * s, ph = 41 * s;
+  const left = shutter + 8, right = w - 8, top = Math.round(h * 0.06), bottom = wall - 30;
+  const cols = Math.max(1, Math.floor((right - left + step - pw) / step));
+  const rows = Math.max(2, Math.min(4, Math.floor((bottom - top + rowStep - ph) / rowStep)));
+  const x0 = left + (right - left - (cols * step - (step - pw))) / 2;
+  const y0 = top + (bottom - top - (rows * rowStep - (rowStep - ph))) / 2;
+  for (let col = 0; col < cols; col++) {
+    for (let row = 0; row < rows; row++) {
+      const year = col * 4 + row, inset = year % 3 * 1.6;
+      groupPrint(g, x0 + col * step + inset * 0.5, y0 + row * rowStep + inset * 0.5, s - inset * 0.018, year);
     }
   }
   rect(g, '#373e36', 0, 8, shutter, wall - 28);
@@ -78,7 +81,8 @@ export function archive(g: Ink, w: number, h: number) {
   for (let i = 0; i < w * 2; i++) rect(g, i % 3 ? '#b08b665c' : '#5c483d55', rand() * w, wall + 1 + rand() * (desk + 18 - wall), 2 + rand() * 15, 1);
   rect(g, '#bd9570', 0, desk + 19, w, 2);
   rect(g, '#3d332e', 0, desk + 21, w, 4);
-  for (let x = cx - 225; x < w; x += 75) {
+  const drawers = Math.max(1, Math.floor((w + 5 - 8) / 75));
+  for (let i = 0, x = Math.round((w - (drawers * 75 - 5)) / 2); i < drawers; i++, x += 75) {
     rect(g, '#392f2a', x, desk + 28, 70, 21);
     rect(g, '#705443', x + 2, desk + 30, 66, 17);
     rect(g, '#ab9263', x + 27, desk + 34, 16, 5);
