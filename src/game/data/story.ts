@@ -43,7 +43,7 @@ export const CLUES: ClueDef[] = [
   { id: 'C-16', chapter: 2, title: '백여덟 개의 돌', place: '분리수거장 구석 돌탑', text: '돌아오지 못한 사람들의 소원이 돌이 되어 쌓였다. 자리는 백여덟, 돌은 백일곱. 비어 있는 한 자리는 "다음에 남는 사람"의 것이다.' },
   { id: 'C-11', chapter: 2, title: '불 꺼진 서가', place: '도서관 (밤)', text: '글자들이 모여 말했다. "별이 지기 전에."' },
   { id: 'C-12', chapter: 3, title: '단체 사진', place: '기록 보관실', text: '해마다 같은 자리에 같은 얼굴. 10년 전 사진 속 이병은 2분대의 말 없는 병장이었다.' },
-  { id: 'C-13', chapter: 3, title: '병장의 일기', place: '2생활관', text: '"별 조각 일곱 개… 마지막 밤… 나는 겁이 나서 거두지 못했다."' },
+  { id: 'C-13', chapter: 3, title: '병장의 일기', place: '2생활관', text: '"별 조각 일곱 개… 마지막 밤… 나는 겁이 나서 거두지 못했다." 마지막 장에 남은 서명은 강민혁.' },
   { id: 'C-17', chapter: 3, title: '2인 1조', place: '탄약고', text: '수불 대장에 기록 없이 빈 상자 하나. 그날 금요일 줄의 두 번째 서명 칸도 비어 있다. 인식표의 이름은 한도윤. 군견은 오늘도 문만 본다.' },
   { id: 'C-14', chapter: 3, title: '진자 자국', place: '탄약고·격납고·부두', text: '잠긴 상자 주변의 둥근 자국. 누군가 별 조각을 숨기고 있었다. 자국은 분리수거장 쓰레기통까지 이어졌다.' },
   { id: 'C-15', chapter: 3, title: '소원을 거둬라', place: '도서관 (밤)', text: '글자들이 끝까지 모였다. "소원을 거둬라."' },
@@ -88,7 +88,7 @@ export const STORY_MISSIONS: StoryMission[] = [
   { id: 'M-02', chapter: 1, title: '거울 속의 나', hint: '막사 화장실에서 세면하기', from: 2, clue: 'C-02', spot: 'wc1' },
   { id: 'M-03', chapter: 1, title: '생일자 명단', hint: '막사 복도 게시판의 "이번 달 생일자" 보기', from: 3, clue: 'C-03', spot: 'board1' },
   { id: 'M-04', chapter: 1, title: '낡은 책 한 권', hint: '막사 2층 도서관의 관리병 네이티오에게 말 걸기', from: 3, clue: 'C-08', spot: 'library' },
-  { id: 'N-01', chapter: 1, title: '안개 너머', hint: '3일차 밤 야간 위병소 근무 때, 위병소 정문 밖으로 나가 보기', from: 3, nightFrom: 3, clue: 'C-04', spot: 'gate' },
+  { id: 'N-01', chapter: 1, title: '안개 너머', hint: '3일차 밤 야간 위병소 근무 때, 위병소 정문 밖으로 나가 보기', hintLate: '개인정비 시간에 위병소 정문으로 가서 안개 너머 길을 걸어 보기', from: 3, nightFrom: 3, clue: 'C-04', spot: 'gate' },
   // ── 2장 「이상한 부대」 (4~6일차)
   { id: 'M-05', chapter: 2, title: '보낸 날짜가 없는 편지', hint: '막사 2층 싸지방에서 인터넷 편지 확인 (점심·개인정비 시간)', from: 4, clue: 'C-05', spot: 'cyber' },
   { id: 'M-06', chapter: 2, title: '낯선 명찰', hint: '동기에게 "같이 빨래하러 가자"고 말 걸기 (점심·개인정비 시간)', from: 4, clue: 'C-06' },

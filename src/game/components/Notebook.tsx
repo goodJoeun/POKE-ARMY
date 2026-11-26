@@ -162,6 +162,11 @@ export default function Notebook({ onClose }: { onClose: () => void }) {
                 <div key={c.id} className="clue-card">
                   <div><b>🔍 {c.title}</b> <span className="hud-dim">· {c.place}</span></div>
                   <div className="clue-text">{c.text}</div>
+                  {c.id === 'C-13' && (s.flags.calledMinhyeok || s.day < TOTAL_DAYS) && (
+                    <div className="clue-text">{s.flags.calledMinhyeok
+                      ? '이름을 불렀더니 병장님이 명찰 뒷면에 직접 적으셨다. 강민혁.'
+                      : '전역 전에 2생활관 병장님을 다시 뵈면, 점호에서 빠진 그 이름을 내가 불러 드리자.'}</div>
+                  )}
                 </div>
               ) : (
                 <div key={c.id} className="clue-card locked"><b>❓ ???</b> <span className="hud-dim">· {c.chapter}장</span></div>
