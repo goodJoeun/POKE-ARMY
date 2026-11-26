@@ -1,6 +1,6 @@
 // 포켓몬스터 어나더 레드 그래픽 가져오기 (정면·뒷모습·아이콘·필드 걷기 시트)
 // 사용법: npm run anotherred -- "<...\Pokemon Another Red_PWT_...\Graphics 폴더 경로>"
-//         (Graphics\Characters\Followers 경로를 줘도 된다)
+//         (Graphics\Pokemon 이나 Graphics\Characters\Followers 경로를 줘도 된다)
 //
 // - 게임에 등장하는 포켓몬의 영문 이름(대문자, 예: CHARMANDER.png)으로 파일을 찾는다.
 //   Graphics/Pokemon/Front  → public/sprites/ar/front/<key>.png  (애니메이션 가로 띠: 정사각형 프레임 여러 장)
@@ -21,6 +21,8 @@ if (!src) {
 }
 // Followers 경로를 줬으면 Graphics 폴더로 올라간다
 if (basename(src).toLowerCase() === 'followers') src = join(src, '..', '..');
+// Graphics\Pokemon 경로를 줘도 Graphics 폴더로 올라간다
+else if (basename(src).toLowerCase() === 'pokemon') src = join(src, '..');
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'sprites');
 const exists = async (p) => access(p).then(() => true, () => false);

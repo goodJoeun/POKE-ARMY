@@ -7,7 +7,9 @@ import { TEXT_SPEED, useSettings } from '../state/settings';
 import { hasGuardNight, hasNightDuty } from '../data/schedule';
 import { BRANCHES, RANKS, TOTAL_DAYS, rankIdxForDay, serviceMonth } from '../data/branches';
 import { ARCHETYPE_INFO, findSpecies } from '../data/monsters';
-import { PERSONALITY_QUIZ } from '../data/quiz';
+import { PERSONALITY_QUIZ, type QuizCast } from '../data/quiz';
+import type { CapType } from '../engine/drawMonster';
+import type { MonsterLook } from '../types';
 import { NPC_IDS, NPC_SKINS } from '../data/npcs';
 import { npcCap, npcSpeaker } from '../engine/speakers';
 import MonsterCanvas from './MonsterCanvas';
@@ -91,6 +93,36 @@ const REACTIONS: Record<Archetype, string[]> = {
   social: ['"사람 좋아하는구나! 나도 좋아해, 사람!"', '"주변이 반짝반짝해지는 대답이네~"', '"같이면 버틸 수 있다… 응, 그 말 마음에 들어."'],
 };
 
+/** 꿈이 보여 주는 장면의 포켓몬 외형: npc면 고른 군의 그 NPC(모자 포함), 아니면 NPC 외형 중 같은 스프라이트 */
+function castLook(branch: BranchId, c: QuizCast): { look: MonsterLook; cap: CapType } | null {
+  if (c.npc) return { look: NPC_SKINS[branch][c.npc].look, cap: npcCap(branch, c.npc) };
+  for (const skins of Object.values(NPC_SKINS)) {
+    for (const sk of Object.values(skins)) if (sk.look.sprite === c.sprite) return { look: sk.look, cap: null };
+  }
+  const sp = c.sprite ? findSpecies(c.sprite) : undefined;
+  return sp ? { look: sp.look, cap: null } : null;
+}
+
+/** 질문 창 윗변에 올라선 등장 포켓몬들 (창 높이가 바뀌면 따라 움직인다) */
+function QuizCastRow({ cast, branch, top }: { cast: QuizCast[]; branch: BranchId; top: number | null }) {
+  if (top === null) return null;
+  return (
+    <div className="quiz-cast" style={{ top }} aria-hidden="true">
+      {cast.map((c, i) => {
+        const found = castLook(branch, c);
+        if (!found) return null;
+        const scale = c.scale ?? 1;
+        return (
+          <div key={`${c.sprite ?? c.npc}-${i}`} className="quiz-actor" style={{ '--s': scale, animationDelay: `${i * 0.12}s` } as React.CSSProperties}>
+            {c.emote && <span className="quiz-emote" style={{ animationDelay: `${i * 0.4}s` }}>{c.emote}</span>}
+            <MonsterCanvas look={found.look} size={Math.round(120 * scale)} dir={c.dir ?? 'down'} cap={found.cap} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Quiz() {
   const s = useGame();
   const b = BRANCHES[s.branch];
@@ -167,11 +199,27 @@ export function Quiz() {
   });
 
   const bright = phase === 'closing' && idx === closing.length - 1;
+  // 🎬 질문마다 꿈이 그 상황을 보여 준다: 장면 그림 + 질문 창 위에 올라선 포켓몬들
+  const vision = phase === 'q' || phase === 'react' ? q.vision : null;
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [boxTop, setBoxTop] = useState<number | null>(null);
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box || !vision) return;
+    const measure = () => setBoxTop(box.offsetTop);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    window.addEventListener('resize', measure);
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, [vision]);
   return (
-    <div className={`scene dream-scene first-dream ${bright ? 'whiteout' : ''}`} onClick={() => phase !== 'q' && advance()}>
-      <SceneryCanvas scene="dreamWater" />
+    <div className={`scene dream-scene first-dream ${vision ? 'vision' : ''} ${bright ? 'whiteout' : ''}`} onClick={() => phase !== 'q' && advance()}>
+      {vision ? <SceneryCanvas key={vision.scene} scene={vision.scene} /> : <SceneryCanvas scene="dreamWater" />}
+      {vision && <div className="quiz-vignette" aria-hidden="true" />}
+      {vision && <QuizCastRow key={qi} cast={vision.cast} branch={s.branch} top={boxTop} />}
       {(phase === 'q' || phase === 'react') && <div className="dream-progress">질문 {qi + 1} / {PERSONALITY_QUIZ.length}</div>}
-      <div className="dream-box" onClick={(e) => { if (phase === 'q') e.stopPropagation(); }}>
+      <div className="dream-box" ref={boxRef} onClick={(e) => { if (phase === 'q') e.stopPropagation(); }}>
         {line.who === 'voice' && <div className="speaker">???</div>}
         <div className={`dialogue-text ${line.who === 'narr' ? 'narr' : ''}`}>
           {line.text.slice(0, typed)}

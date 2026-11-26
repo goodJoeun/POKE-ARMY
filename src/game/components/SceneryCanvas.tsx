@@ -15,8 +15,9 @@ import { patrolBoard } from '../engine/scenery/patrolBoard';
 import { paperYard, unsentLetters } from '../engine/scenery/paperYard';
 import { emptyDutyHall, pendulumHall } from '../engine/scenery/pendulumHall';
 import { rect, wash } from '../engine/scenery/pixels';
+import { quizCounter, quizGate, quizParty, quizProject, quizTrip, quizWeekend } from '../engine/scenery/quizVisions';
 
-const paintings = { hill: dreamHill, roof, library, radio, archive, parade, wakingBarracks, bedtime, dreamWater, washroom, watchDesk, fogGate, mailbox, datedMailbox, patrolBoard, paperYard, unsentLetters, pendulumHall, emptyDutyHall };
+const paintings = { hill: dreamHill, roof, library, radio, archive, parade, wakingBarracks, bedtime, dreamWater, washroom, watchDesk, fogGate, mailbox, datedMailbox, patrolBoard, paperYard, unsentLetters, pendulumHall, emptyDutyHall, quizTrip, quizProject, quizParty, quizCounter, quizWeekend, quizGate };
 
 export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof paintings; day?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
