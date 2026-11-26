@@ -1,36 +1,80 @@
-'use client';
-import { create } from 'zustand';
+"use client";
+import { create } from "zustand";
 import type {
-  ActiveQuest, Archetype, BranchId, Dialogue, DialogueCtx, Effects, GameId,
-  NpcId, Scene, ScheduleEvent, SpotId, Stats,
-} from '../types';
-import { BRANCHES, FACILITY_NAME, RANKS, STORE_NAME, TOTAL_DAYS, rankIdxForDay, seasonForDay } from '../data/branches';
-import { pickSpecies, topArchetype } from '../data/monsters';
-import { NPC_IDS, NPC_SKINS, SOLDIER_IDS, birthdayNpcs, npcPresent, arriveDay, leaveDay } from '../data/npcs';
-import { buildSchedule, mealFromWork } from '../data/schedule';
-import { DIALOGUES } from '../data/dialogues';
-import { QUESTS, QUEST_CHAINS, chainOf } from '../data/quests';
-import { ITEMS, GIFT_AFFINITY } from '../data/items';
-import { rollcallPool, type RollcallQuestion } from '../data/rollcall';
-import { fixJosa, fmt } from '../engine/text';
-import { teleport } from '../engine/runtime';
-import { extrasForDay } from '../data/extras';
-import { CLUES, CHAPTERS, DREAMS, MEMORY_DECAY, MEMORY_PER_CLUE, MEMORY_PER_DREAM, MEMORY_START, RETURN_DAYS, chapterDone, clueDef } from '../data/story';
-import { getWorld } from '../engine/map';
-import { SUSPICIONS, suspicionState } from '../data/suspicions';
-import { CANDY_START, NO_PROGRESS, puzzleDef, puzzleReward, type PuzzleProgress } from '../data/puzzles';
+  ActiveQuest,
+  Archetype,
+  BranchId,
+  Dialogue,
+  DialogueCtx,
+  Effects,
+  GameId,
+  NpcId,
+  Scene,
+  ScheduleEvent,
+  SpotId,
+  Stats,
+} from "../types";
+import {
+  BRANCHES,
+  FACILITY_NAME,
+  RANKS,
+  STORE_NAME,
+  TOTAL_DAYS,
+  rankIdxForDay,
+  seasonForDay,
+} from "../data/branches";
+import { pickSpecies, topArchetype } from "../data/monsters";
+import {
+  NPC_IDS,
+  NPC_SKINS,
+  SOLDIER_IDS,
+  birthdayNpcs,
+  npcPresent,
+  arriveDay,
+  leaveDay,
+} from "../data/npcs";
+import { buildSchedule, mealFromWork } from "../data/schedule";
+import { DIALOGUES } from "../data/dialogues";
+import { QUESTS, QUEST_CHAINS, chainOf } from "../data/quests";
+import { ITEMS, GIFT_AFFINITY } from "../data/items";
+import { rollcallPool, type RollcallQuestion } from "../data/rollcall";
+import { fixJosa, fmt } from "../engine/text";
+import { teleport } from "../engine/runtime";
+import { extrasForDay } from "../data/extras";
+import {
+  CLUES,
+  CHAPTERS,
+  DREAMS,
+  MEMORY_DECAY,
+  MEMORY_PER_CLUE,
+  MEMORY_PER_DREAM,
+  MEMORY_START,
+  RETURN_DAYS,
+  chapterDone,
+  clueDef,
+} from "../data/story";
+import { getWorld } from "../engine/map";
+import { SUSPICIONS, suspicionState } from "../data/suspicions";
+import {
+  CANDY_START,
+  NO_PROGRESS,
+  puzzleDef,
+  puzzleReward,
+  type PuzzleProgress,
+} from "../data/puzzles";
 
 // v2: 포켓몬 종 ID로 변경되어 이전 세이브와 호환되지 않음
-const SAVE_KEY = 'poke-army-save-v2';
+const SAVE_KEY = "poke-army-save-v2";
 
 export interface Toast {
   id: number;
   text: string;
-  tone: 'info' | 'good' | 'bad' | 'alert';
+  tone: "info" | "good" | "bad" | "alert";
   waitForDisplay?: boolean;
 }
-type ToastPriority = 'normal' | 'routine';
-export const toastDuration = (tone: Toast['tone']) => tone === 'alert' ? 5000 : 3800;
+type ToastPriority = "normal" | "routine";
+export const toastDuration = (tone: Toast["tone"]) =>
+  tone === "alert" ? 5000 : 3800;
 
 interface GradeRecord {
   day: number;
@@ -84,66 +128,84 @@ interface Persist {
 }
 
 /** 야간 순찰 점검 장소: 막사 1·2층 복도 게시판 · 세탁실 · 화장실 */
-export const PATROL_SPOTS: SpotId[] = ['board1', 'laundry1', 'wc1', 'board2', 'laundry2', 'wc2'];
+export const PATROL_SPOTS: SpotId[] = [
+  "board1",
+  "laundry1",
+  "wc1",
+  "board2",
+  "laundry2",
+  "wc2",
+];
 const PATROL_TEXT: Partial<Record<SpotId, string[]>> = {
   board1: [
-    '1층 복도 이상 무. 게시판 경계작전명령서 최신본 확인.',
-    '1층 복도 창문 잠금 확인. 이상 무.',
-    '1층 복도: 게시판 압정 하나가 바닥에 떨어져 있다. 주워서 다시 꽂았다.',
-    '1층 복도: 소화기 압력 바늘 초록 칸. 점검표에 서명했다.',
-    '1층 복도: 손전등 불빛에 내 그림자가 길게 늘어진다. …그림자는 하나다. 이상 무.',
-    '1층 복도: 식단표가 한 장 넘어가 있다. 누가 넘겼는지는 모르겠다. 오늘 날짜로 돌려 놓았다.',
+    "1층 복도 이상 무. 게시판 경계작전명령서 최신본 확인.",
+    "1층 복도 창문 잠금 확인. 이상 무.",
+    "1층 복도: 게시판 압정 하나가 바닥에 떨어져 있다. 주워서 다시 꽂았다.",
+    "1층 복도: 소화기 압력 바늘 초록 칸. 점검표에 서명했다.",
+    "1층 복도: 손전등 불빛에 내 그림자가 길게 늘어진다. …그림자는 하나다. 이상 무.",
+    "1층 복도: 식단표가 한 장 넘어가 있다. 누가 넘겼는지는 모르겠다. 오늘 날짜로 돌려 놓았다.",
   ],
   board2: [
-    '2층 복도 이상 무. 비상구 표지등 정상.',
-    '2층 복도 창문 하나가 열려 있다. 닫았다.',
-    '2층 복도: 게시판 유리에 불빛이 반사돼 잠깐 눈이 부셨다. 이상 무.',
-    '2층 복도: 체단실 문틈으로 아령 굴러가는 소리. 열어 보니 아무도 없다. 아령을 거치대에 올렸다.',
-    '2층 복도: 계단 쪽에서 찬 바람이 내려온다. 옥상 철문은 잠겨 있다. 이상 무.',
-    '2층 복도: 비상구 표지등이 한 번 깜빡였다. 다시 보니 멀쩡하다. 메모만 남긴다.',
+    "2층 복도 이상 무. 비상구 표지등 정상.",
+    "2층 복도 창문 하나가 열려 있다. 닫았다.",
+    "2층 복도: 게시판 유리에 불빛이 반사돼 잠깐 눈이 부셨다. 이상 무.",
+    "2층 복도: 체단실 문틈으로 아령 굴러가는 소리. 열어 보니 아무도 없다. 아령을 거치대에 올렸다.",
+    "2층 복도: 계단 쪽에서 찬 바람이 내려온다. 옥상 철문은 잠겨 있다. 이상 무.",
+    "2층 복도: 비상구 표지등이 한 번 깜빡였다. 다시 보니 멀쩡하다. 메모만 남긴다.",
   ],
   laundry1: [
-    '1층 세탁실: 건조기가 아직 돌아간다. 취침 시간 이후 사용 금지… 전원을 끄고 메모를 붙였다.',
-    '1층 세탁실 이상 무. 물 새는 곳 없음.',
-    '1층 세탁실: 건조대의 전투복 한 벌이 아직 젖어 있다. 이름표 자리는 비어 있다. 그대로 둔다.',
-    '1층 세탁실: 세탁기 문이 열려 있다. 안은 비었다. 닫고 나왔다.',
-    '1층 세탁실: 수도꼭지에서 물방울이 똑, 똑. …박자가 너무 일정하다. 꽉 잠갔다.',
+    "1층 세탁실: 건조기가 아직 돌아간다. 취침 시간 이후 사용 금지… 전원을 끄고 메모를 붙였다.",
+    "1층 세탁실 이상 무. 물 새는 곳 없음.",
+    "1층 세탁실: 건조대의 전투복 한 벌이 아직 젖어 있다. 이름표 자리는 비어 있다. 그대로 둔다.",
+    "1층 세탁실: 세탁기 문이 열려 있다. 안은 비었다. 닫고 나왔다.",
+    "1층 세탁실: 수도꼭지에서 물방울이 똑, 똑. …박자가 너무 일정하다. 꽉 잠갔다.",
   ],
   laundry2: [
-    '2층 세탁실 이상 무. 세제 정리 상태 양호.',
-    '2층 세탁실: 누군가 빨래를 두고 갔다. 이름표 확인 후 메모.',
-    '2층 세탁실: 건조기 보풀 통이 가득 찼다. 비우고 점검표에 적었다.',
-    '2층 세탁실: 창문에 김이 서려 있다. 손자국 같은 얼룩 하나. 닦으니 지워진다. 이상 무.',
-    '2층 세탁실: 양말 한 짝이 바닥에 떨어져 있다. 분실물 바구니에 넣었다.',
+    "2층 세탁실 이상 무. 세제 정리 상태 양호.",
+    "2층 세탁실: 누군가 빨래를 두고 갔다. 이름표 확인 후 메모.",
+    "2층 세탁실: 건조기 보풀 통이 가득 찼다. 비우고 점검표에 적었다.",
+    "2층 세탁실: 창문에 김이 서려 있다. 손자국 같은 얼룩 하나. 닦으니 지워진다. 이상 무.",
+    "2층 세탁실: 양말 한 짝이 바닥에 떨어져 있다. 분실물 바구니에 넣었다.",
   ],
   wc1: [
-    '1층 화장실: 불이 켜져 있다. 아무도 없다. 소등 완료.',
-    '1층 화장실 이상 무. 수도꼭지 잠금 확인.',
-    '1층 화장실: 맨 끝 칸 문이 닫혀 있다. 노크해 보니 비어 있다. 열어 두었다.',
-    '1층 화장실: 환풍기가 혼자 돌고 있다. 스위치를 내렸다.',
-    '1층 화장실: 세면대 거울에 김이 서려 있다. 방금까지 누가 있었던 것처럼. …인원 없음.',
+    "1층 화장실: 불이 켜져 있다. 아무도 없다. 소등 완료.",
+    "1층 화장실 이상 무. 수도꼭지 잠금 확인.",
+    "1층 화장실: 맨 끝 칸 문이 닫혀 있다. 노크해 보니 비어 있다. 열어 두었다.",
+    "1층 화장실: 환풍기가 혼자 돌고 있다. 스위치를 내렸다.",
+    "1층 화장실: 세면대 거울에 김이 서려 있다. 방금까지 누가 있었던 것처럼. …인원 없음.",
   ],
   wc2: [
-    '2층 화장실 이상 무.',
-    '2층 화장실: 물이 계속 흐른다. 꼭지를 잠그고 수리 요청 메모.',
-    '2층 화장실: 비누 받침이 바닥에 떨어져 있다. 제자리에 올렸다.',
-    '2층 화장실: 창문이 한 뼘 열려 있다. 밖은 안개뿐이다. 닫았다.',
-    '2층 화장실: 거울 쪽은 길게 보지 않았다. 이상 무.',
+    "2층 화장실 이상 무.",
+    "2층 화장실: 물이 계속 흐른다. 꼭지를 잠그고 수리 요청 메모.",
+    "2층 화장실: 비누 받침이 바닥에 떨어져 있다. 제자리에 올렸다.",
+    "2층 화장실: 창문이 한 뼘 열려 있다. 밖은 안개뿐이다. 닫았다.",
+    "2층 화장실: 거울 쪽은 길게 보지 않았다. 이상 무.",
   ],
 };
 /** 같은 자리에서 방금 본 문구는 다음 순찰에 다시 나오지 않게 한다 */
 const lastPatrolText: Partial<Record<SpotId, string>> = {};
 
 /** ⏰ 다음 일정이 시작할 시각이 됐다 (집합 장소에 가야 할 때): 시간이 드는 일(퀘스트 · 활동)은 일정을 마친 뒤로 미룬다 */
-export function eventDue(s: { minute: number; eventBegun: boolean; currentEvent: () => ScheduleEvent | null }): boolean {
+export function eventDue(s: {
+  minute: number;
+  eventBegun: boolean;
+  currentEvent: () => ScheduleEvent | null;
+}): boolean {
   const ev = s.currentEvent();
-  return !!ev && !s.eventBegun && !ev.auto && ev.kind !== 'farewell' && s.minute >= ev.start;
+  return (
+    !!ev &&
+    !s.eventBegun &&
+    !ev.auto &&
+    ev.kind !== "farewell" &&
+    s.minute >= ev.start
+  );
 }
 
-const fmtClock = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(Math.floor(min % 60)).padStart(2, '0')}`;
+const fmtClock = (min: number) =>
+  `${String(Math.floor(min / 60) % 24).padStart(2, "0")}:${String(Math.floor(min % 60)).padStart(2, "0")}`;
 
 export interface MealCheck {
-  meal: 'lunch' | 'dinner';
+  meal: "lunch" | "dinner";
   /** 식사 시작 시각 */
   start: number;
   /** 분대와 함께 먹고 생활관으로 돌아왔다. 그 전에는 배식 시간이 끝나지 않고, 다음 일정·스토리도 진행되지 않는다 */
@@ -158,14 +220,23 @@ export interface MealCheck {
  * - guard(위병소): 사수(또는 부사수)가 조용히 깨움 → 같이 위병소로 → 이전 근무자와 교대 → 근무 → 같이 복귀 → 취침
  */
 export interface NightDuty {
-  kind: 'watch' | 'guard';
+  kind: "watch" | "guard";
   /** report: 교대를 마치고 지휘통제실 당직 간부에게 근무 철수 보고하러 가는 중 → return: 보고를 마치고 침상으로 */
   /**
    * 불침번: sleep → woken(인수인계) → checkin(지휘통제실로 걸어가 근무 신고) → shift(신고 장면) → rounds(2생활관 · 1생활관 순찰)
    *        → wakeNext(다음 근무자 깨우기) → report(지휘통제실 철수 보고) → return(침상)
    * 위병소: sleep → woken → toPost → shift → report → return
    */
-  phase: 'sleep' | 'woken' | 'checkin' | 'toPost' | 'shift' | 'rounds' | 'wakeNext' | 'report' | 'return';
+  phase:
+    | "sleep"
+    | "woken"
+    | "checkin"
+    | "toPost"
+    | "shift"
+    | "rounds"
+    | "wakeNext"
+    | "report"
+    | "return";
   /** 불침번 순찰: 돌아본 생활관 */
   rounds?: string[];
   /** 나를 깨우는 사람 (불침번: 이전 근무자 / 위병소: 같이 가는 사수·부사수). 주요 NPC id 또는 'x:<엑스트라>' */
@@ -185,24 +256,24 @@ export interface NightDuty {
  */
 export function nightDutyClockCap(nd: NightDuty): number {
   switch (nd.phase) {
-    case 'sleep':
-    case 'woken':
-    case 'checkin':
-    case 'toPost':
+    case "sleep":
+    case "woken":
+    case "checkin":
+    case "toPost":
       return nd.shiftStart;
-    case 'shift':
-    case 'rounds':
-      return nd.kind === 'watch' ? nd.shiftEnd - 10 : nd.shiftEnd;
-    case 'wakeNext':
-    case 'report':
+    case "shift":
+    case "rounds":
+      return nd.kind === "watch" ? nd.shiftEnd - 10 : nd.shiftEnd;
+    case "wakeNext":
+    case "report":
       return nd.shiftEnd;
-    case 'return':
+    case "return":
       return nd.shiftEnd + 30;
   }
 }
 
 export interface RollcallState {
-  kind: 'rollcall_am' | 'rollcall_pm';
+  kind: "rollcall_am" | "rollcall_pm";
   q: RollcallQuestion;
   late: boolean;
 }
@@ -239,12 +310,12 @@ interface Store extends Persist {
   answerRollcall: (choice: number) => boolean;
   closeRollcall: () => void;
   applyEffects: (e: Effects, label?: string, silent?: boolean) => string;
-  toast: (text: string, tone?: Toast['tone'], priority?: ToastPriority) => void;
+  toast: (text: string, tone?: Toast["tone"], priority?: ToastPriority) => void;
   dismissToast: (id: number) => void;
   log: (text: string) => void;
   spend: (mins: number) => void;
   /** 일과 장면 대기: 집합이 끝나 일과가 시작됐다 (월드가 장면을 보여 주고 finishWork를 부른다) */
-  work: { eventId: string; game: GameId; slot: 'am' | 'pm' } | null;
+  work: { eventId: string; game: GameId; slot: "am" | "pm" } | null;
   /** 일과 장면이 끝났다 → 일과 종료 시각으로 */
   finishWork: () => void;
   /** 야간 근무(불침번·위병소)의 근무 시간이 지나갔다 → 교대하러 / 복귀하러 */
@@ -253,7 +324,10 @@ interface Store extends Persist {
   pickDialogue: (npc: NpcId) => Dialogue | null;
   markSeen: (id: string) => void;
   markTalked: (npc: NpcId) => void;
-  questStepAt: (t: { spot?: SpotId; npc?: NpcId }) => { quest: ActiveQuest; text: string; minutes?: number } | null;
+  questStepAt: (t: {
+    spot?: SpotId;
+    npc?: NpcId;
+  }) => { quest: ActiveQuest; text: string; minutes?: number } | null;
   advanceQuest: (id: string) => void;
   buy: (item: string) => boolean;
   useItem: (item: string) => void;
@@ -300,10 +374,10 @@ const zeroAff = (): Record<NpcId, number> =>
   Object.fromEntries(NPC_IDS.map((n) => [n, 0])) as Record<NpcId, number>;
 
 const initialPersist = (): Persist => ({
-  name: '김몬스',
-  branch: 'army',
-  archetype: 'leader',
-  speciesId: 'charmander',
+  name: "레드",
+  branch: "army",
+  archetype: "leader",
+  speciesId: "charmander",
   day: 1,
   minute: 360,
   stats: { hp: 80, mental: 70, discipline: 50, skill: 10 },
@@ -329,7 +403,10 @@ const initialPersist = (): Persist => ({
   candy: CANDY_START,
   susSeen: {},
   dayLog: [],
-  dayStart: { stats: { hp: 80, mental: 70, discipline: 50, skill: 10 }, affinity: zeroAff() },
+  dayStart: {
+    stats: { hp: 80, mental: 70, discipline: 50, skill: 10 },
+    affinity: zeroAff(),
+  },
   lateCount: 0,
   askedQ: [],
   farewellDone: [],
@@ -348,37 +425,49 @@ const WORKLOAD: Record<GameId, { hp: number; mental: number }> = {
 
 export function fmtDelta(v: number): string {
   const r = Math.round(v * 10) / 10;
-  return `${r > 0 ? '+' : ''}${Number.isInteger(r) ? r : r.toFixed(1)}`;
+  return `${r > 0 ? "+" : ""}${Number.isInteger(r) ? r : r.toFixed(1)}`;
 }
-
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 let toastId = 1;
 
 export const useGame = create<Store>((set, get) => ({
   ...initialPersist(),
-  scene: 'title',
+  scene: "title",
   work: null,
- 
+
   nightDuty: null,
   susNote: [],
   solo: null,
   rollcall: null,
- 
+
   toasts: [],
   busy: false,
 
   go: (s) => set({ scene: s }),
 
   newGame: (name) => {
-    set({ ...initialPersist(), name: name.trim() || '김몬스', scene: 'home', nightDuty: null, rollcall: null, work: null, toasts: [], busy: false });
+    set({
+      ...initialPersist(),
+      name: name.trim() || "레드",
+      scene: "home",
+      nightDuty: null,
+      rollcall: null,
+      work: null,
+      toasts: [],
+      busy: false,
+    });
   },
 
   chooseBranch: (b) => set({ branch: b }),
 
   finishQuiz: (scores) => {
     const sp = pickSpecies(get().branch, scores);
-    set({ archetype: topArchetype(scores), speciesId: sp.id, scene: 'transform' });
+    set({
+      archetype: topArchetype(scores),
+      speciesId: sp.id,
+      scene: "transform",
+    });
   },
 
   startDay: () => {
@@ -387,39 +476,50 @@ export const useGame = create<Store>((set, get) => ({
     const prevRank = rankIdxForDay(day - 1);
     const rank = rankIdxForDay(day);
     const logs: { text: string; priority: ToastPriority }[] = [];
-    const addLog = (text: string, priority: ToastPriority = 'normal') => logs.push({ text, priority });
+    const addLog = (text: string, priority: ToastPriority = "normal") =>
+      logs.push({ text, priority });
     const st = { ...s.stats };
     const b = BRANCHES[s.branch];
     // 🌟 인간이었던 기억은 매일 조금씩 흐려진다 (스토리가 시작된 뒤부터)
     let memory = s.memory;
     if (s.clues.length > 0 && day >= 2) {
       memory = Math.max(0, memory - MEMORY_DECAY);
-      addLog(`🌟 인간이었던 기억이 조금 흐려졌다… (기억 ${memory})`, 'routine');
+      addLog(`🌟 인간이었던 기억이 조금 흐려졌다… (기억 ${memory})`, "routine");
     }
     // 도착/전역 알림
     for (const id of SOLDIER_IDS) {
       const sk = NPC_SKINS[s.branch][id];
-      if (arriveDay(id) === day && day > 1) addLog(`📦 새 후임 ${sk.name}(${sk.species})이(가) 전입 왔다.`);
+      if (arriveDay(id) === day && day > 1)
+        addLog(`📦 새 후임 ${sk.name}(${sk.species})이(가) 전입 왔다.`);
       if (leaveDay(id) === day) addLog(`🎉 ${sk.name} 선임이 전역했다.`);
     }
     // 군기 해이: 높을수록 조금씩 풀린다 → 꾸준히 관리해야 유지되는 균형점이 생긴다
     if (day > 1) {
-      const slack = Math.max(0, Math.round((st.discipline - 40) * 0.1 * 10) / 10);
+      const slack = Math.max(
+        0,
+        Math.round((st.discipline - 40) * 0.1 * 10) / 10,
+      );
       if (slack >= 0.5) {
         st.discipline = Math.max(0, st.discipline - slack);
-        addLog('🫠 하루가 지나며 긴장이 조금 풀렸다.', 'routine');
+        addLog("🫠 하루가 지나며 긴장이 조금 풀렸다.", "routine");
       }
     }
     const promoted = day > 1 && rank > prevRank;
     if (promoted) addLog(`🎖️ ${RANKS[rank]}으로 진급했다!`);
-    if (day === 7) addLog('🪖 생활관 분대장 임무를 맡게 됐다.');
+    if (day === 7) addLog("🪖 생활관 분대장 임무를 맡게 됐다.");
     // 의뢰인이나 남은 단계의 상대가 전역(전출)해 부대에 없으면 그 퀘스트는 사라진다
     const quests = s.quests.filter((q) => {
       const d = QUESTS[q.id];
       if (!d) return false;
-      const gone = [d.giver, ...d.steps.slice(q.step).map((x) => x.npc)].find((n) => n && !npcPresent(n, day));
+      const gone = [d.giver, ...d.steps.slice(q.step).map((x) => x.npc)].find(
+        (n) => n && !npcPresent(n, day),
+      );
       if (!gone) return true;
-      addLog(fixJosa(`📋 ${NPC_SKINS[s.branch][gone].name}이(가) 전역해서 「${d.title}」 퀘스트가 사라졌다.`));
+      addLog(
+        fixJosa(
+          `📋 ${NPC_SKINS[s.branch][gone].name}이(가) 전역해서 「${d.title}」 퀘스트가 사라졌다.`,
+        ),
+      );
       return false;
     });
     teleportToBed(s.branch);
@@ -438,14 +538,15 @@ export const useGame = create<Store>((set, get) => ({
       dayLog: logs.map((entry) => entry.text),
       stats: st,
       dayStart: { stats: { ...st }, affinity: { ...s.affinity } },
-      scene: promoted ? 'promotion' : 'world',
+      scene: promoted ? "promotion" : "world",
       work: null,
       rollcall: null,
-     
+
       busy: false,
     });
-    for (const entry of logs) get().toast(entry.text, 'info', entry.priority);
-    if (day === TOTAL_DAYS) get().toast(`🎊 전역일 아침이다! ${b.name} 생활 마지막 날.`, 'good');
+    for (const entry of logs) get().toast(entry.text, "info", entry.priority);
+    if (day === TOTAL_DAYS)
+      get().toast(`🎊 전역일 아침이다! ${b.name} 생활 마지막 날.`, "good");
     get().checkSuspicions();
     get().save();
   },
@@ -453,7 +554,7 @@ export const useGame = create<Store>((set, get) => ({
   nextDay: () => {
     const s = get();
     if (s.day >= TOTAL_DAYS) {
-      set({ scene: 'ending' });
+      set({ scene: "ending" });
       return;
     }
     set({ day: s.day + 1 });
@@ -471,66 +572,113 @@ export const useGame = create<Store>((set, get) => ({
 
   tick: (mins) => {
     const s = get();
-    if (s.scene !== 'world') return;
+    if (s.scene !== "world") return;
     // 1일차: 늦잠 장면이 끝나기 전에는 시간이 흐르지 않는다
     if (s.day === 1 && !s.flags.wokeUp) return;
     let minute = s.minute + mins;
-    if (s.nightDuty) minute = Math.min(minute, Math.max(s.minute, nightDutyClockCap(s.nightDuty)));
+    if (s.nightDuty)
+      minute = Math.min(
+        minute,
+        Math.max(s.minute, nightDutyClockCap(s.nightDuty)),
+      );
     // 시간은 저절로 흐르지 않는다: 다음 일정 장소에 도착하기(arrive) 전에는 그 일정 시각에서 멈춘다
     const ev0 = s.currentEvent();
-    if (ev0 && !s.eventBegun && !ev0.auto) minute = Math.min(minute, Math.max(s.minute, ev0.start));
+    if (ev0 && !s.eventBegun && !ev0.auto)
+      minute = Math.min(minute, Math.max(s.minute, ev0.start));
     // 식사는 분대 단위: 분대와 함께 먹고 돌아오기 전에는 배식 시간이 끝나지 않는다
     const mc0 = s.mealCheck;
-    if (mc0 && !mc0.done) minute = Math.min(minute, Math.max(s.minute, (mc0.meal === 'lunch' ? 13 * 60 : 18 * 60 + 30) - 1));
+    if (mc0 && !mc0.done)
+      minute = Math.min(
+        minute,
+        Math.max(s.minute, (mc0.meal === "lunch" ? 13 * 60 : 18 * 60 + 30) - 1),
+      );
     set({ minute });
     const ev = get().currentEvent();
     // 시간대 알림
     // (until: 이 시각이 지났으면 알림은 건너뛴다 — 시간이 한꺼번에 넘어갔을 때 이미 끝난 시간대를 알리지 않도록)
-    const ann = (key: string, at: number, text: string, tone: Toast['tone'] = 'info', until = Infinity) => {
+    const ann = (
+      key: string,
+      at: number,
+      text: string,
+      tone: Toast["tone"] = "info",
+      until = Infinity,
+    ) => {
       if (minute >= at && !get().announced.includes(key)) {
         set({ announced: [...get().announced, key] });
-        if (minute < until) get().toast(text, tone, tone === 'alert' ? 'normal' : 'routine');
+        if (minute < until)
+          get().toast(text, tone, tone === "alert" ? "normal" : "routine");
       }
     };
     if (s.day < TOTAL_DAYS) {
-      ann('lunch', 12 * 60, '🍚 점심시간! 오후 일과 전까지 자유 시간이다.', 'info', 13 * 60 + 30);
-      ann('dinner', 17 * 60 + 30, '🌇 일과 종료! 개인정비 시간 (저녁 식사 ~18:30)');
-      ann('phone', 18 * 60, '📱 휴대폰 사용 시간 (침상에서 사용 가능, ~21:00)', 'info', 21 * 60);
+      ann(
+        "lunch",
+        12 * 60,
+        "🍚 점심시간! 오후 일과 전까지 자유 시간이다.",
+        "info",
+        13 * 60 + 30,
+      );
+      ann(
+        "dinner",
+        17 * 60 + 30,
+        "🌇 일과 종료! 개인정비 시간 (저녁 식사 ~18:30)",
+      );
+      ann(
+        "phone",
+        18 * 60,
+        "📱 휴대폰 사용 시간 (침상에서 사용 가능, ~21:00)",
+        "info",
+        21 * 60,
+      );
       // 식사 시간이 끝났는데 밥을 안 먹었으면 굶은 대가를 치른다
-      const missed = (key: string, at: number, meal: 'meal_lunch' | 'meal_dinner', label: string) => {
+      const missed = (
+        key: string,
+        at: number,
+        meal: "meal_lunch" | "meal_dinner",
+        label: string,
+      ) => {
         if (minute < at || get().announced.includes(key)) return;
         set({ announced: [...get().announced, key] });
         if (get().daily.includes(meal)) return;
         get().applyEffects({ hp: -6, mental: -3 }, `${label} 거름`);
-        get().toast(`🍚 ${label}을 걸렀다… 배에서 꼬르륵 소리가 난다.`, 'bad');
+        get().toast(`🍚 ${label}을 걸렀다… 배에서 꼬르륵 소리가 난다.`, "bad");
         get().log(`🍚 ${label}을 걸렀다.`);
       };
-      missed('lunchMissed', 13 * 60, 'meal_lunch', '점심');
-      missed('dinnerMissed', 18 * 60 + 30, 'meal_dinner', '저녁');
+      missed("lunchMissed", 13 * 60, "meal_lunch", "점심");
+      missed("dinnerMissed", 18 * 60 + 30, "meal_dinner", "저녁");
       // 식사 시간이 되면 분대가 1생활관에 모인다. 분대장이 "밥 먹으러 가자" 하면 다 같이 식당으로 (World에서 처리)
-      const assignMeal = (key: string, at: number, meal: MealCheck['meal']) => {
+      const assignMeal = (key: string, at: number, meal: MealCheck["meal"]) => {
         if (minute < at || get().announced.includes(key)) return;
         set({ announced: [...get().announced, key] });
         set({ mealCheck: { meal, start: at, done: false } });
         // 일과 장소에서 분대장이 곧장 인솔하는 끼니는 그 자리에서 부른다 (World) → 생활관 안내는 띄우지 않는다
-        if (!(minute === at && mealFromWork(s.day, meal))) get().toast('🍚 식사 시간. 먼저 1생활관에 가자 — 분대원들과 다 같이 식당으로 간다.', 'info');
+        if (!(minute === at && mealFromWork(s.day, meal)))
+          get().toast(
+            "🍚 식사 시간. 먼저 1생활관에 가자 — 분대원들과 다 같이 식당으로 간다.",
+            "info",
+          );
       };
-      const endMeal = (key: string, at: number, meal: MealCheck['meal']) => {
+      const endMeal = (key: string, at: number, meal: MealCheck["meal"]) => {
         if (minute < at || get().announced.includes(key)) return;
         set({ announced: [...get().announced, key] });
         if (get().mealCheck?.meal === meal) set({ mealCheck: null });
       };
-      assignMeal('mealCheckLunch', 12 * 60, 'lunch');
-      assignMeal('mealCheckDinner', 17 * 60 + 30, 'dinner');
-      endMeal('mealCheckLunchEnd', 13 * 60, 'lunch');
-      endMeal('mealCheckDinnerEnd', 18 * 60 + 30, 'dinner');
+      assignMeal("mealCheckLunch", 12 * 60, "lunch");
+      assignMeal("mealCheckDinner", 17 * 60 + 30, "dinner");
+      endMeal("mealCheckLunchEnd", 13 * 60, "lunch");
+      endMeal("mealCheckDinnerEnd", 18 * 60 + 30, "dinner");
     }
     if (!ev || s.eventBegun) return;
     if (ev.auto) {
       if (minute >= ev.start) get().beginEvent();
       return;
     }
-    if (ev.kind === 'farewell') ann('farewell', ev.start, '🎊 전역 신고 완료! 모두에게 인사하고 위병소 정문으로 가자.', 'good');
+    if (ev.kind === "farewell")
+      ann(
+        "farewell",
+        ev.start,
+        "🎊 전역 신고 완료! 모두에게 인사하고 위병소 정문으로 가자.",
+        "good",
+      );
     // 나머지 일정은 장소에 도착하면 시작한다 (arrive)
   },
 
@@ -543,10 +691,16 @@ export const useGame = create<Store>((set, get) => ({
     const s = get();
     const ev = s.currentEvent();
     if (!ev || s.eventBegun || ev.auto) return;
-    if (ev.kind === 'farewell') { get().beginEvent(); return; }
+    if (ev.kind === "farewell") {
+      get().beginEvent();
+      return;
+    }
     // 식사 시간엔 먼저 생활관에 들러 분대와 함께 먹어야 다음 일정으로 넘어간다
     if (s.mealCheck && !s.mealCheck.done) {
-      get().toast('🍚 식사 시간이다. 먼저 1생활관에 들러 분대와 함께 밥을 먹자.', 'alert');
+      get().toast(
+        "🍚 식사 시간이다. 먼저 1생활관에 들러 분대와 함께 밥을 먹자.",
+        "alert",
+      );
       return;
     }
     // 그 일정 시각으로 넘어간다 (그 사이 지나간 식사·알림 처리 포함)
@@ -557,18 +711,32 @@ export const useGame = create<Store>((set, get) => ({
     const now = get();
     if (now.eventBegun || now.currentEvent()?.id !== ev.id) return;
     // 전입 첫날 아침 점호는 늦잠 탓에 맨 끝자리에 늦게 합류한다
-    const late = s.day === 1 && ev.kind === 'rollcall_am';
-    get().toast(late ? `🏃 헐레벌떡 도착! ${ev.label} 대열 맨 끝에 섰다` : `✅ 집합 완료! ${ev.label} 시작`, late ? 'info' : 'good', 'routine');
+    const late = s.day === 1 && ev.kind === "rollcall_am";
+    get().toast(
+      late
+        ? `🏃 헐레벌떡 도착! ${ev.label} 대열 맨 끝에 섰다`
+        : `✅ 집합 완료! ${ev.label} 시작`,
+      late ? "info" : "good",
+      "routine",
+    );
     get().beginEvent(late);
   },
 
   oversleep: () => {
     // 전입 첫날: 분대장에게 혼나고 → 화장실에서 세수(거울) → 내 발로 연병장에 뛰어간다 (도착하면 늦게 합류한 점호가 시작된다)
     const s = get();
-    get().applyEffects({ discipline: -5, mental: -2, flag: 'wokeUp' }, '전입 첫날 늦잠');
-    get().log('😱 눈을 떠 보니 눈앞에 포켓몬이 있었다. 게다가 전입하자마자 늦잠…');
-    get().markSeen('sgt_first');
-    set({ lateCount: s.lateCount + 1, minute: Math.max(s.minute, 6 * 60 + 25) });
+    get().applyEffects(
+      { discipline: -5, mental: -2, flag: "wokeUp" },
+      "전입 첫날 늦잠",
+    );
+    get().log(
+      "😱 눈을 떠 보니 눈앞에 포켓몬이 있었다. 게다가 전입하자마자 늦잠…",
+    );
+    get().markSeen("sgt_first");
+    set({
+      lateCount: s.lateCount + 1,
+      minute: Math.max(s.minute, 6 * 60 + 25),
+    });
   },
 
   beginEvent: (late = false) => {
@@ -577,50 +745,110 @@ export const useGame = create<Store>((set, get) => ({
     if (!ev || s.eventBegun) return;
     set({ eventBegun: true });
     switch (ev.kind) {
-      case 'rollcall_am':
-      case 'rollcall_pm': {
+      case "rollcall_am":
+      case "rollcall_pm": {
         const pool = rollcallPool(s.branch);
-        let candidates = pool.map((_, i) => i).filter((i) => !get().askedQ.includes(i));
-        if (candidates.length === 0) { candidates = pool.map((_, i) => i); set({ askedQ: [] }); }
+        let candidates = pool
+          .map((_, i) => i)
+          .filter((i) => !get().askedQ.includes(i));
+        if (candidates.length === 0) {
+          candidates = pool.map((_, i) => i);
+          set({ askedQ: [] });
+        }
         const qi = candidates[Math.floor(Math.random() * candidates.length)];
         const base = pool[qi];
-        const order = base.options.map((_, i) => i).sort(() => Math.random() - 0.5);
-        const q = { ...base, options: order.map((i) => base.options[i]), answer: order.indexOf(base.answer) };
-        set({ askedQ: [...get().askedQ, qi], rollcall: { kind: ev.kind, q, late }, busy: true });
+        const order = base.options
+          .map((_, i) => i)
+          .sort(() => Math.random() - 0.5);
+        const q = {
+          ...base,
+          options: order.map((i) => base.options[i]),
+          answer: order.indexOf(base.answer),
+        };
+        set({
+          askedQ: [...get().askedQ, qi],
+          rollcall: { kind: ev.kind, q, late },
+          busy: true,
+        });
         break;
       }
-      case 'work':
+      case "work":
         // 일과는 조작하지 않는다. 그 시간에 있었던 일을 짧은 장면으로 보여 준다 (data/workScenes.ts)
-        set({ work: { eventId: ev.id, game: ev.game!, slot: ev.id === 'work_am' ? 'am' : 'pm' }, busy: true });
+        set({
+          work: {
+            eventId: ev.id,
+            game: ev.game!,
+            slot: ev.id === "work_am" ? "am" : "pm",
+          },
+          busy: true,
+        });
         break;
-      case 'night': {
+      case "night": {
         // 소등 → 잠들었다가 근무 시간에 깨어난다 (진행은 월드에서)
-        const xs = new Set(extrasForDay(s.branch, s.day).map((d) => `x:${d.id}`));
-        const has = (k: string) => (k.startsWith('x:') ? xs.has(k) : npcPresent(k as NpcId, s.day));
+        const xs = new Set(
+          extrasForDay(s.branch, s.day).map((d) => `x:${d.id}`),
+        );
+        const has = (k: string) =>
+          k.startsWith("x:") ? xs.has(k) : npcPresent(k as NpcId, s.day);
         const pick = (...ks: string[]) => ks.find(has) ?? ks[ks.length - 1];
         const rank = rankIdxForDay(s.day);
         let nd: NightDuty;
-        if (ev.game === 'guard') {
+        if (ev.game === "guard") {
           // 이병·일병이면 사수(선임)를 따라가고, 상병부터는 부사수(후임)를 데려간다
-          const partner = rank <= 1 ? pick('senior', 'x:sq1', 'x:r2b', 'sgt') : pick('junior', 'junior2', 'buddy');
-          nd = { kind: 'guard', phase: 'sleep', prev: partner, partner, next: '', nextAwake: false, shiftStart: 24 * 60, shiftEnd: 26 * 60 };
+          const partner =
+            rank <= 1
+              ? pick("senior", "x:sq1", "x:r2b", "sgt")
+              : pick("junior", "junior2", "buddy");
+          nd = {
+            kind: "guard",
+            phase: "sleep",
+            prev: partner,
+            partner,
+            next: "",
+            nextAwake: false,
+            shiftStart: 24 * 60,
+            shiftEnd: 26 * 60,
+          };
         } else {
           // 앞 근무자: 이병·일병 땐 2분대 선임이, 상병부터는 후임(막내)이 깨우러 온다
-          const prev = rank >= 2 ? pick('junior2', 'junior', 'x:r2d', 'buddy') : pick('x:r2c', 'x:r2b', 'x:room2a', 'buddy');
-          const next = pick('buddy', 'junior', 'x:sq1', 'senior');
-          nd = { kind: 'watch', phase: 'sleep', prev, partner: null, next, nextAwake: false, shiftStart: 24 * 60, shiftEnd: 25 * 60 };
+          const prev =
+            rank >= 2
+              ? pick("junior2", "junior", "x:r2d", "buddy")
+              : pick("x:r2c", "x:r2b", "x:room2a", "buddy");
+          const next = pick("buddy", "junior", "x:sq1", "senior");
+          nd = {
+            kind: "watch",
+            phase: "sleep",
+            prev,
+            partner: null,
+            next,
+            nextAwake: false,
+            shiftStart: 24 * 60,
+            shiftEnd: 25 * 60,
+          };
         }
         set({ nightDuty: nd, busy: false });
         break;
       }
-      case 'farewell':
-        set({ scene: 'ending' });
+      case "farewell":
+        set({ scene: "ending" });
         break;
-      case 'patrol':
+      case "patrol":
         set({ patrol: { done: [] }, busy: false });
-        get().toast('🔦 야간 순찰 시작! 막사 1·2층 복도·세탁실·화장실을 점검하고 지휘통제실 당직사관에게 보고하자', 'alert');
-        if (s.clues.length > 0 && s.day === 5) get().toast('📋 당직 간부: "2층 게시판 공지 떨어진 거 없는지도 봐라."', 'info');
-        if (s.clues.length > 0 && s.day === 9) get().toast('📋 당직 간부: "2층 휴게실 TV를 누가 켜 놨더라. 끄고 와라."', 'info');
+        get().toast(
+          "🔦 야간 순찰 시작! 막사 1·2층 복도·세탁실·화장실을 점검하고 지휘통제실 당직사관에게 보고하자",
+          "alert",
+        );
+        if (s.clues.length > 0 && s.day === 5)
+          get().toast(
+            '📋 당직 간부: "2층 게시판 공지 떨어진 거 없는지도 봐라."',
+            "info",
+          );
+        if (s.clues.length > 0 && s.day === 9)
+          get().toast(
+            '📋 당직 간부: "2층 휴게실 TV를 누가 켜 놨더라. 끄고 와라."',
+            "info",
+          );
         break;
     }
   },
@@ -633,8 +861,15 @@ export const useGame = create<Store>((set, get) => ({
   finishNightDuty: () => {
     const nd = get().nightDuty;
     if (!nd) return;
-    get().applyEffects({ discipline: 2 }, nd.kind === 'watch' ? '불침번 교대' : '위병소 근무 복귀');
-    get().log(nd.kind === 'watch' ? '🌙 불침번 근무를 마치고 다음 근무자와 교대했다.' : '🌙 위병소 야간 근무를 마치고 조용히 복귀했다.');
+    get().applyEffects(
+      { discipline: 2 },
+      nd.kind === "watch" ? "불침번 교대" : "위병소 근무 복귀",
+    );
+    get().log(
+      nd.kind === "watch"
+        ? "🌙 불침번 근무를 마치고 다음 근무자와 교대했다."
+        : "🌙 위병소 야간 근무를 마치고 조용히 복귀했다.",
+    );
     set({ nightDuty: null });
     get().completeEvent();
   },
@@ -646,21 +881,36 @@ export const useGame = create<Store>((set, get) => ({
     if (s.nightDuty) set({ nightDuty: null });
     if (s.work) set({ work: null });
     const minute = Math.max(s.minute, ev.end);
-    set({ minute, eventIdx: s.eventIdx + 1, eventBegun: false, rollcall: null, busy: false });
+    set({
+      minute,
+      eventIdx: s.eventIdx + 1,
+      eventBegun: false,
+      rollcall: null,
+      busy: false,
+    });
     const next = get().currentEvent();
     if (!next) {
-      set({ scene: 'dayEnd' });
+      set({ scene: "dayEnd" });
       return;
     }
     if (next.auto && get().minute >= next.start) {
       get().beginEvent();
       return;
     }
-    set({ scene: 'world' });
+    set({ scene: "world" });
     // 시간이 넘어갔으니 그 시각의 알림(식사 시간 등)을 처리하고, 다음 목적지를 알려 준다
     get().tick(0);
-    if (!get().eventBegun && get().currentEvent()?.id === next.id && next.spot && next.kind !== 'farewell')
-      get().toast(`📍 다음 일정: ${fmtClock(next.start)} ${next.label} — ${buildMapSpotLabel(get().branch, next.spot)}에 가면 시작`, 'info', 'routine');
+    if (
+      !get().eventBegun &&
+      get().currentEvent()?.id === next.id &&
+      next.spot &&
+      next.kind !== "farewell"
+    )
+      get().toast(
+        `📍 다음 일정: ${fmtClock(next.start)} ${next.label} — ${buildMapSpotLabel(get().branch, next.spot)}에 가면 시작`,
+        "info",
+        "routine",
+      );
     get().save();
   },
 
@@ -668,11 +918,14 @@ export const useGame = create<Store>((set, get) => ({
     const s = get();
     if (!s.rollcall) return false;
     const correct = choice === s.rollcall.q.answer;
-    const who: NpcId = 'lt';
-    if (correct) get().applyEffects({ discipline: 2, affinity: { [who]: 1 } }, '점호');
-    else get().applyEffects({ discipline: -3, mental: -2 }, '점호');
+    const who: NpcId = "lt";
+    if (correct)
+      get().applyEffects({ discipline: 2, affinity: { [who]: 1 } }, "점호");
+    else get().applyEffects({ discipline: -3, mental: -2 }, "점호");
     get().addTip(s.rollcall.q.tip);
-    get().log(correct ? '✅ 점호 질문에 정확히 답했다.' : '❌ 점호 질문에 틀렸다.');
+    get().log(
+      correct ? "✅ 점호 질문에 정확히 답했다." : "❌ 점호 질문에 틀렸다.",
+    );
     return correct;
   },
 
@@ -685,46 +938,58 @@ export const useGame = create<Store>((set, get) => ({
     const s = get();
     const mult = (key: string, v: number) => {
       if (v <= 0) return v;
-      if (key === 'discipline' && s.archetype === 'leader') return Math.round(v * 1.3);
-      if (key === 'skill' && s.archetype === 'diligent') return Math.round(v * 1.3);
-      if (key === 'affinity' && s.archetype === 'social') return Math.round(v * 1.3);
+      if (key === "discipline" && s.archetype === "leader")
+        return Math.round(v * 1.3);
+      if (key === "skill" && s.archetype === "diligent")
+        return Math.round(v * 1.3);
+      if (key === "affinity" && s.archetype === "social")
+        return Math.round(v * 1.3);
       return v;
     };
     const stats = { ...s.stats };
     const parts: string[] = [];
-    (['hp', 'mental', 'discipline', 'skill'] as (keyof Stats)[]).forEach((k) => {
-      const raw = e[k];
-      if (!raw) return;
-      let v = mult(k, raw);
-      // 군기·숙련도는 높을수록 오르기 어렵다 (소프트 캡)
-      if ((k === 'discipline' || k === 'skill') && v > 0) v = Math.round(v * Math.max(0.2, 1 - stats[k] / 125) * 10) / 10;
-      // 체력·멘탈·군기·숙련은 화면에 보이지 않는 값이다: 알림에는 적지 않는다
-      stats[k] = clamp(stats[k] + v);
-    });
+    (["hp", "mental", "discipline", "skill"] as (keyof Stats)[]).forEach(
+      (k) => {
+        const raw = e[k];
+        if (!raw) return;
+        let v = mult(k, raw);
+        // 군기·숙련도는 높을수록 오르기 어렵다 (소프트 캡)
+        if ((k === "discipline" || k === "skill") && v > 0)
+          v = Math.round(v * Math.max(0.2, 1 - stats[k] / 125) * 10) / 10;
+        // 체력·멘탈·군기·숙련은 화면에 보이지 않는 값이다: 알림에는 적지 않는다
+        stats[k] = clamp(stats[k] + v);
+      },
+    );
     const affinity = { ...s.affinity };
     if (e.affinity) {
       for (const [id, raw] of Object.entries(e.affinity) as [NpcId, number][]) {
         if (!raw) continue;
-        const v = mult('affinity', raw);
+        const v = mult("affinity", raw);
         affinity[id] = clamp(affinity[id] + v, -100, 100);
-        parts.push(`${NPC_SKINS[s.branch][id].name} 호감 ${v > 0 ? '+' : ''}${v}`);
+        parts.push(
+          `${NPC_SKINS[s.branch][id].name} 호감 ${v > 0 ? "+" : ""}${v}`,
+        );
       }
     }
     let memory = s.memory;
     if (e.memory) {
       memory = Math.max(0, Math.min(100, memory + e.memory));
-      parts.push(`🌟 기억 ${e.memory > 0 ? '+' : ''}${e.memory}`);
+      parts.push(`🌟 기억 ${e.memory > 0 ? "+" : ""}${e.memory}`);
     }
     let candy = s.candy;
     if (e.candy) {
       candy = Math.max(0, candy + e.candy);
-      parts.push(`🍬 별사탕 ${e.candy > 0 ? '+' : ''}${e.candy}`);
+      parts.push(`🍬 별사탕 ${e.candy > 0 ? "+" : ""}${e.candy}`);
     }
     const flags = e.flag ? { ...s.flags, [e.flag]: true } : s.flags;
     let quests = s.quests;
-    if (e.quest && !s.quests.some((q) => q.id === e.quest) && !s.doneQuests.includes(e.quest)) {
+    if (
+      e.quest &&
+      !s.quests.some((q) => q.id === e.quest) &&
+      !s.doneQuests.includes(e.quest)
+    ) {
       quests = [...s.quests, { id: e.quest, step: 0 }];
-      get().toast(`📋 새 퀘스트: ${QUESTS[e.quest].title}`, 'info');
+      get().toast(`📋 새 퀘스트: ${QUESTS[e.quest].title}`, "info");
     }
     const inventory = { ...s.inventory };
     if (e.item) inventory[e.item] = (inventory[e.item] ?? 0) + 1;
@@ -732,36 +997,90 @@ export const useGame = create<Store>((set, get) => ({
 
     // 쓰러짐 / 멘붕 처리
     if (stats.hp <= 0) {
-      set({ stats: { ...get().stats, hp: 40, mental: clamp(get().stats.mental - 10) } });
-      const late = !!get().nightDuty || !!get().patrol || get().minute >= 22 * 60 || get().minute < 6 * 60;
-      get().toast(late ? '🏥 다리에 힘이 풀려 잠깐 주저앉았다… 이를 악물고 다시 일어났다. 날이 밝으면 의무대에 들르자.' : '🏥 너무 지쳐서 쓰러졌다… 의무대에서 쉬고 나왔다.', 'bad');
-      get().log(late ? '🏥 한밤중에 탈진해 주저앉았다.' : '🏥 탈진해서 의무대 신세를 졌다.');
+      set({
+        stats: {
+          ...get().stats,
+          hp: 40,
+          mental: clamp(get().stats.mental - 10),
+        },
+      });
+      const late =
+        !!get().nightDuty ||
+        !!get().patrol ||
+        get().minute >= 22 * 60 ||
+        get().minute < 6 * 60;
+      get().toast(
+        late
+          ? "🏥 다리에 힘이 풀려 잠깐 주저앉았다… 이를 악물고 다시 일어났다. 날이 밝으면 의무대에 들르자."
+          : "🏥 너무 지쳐서 쓰러졌다… 의무대에서 쉬고 나왔다.",
+        "bad",
+      );
+      get().log(
+        late
+          ? "🏥 한밤중에 탈진해 주저앉았다."
+          : "🏥 탈진해서 의무대 신세를 졌다.",
+      );
     }
     if (get().stats.mental <= 0) {
-      set({ stats: { ...get().stats, mental: 35, discipline: clamp(get().stats.discipline - 5) } });
-      const late = !!get().nightDuty || !!get().patrol || get().minute >= 22 * 60 || get().minute < 6 * 60;
-      get().toast(late ? '🫂 마음이 바닥까지 가라앉았다… 숨을 고르고, 날이 밝으면 상담관 선생님을 찾아가기로 했다.' : '🫂 병영생활전문상담관과 면담했다. 마음이 조금 편해졌다.', 'info');
-      get().log(late ? '🫂 한밤중에 마음이 무너질 뻔했다. 날이 밝으면 상담관을 찾아가기로 했다.' : '🫂 상담관 선생님과 이야기를 나눴다.');
+      set({
+        stats: {
+          ...get().stats,
+          mental: 35,
+          discipline: clamp(get().stats.discipline - 5),
+        },
+      });
+      const late =
+        !!get().nightDuty ||
+        !!get().patrol ||
+        get().minute >= 22 * 60 ||
+        get().minute < 6 * 60;
+      get().toast(
+        late
+          ? "🫂 마음이 바닥까지 가라앉았다… 숨을 고르고, 날이 밝으면 상담관 선생님을 찾아가기로 했다."
+          : "🫂 병영생활전문상담관과 면담했다. 마음이 조금 편해졌다.",
+        "info",
+      );
+      get().log(
+        late
+          ? "🫂 한밤중에 마음이 무너질 뻔했다. 날이 밝으면 상담관을 찾아가기로 했다."
+          : "🫂 상담관 선생님과 이야기를 나눴다.",
+      );
     }
-    const summary = parts.join(' · ');
+    const summary = parts.join(" · ");
     if (!silent && summary) {
-      const negative = Object.values(e).some((v) => typeof v === 'number' && v < 0);
-      get().toast(`${label ? `[${label}] ` : ''}${summary}`, negative && parts.every((p) => p.includes('-')) ? 'bad' : 'good', 'routine');
+      const negative = Object.values(e).some(
+        (v) => typeof v === "number" && v < 0,
+      );
+      get().toast(
+        `${label ? `[${label}] ` : ""}${summary}`,
+        negative && parts.every((p) => p.includes("-")) ? "bad" : "good",
+        "routine",
+      );
     }
     return summary;
   },
 
-  toast: (text, tone = 'info', priority = 'normal') => {
-    const compact = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
-    if (compact && priority === 'routine') return;
+  toast: (text, tone = "info", priority = "normal") => {
+    const compact =
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    if (compact && priority === "routine") return;
     const id = toastId++;
     const pending = get().toasts;
-    const previous = compact ? pending.filter(t => t.tone === 'alert' || t.waitForDisplay).slice(-4) : pending.slice(-4);
-    set({ toasts: [...previous, { id, text: fixJosa(text), tone, waitForDisplay: compact }] });
+    const previous = compact
+      ? pending.filter((t) => t.tone === "alert" || t.waitForDisplay).slice(-4)
+      : pending.slice(-4);
+    set({
+      toasts: [
+        ...previous,
+        { id, text: fixJosa(text), tone, waitForDisplay: compact },
+      ],
+    });
     if (!compact) setTimeout(() => get().dismissToast(id), toastDuration(tone));
   },
 
-  dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
+  dismissToast: (id) =>
+    set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
   log: (text) => set({ dayLog: [...get().dayLog, fixJosa(text)] }),
 
@@ -771,22 +1090,37 @@ export const useGame = create<Store>((set, get) => ({
     const s = get();
     const w = s.work;
     if (!w) return;
-    const game = w.game as Exclude<GameId, 'night'>;
+    const game = w.game as Exclude<GameId, "night">;
     const title = BRANCHES[s.branch].games[game];
     set({ work: null });
-    get().applyEffects({ ...WORKLOAD[game], skill: 2, discipline: 1 }, title, true);
+    get().applyEffects(
+      { ...WORKLOAD[game], skill: 2, discipline: 1 },
+      title,
+      true,
+    );
     get().log(`🪖 ${title}: 일과를 마쳤다.`);
     if (s.currentEvent()?.id === w.eventId) get().completeEvent();
   },
 
   finishShift: () => {
     const nd = get().nightDuty;
-    if (!nd || nd.phase !== 'shift') return;
-    const watch = nd.kind === 'watch';
-    get().applyEffects({ ...WORKLOAD[watch ? 'night' : 'guard'], discipline: 1 }, watch ? '불침번 근무' : '위병소 근무', true);
-    get().log(watch ? '🌙 한 시간 동안 생활관의 밤을 지켰다.' : '🌙 두 시간 동안 위병소 초소를 지켰다.');
+    if (!nd || nd.phase !== "shift") return;
+    const watch = nd.kind === "watch";
+    get().applyEffects(
+      { ...WORKLOAD[watch ? "night" : "guard"], discipline: 1 },
+      watch ? "불침번 근무" : "위병소 근무",
+      true,
+    );
+    get().log(
+      watch
+        ? "🌙 한 시간 동안 생활관의 밤을 지켰다."
+        : "🌙 두 시간 동안 위병소 초소를 지켰다.",
+    );
     // 불침번은 근무 신고 뒤 생활관 순찰(2생활관 → 1생활관)로 이어진다 / 위병소는 다음 근무자와 교대 → 지휘통제실에 철수 보고
-    set({ nightDuty: { ...nd, phase: watch ? 'rounds' : 'report', rounds: [] }, minute: watch ? Math.max(get().minute, nd.shiftStart + 15) : nd.shiftEnd });
+    set({
+      nightDuty: { ...nd, phase: watch ? "rounds" : "report", rounds: [] },
+      minute: watch ? Math.max(get().minute, nd.shiftStart + 15) : nd.shiftEnd,
+    });
   },
 
   dialogueCtx: () => {
@@ -807,10 +1141,13 @@ export const useGame = create<Store>((set, get) => ({
   pickDialogue: (npc) => {
     const s = get();
     // 📖 동기가 나를 잊은 동안(잊혀 가는 이름): 예전처럼 부탁하거나 아는 척하지 않는다
-    if (npc === 'buddy' && buddyForgot(s)) return null;
+    if (npc === "buddy" && buddyForgot(s)) return null;
     const c = get().dialogueCtx();
     const cands = DIALOGUES.filter(
-      (d) => d.npc === npc && !(d.once && s.seen.includes(d.id)) && (!d.when || d.when(c)),
+      (d) =>
+        d.npc === npc &&
+        !(d.once && s.seen.includes(d.id)) &&
+        (!d.when || d.when(c)),
     );
     if (cands.length === 0) return null;
     const maxP = Math.max(...cands.map((d) => d.priority ?? 0));
@@ -818,8 +1155,12 @@ export const useGame = create<Store>((set, get) => ({
     return top[Math.floor(Math.random() * top.length)];
   },
 
-  markSeen: (id) => { if (!get().seen.includes(id)) set({ seen: [...get().seen, id] }); },
-  markTalked: (npc) => { if (!get().talked.includes(npc)) set({ talked: [...get().talked, npc] }); },
+  markSeen: (id) => {
+    if (!get().seen.includes(id)) set({ seen: [...get().seen, id] });
+  },
+  markTalked: (npc) => {
+    if (!get().talked.includes(npc)) set({ talked: [...get().talked, npc] });
+  },
 
   questStepAt: (t) => {
     const s = get();
@@ -828,7 +1169,11 @@ export const useGame = create<Store>((set, get) => ({
       const step = def.steps[q.step];
       if (!step) continue;
       if ((t.spot && step.spot === t.spot) || (t.npc && step.npc === t.npc)) {
-        return { quest: q, text: fmt(step.text, { branch: s.branch, name: s.name, day: s.day }), minutes: step.minutes };
+        return {
+          quest: q,
+          text: fmt(step.text, { branch: s.branch, name: s.name, day: s.day }),
+          minutes: step.minutes,
+        };
       }
     }
     return null;
@@ -851,10 +1196,16 @@ export const useGame = create<Store>((set, get) => ({
         const idx = ch.quests.indexOf(id);
         if (ch.quests.every((qid) => doneQuests.includes(qid))) {
           get().applyEffects(ch.bonus, `🔗 연계 퀘스트 완료: ${ch.title}`);
-          get().toast(`🔗 연계 퀘스트 「${ch.title}」 완료! 보너스 보상`, 'good');
+          get().toast(
+            `🔗 연계 퀘스트 「${ch.title}」 완료! 보너스 보상`,
+            "good",
+          );
           get().log(`🔗 연계 퀘스트 「${ch.title}」를 모두 마쳤다.`);
         } else if (idx >= 0 && idx < ch.quests.length - 1) {
-          get().toast(`🔗 연계 퀘스트 「${ch.title}」 ${idx + 1}/${ch.quests.length} — 다음: ${QUESTS[ch.quests[idx + 1]].title} (${NPC_SKINS[s.branch][ch.giver].name}에게 다시 말 걸기)`, 'info');
+          get().toast(
+            `🔗 연계 퀘스트 「${ch.title}」 ${idx + 1}/${ch.quests.length} — 다음: ${QUESTS[ch.quests[idx + 1]].title} (${NPC_SKINS[s.branch][ch.giver].name}에게 다시 말 걸기)`,
+            "info",
+          );
         }
       }
     } else {
@@ -866,8 +1217,10 @@ export const useGame = create<Store>((set, get) => ({
     const s = get();
     const def = ITEMS[item];
     // 돈은 따로 세지 않는다: PX에서는 고르는 대로 챙긴다
-    set({ inventory: { ...s.inventory, [item]: (s.inventory[item] ?? 0) + 1 } });
-    get().toast(fixJosa(`🛒 ${def.icon} ${def.name}을(를) 샀다.`), 'info');
+    set({
+      inventory: { ...s.inventory, [item]: (s.inventory[item] ?? 0) + 1 },
+    });
+    get().toast(fixJosa(`🛒 ${def.icon} ${def.name}을(를) 샀다.`), "info");
     return true;
   },
 
@@ -875,7 +1228,10 @@ export const useGame = create<Store>((set, get) => ({
     const s = get();
     if (!s.inventory[item]) return;
     set({ inventory: { ...s.inventory, [item]: s.inventory[item] - 1 } });
-    get().applyEffects(ITEMS[item].use, `${ITEMS[item].icon} ${ITEMS[item].name}`);
+    get().applyEffects(
+      ITEMS[item].use,
+      `${ITEMS[item].icon} ${ITEMS[item].name}`,
+    );
   },
 
   gift: (npc, item) => {
@@ -889,10 +1245,19 @@ export const useGame = create<Store>((set, get) => ({
     });
     // 같은 상대에게 반복 선물할수록 효과 감소 (6 → 4 → 2 → 1…)
     const bday = birthdayNpcs(s.day).includes(npc);
-    const bonus = (item === 'chocopie' ? 2 : 0) + (bday ? 3 : 0);
-    if (bday) get().toast(`🎂 생일 축하 선물! ${NPC_SKINS[s.branch][npc].name}의 호감이 더 올랐다.`, 'good');
-    get().applyEffects({ affinity: { [npc]: Math.max(1, GIFT_AFFINITY - count * 2) + bonus } }, '선물');
-    get().log(`🎁 ${NPC_SKINS[s.branch][npc].name}에게 ${ITEMS[item].name}을(를) 선물했다.`);
+    const bonus = (item === "chocopie" ? 2 : 0) + (bday ? 3 : 0);
+    if (bday)
+      get().toast(
+        `🎂 생일 축하 선물! ${NPC_SKINS[s.branch][npc].name}의 호감이 더 올랐다.`,
+        "good",
+      );
+    get().applyEffects(
+      { affinity: { [npc]: Math.max(1, GIFT_AFFINITY - count * 2) + bonus } },
+      "선물",
+    );
+    get().log(
+      `🎁 ${NPC_SKINS[s.branch][npc].name}에게 ${ITEMS[item].name}을(를) 선물했다.`,
+    );
     return true;
   },
 
@@ -915,9 +1280,16 @@ export const useGame = create<Store>((set, get) => ({
     get().log(`🔍 단서 「${def.title}」를 기억의 실마리에 적었다.`);
     // 장(章) 완료
     const ch = CHAPTERS.find((c) => c.n === def.chapter);
-    if (ch && chapterDone(ch.n, { clues, flags: get().flags }) && !s.flags[`story_ch${ch.n}`]) {
+    if (
+      ch &&
+      chapterDone(ch.n, { clues, flags: get().flags }) &&
+      !s.flags[`story_ch${ch.n}`]
+    ) {
       get().applyEffects({ flag: `story_ch${ch.n}` }, undefined, true);
-      get().toast(`📖 ${ch.n}장 「${ch.title}」 완료! 실마리 ${clues.length}/${CLUES.length}`, 'good');
+      get().toast(
+        `📖 ${ch.n}장 「${ch.title}」 완료! 실마리 ${clues.length}/${CLUES.length}`,
+        "good",
+      );
       get().log(`📖 ${ch.n}장 「${ch.title}」의 단서를 모두 모았다.`);
     }
     get().checkSuspicions();
@@ -933,11 +1305,17 @@ export const useGame = create<Store>((set, get) => ({
     let changed = false;
     for (const d of SUSPICIONS) {
       const st = suspicionState(d, s);
-      if (st === 'hidden' || seen[d.id] === st) continue;
+      if (st === "hidden" || seen[d.id] === st) continue;
       // 열리자마자 풀린 의혹도 물음부터 알린다
       // 새 의혹은 불쑥 알림으로 띄우지 않는다: 주인공이 이상한 점을 스스로 떠올리는 장면으로 보여 준다 (World)
-      if (!seen[d.id]) { set({ susNote: [...get().susNote.filter((x) => x !== d.id), d.id] }); get().log(`❓ 수첩에 의혹을 적었다: ${d.title}`); }
-      if (st === 'solved') { get().toast(`✅ 의혹이 풀렸다: ${d.title}`, 'good'); get().log(`✅ 의혹 「${d.title}」이(가) 풀렸다.`); }
+      if (!seen[d.id]) {
+        set({ susNote: [...get().susNote.filter((x) => x !== d.id), d.id] });
+        get().log(`❓ 수첩에 의혹을 적었다: ${d.title}`);
+      }
+      if (st === "solved") {
+        get().toast(`✅ 의혹이 풀렸다: ${d.title}`, "good");
+        get().log(`✅ 의혹 「${d.title}」이(가) 풀렸다.`);
+      }
       seen[d.id] = st;
       changed = true;
     }
@@ -955,7 +1333,10 @@ export const useGame = create<Store>((set, get) => ({
     const s = get();
     const p = s.puzzles[id] ?? NO_PROGRESS;
     if (p.hints >= 3 || s.candy <= 0) return false;
-    set({ candy: s.candy - 1, puzzles: { ...s.puzzles, [id]: { ...p, hints: p.hints + 1 } } });
+    set({
+      candy: s.candy - 1,
+      puzzles: { ...s.puzzles, [id]: { ...p, hints: p.hints + 1 } },
+    });
     return true;
   },
 
@@ -965,7 +1346,9 @@ export const useGame = create<Store>((set, get) => ({
     const p = s.puzzles[id] ?? NO_PROGRESS;
     if (!def || p.solved) return 0;
     set({ puzzles: { ...s.puzzles, [id]: { ...p, solved: true } } });
-    get().log(`🧩 퍼즐 「${def.title}」을(를) 풀었다.${p.wrong === 0 ? ' 한 번에!' : ''}`);
+    get().log(
+      `🧩 퍼즐 「${def.title}」을(를) 풀었다.${p.wrong === 0 ? " 한 번에!" : ""}`,
+    );
     return puzzleReward(def, p.wrong);
   },
 
@@ -973,7 +1356,7 @@ export const useGame = create<Store>((set, get) => ({
     const s = get();
     if (s.stars.includes(n)) return;
     set({ stars: [...s.stars, n].sort((a, b) => a - b) });
-    get().toast(`✨ 별 조각을 얻었다! (${s.stars.length + 1}/7)`, 'good');
+    get().toast(`✨ 별 조각을 얻었다! (${s.stars.length + 1}/7)`, "good");
     get().log(`✨ 별 조각 ${n}번째를 손에 넣었다.`);
   },
 
@@ -984,7 +1367,7 @@ export const useGame = create<Store>((set, get) => ({
     for (const ch of CHAPTERS) {
       if (s.flags[`story_ch${ch.n}`] || !chapterDone(ch.n, s)) continue;
       set({ flags: { ...get().flags, [`story_ch${ch.n}`]: true } });
-      get().toast(`📖 ${ch.n}장 「${ch.title}」 완료!`, 'good');
+      get().toast(`📖 ${ch.n}장 「${ch.title}」 완료!`, "good");
       get().log(`📖 ${ch.n}장 「${ch.title}」을(를) 마쳤다.`);
     }
     get().checkSuspicions();
@@ -997,7 +1380,7 @@ export const useGame = create<Store>((set, get) => ({
     get().applyEffects({ flag: `dream_${s.day}` }, undefined, true);
     if (dream.clue) get().findClue(dream.clue);
     if (dream.star) get().gainStar(dream.star);
-    get().applyEffects({ memory: MEMORY_PER_DREAM }, '꿈: 별의 언덕', true);
+    get().applyEffects({ memory: MEMORY_PER_DREAM }, "꿈: 별의 언덕", true);
   },
 
   patrolCheck: (spot) => {
@@ -1005,12 +1388,22 @@ export const useGame = create<Store>((set, get) => ({
     if (!pt || pt.done.includes(spot)) return;
     const done = [...pt.done, spot];
     set({ patrol: { done } });
-    const pool = PATROL_TEXT[spot] ?? ['이상 무.'];
+    const pool = PATROL_TEXT[spot] ?? ["이상 무."];
     const fresh = pool.filter((t) => t !== lastPatrolText[spot]);
-    const text = (fresh.length ? fresh : pool)[Math.floor(Math.random() * (fresh.length || pool.length))];
+    const text = (fresh.length ? fresh : pool)[
+      Math.floor(Math.random() * (fresh.length || pool.length))
+    ];
     lastPatrolText[spot] = text;
-    get().toast(`🔦 (${done.length}/${PATROL_SPOTS.length}) ${text}`, 'info', 'routine');
-    if (done.length >= PATROL_SPOTS.length) get().toast('✅ 순찰 완료! 막사 1층 지휘통제실 당직사관에게 보고하자.', 'good');
+    get().toast(
+      `🔦 (${done.length}/${PATROL_SPOTS.length}) ${text}`,
+      "info",
+      "routine",
+    );
+    if (done.length >= PATROL_SPOTS.length)
+      get().toast(
+        "✅ 순찰 완료! 막사 1층 지휘통제실 당직사관에게 보고하자.",
+        "good",
+      );
   },
 
   finishPatrol: (reported) => {
@@ -1018,13 +1411,21 @@ export const useGame = create<Store>((set, get) => ({
     if (!pt) return;
     set({ patrol: null });
     if (reported) {
-      get().applyEffects({ discipline: 4, affinity: { lt: 3 } }, '야간 순찰');
-      get().log('🔦 야간 순찰을 빠짐없이 돌고 당직사관에게 보고했다.');
+      get().applyEffects({ discipline: 4, affinity: { lt: 3 } }, "야간 순찰");
+      get().log("🔦 야간 순찰을 빠짐없이 돌고 당직사관에게 보고했다.");
     } else {
       const ratio = pt.done.length / PATROL_SPOTS.length;
-      get().applyEffects(ratio >= 1 ? { discipline: 1 } : { discipline: -3, mental: -2 }, '야간 순찰');
-      get().toast(ratio >= 1 ? '🔦 순찰은 다 돌았지만 보고를 못 했다…' : `🔦 순찰을 다 돌지 못했다… (${pt.done.length}/${PATROL_SPOTS.length})`, 'bad');
-      get().log('🔦 야간 순찰을 제대로 마치지 못했다.');
+      get().applyEffects(
+        ratio >= 1 ? { discipline: 1 } : { discipline: -3, mental: -2 },
+        "야간 순찰",
+      );
+      get().toast(
+        ratio >= 1
+          ? "🔦 순찰은 다 돌았지만 보고를 못 했다…"
+          : `🔦 순찰을 다 돌지 못했다… (${pt.done.length}/${PATROL_SPOTS.length})`,
+        "bad",
+      );
+      get().log("🔦 야간 순찰을 제대로 마치지 못했다.");
     }
     get().completeEvent();
   },
@@ -1033,16 +1434,45 @@ export const useGame = create<Store>((set, get) => ({
     try {
       const s = get();
       const data: Persist = {
-        name: s.name, branch: s.branch, archetype: s.archetype, speciesId: s.speciesId, day: s.day, minute: s.minute,
-        stats: s.stats, affinity: s.affinity, talked: s.talked, gifted: s.gifted, seen: s.seen, quests: s.quests,
-        doneQuests: s.doneQuests, inventory: s.inventory, flags: s.flags, tips: s.tips, eventIdx: s.eventIdx,
-        eventBegun: false, announced: s.announced, daily: s.daily, dayLog: s.dayLog, dayStart: s.dayStart,
-        lateCount: s.lateCount, askedQ: s.askedQ, farewellDone: s.farewellDone,
-        giftCount: s.giftCount, mealCheck: s.mealCheck, patrol: null,
-        clues: s.clues, stars: s.stars, memory: s.memory, puzzles: s.puzzles, candy: s.candy, susSeen: s.susSeen,
+        name: s.name,
+        branch: s.branch,
+        archetype: s.archetype,
+        speciesId: s.speciesId,
+        day: s.day,
+        minute: s.minute,
+        stats: s.stats,
+        affinity: s.affinity,
+        talked: s.talked,
+        gifted: s.gifted,
+        seen: s.seen,
+        quests: s.quests,
+        doneQuests: s.doneQuests,
+        inventory: s.inventory,
+        flags: s.flags,
+        tips: s.tips,
+        eventIdx: s.eventIdx,
+        eventBegun: false,
+        announced: s.announced,
+        daily: s.daily,
+        dayLog: s.dayLog,
+        dayStart: s.dayStart,
+        lateCount: s.lateCount,
+        askedQ: s.askedQ,
+        farewellDone: s.farewellDone,
+        giftCount: s.giftCount,
+        mealCheck: s.mealCheck,
+        patrol: null,
+        clues: s.clues,
+        stars: s.stars,
+        memory: s.memory,
+        puzzles: s.puzzles,
+        candy: s.candy,
+        susSeen: s.susSeen,
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    } catch { /* 저장 불가 환경 */ }
+    } catch {
+      /* 저장 불가 환경 */
+    }
   },
 
   load: () => {
@@ -1054,22 +1484,45 @@ export const useGame = create<Store>((set, get) => ({
       if (!data.flags?.returnChoices) {
         data.flags = { ...data.flags, returnChoices: true };
         for (const day of RETURN_DAYS) {
-          if (data.day > day || data.flags[`dream_${day}`]) data.flags[`return_${day}`] = true;
+          if (data.day > day || data.flags[`dream_${day}`])
+            data.flags[`return_${day}`] = true;
         }
-        if (data.flags.end_true && data.clues?.includes('C-13') && data.memory >= 60) data.flags.end_rescue = true;
+        if (
+          data.flags.end_true &&
+          data.clues?.includes("C-13") &&
+          data.memory >= 60
+        )
+          data.flags.end_rescue = true;
       }
       // Older saves may have received return credit for nights played before the choices existed.
       // Keep that credit, but only narrate a specific gesture when its history is known.
       if (!data.flags.returnHistoryKnown) {
         for (const day of RETURN_DAYS) {
-          if (data.flags[`return_${day}`]) data.flags[`unconfirmedReturn_${day}`] = true;
+          if (data.flags[`return_${day}`])
+            data.flags[`unconfirmedReturn_${day}`] = true;
         }
         data.flags.returnHistoryKnown = true;
       }
       // 식사 상태는 끼니·시작 시각만 이어받는다. 저장할 때 이미 먹었으면 식사는 끝난 것으로
       const mc = data.mealCheck;
-      const mealCheck = mc ? { meal: mc.meal, start: mc.start, done: !!data.daily?.includes(`meal_${mc.meal}`) } : null;
-      set({ ...initialPersist(), ...data, mealCheck, scene: 'world', nightDuty: null, rollcall: null, work: null, toasts: [], busy: false });
+      const mealCheck = mc
+        ? {
+            meal: mc.meal,
+            start: mc.start,
+            done: !!data.daily?.includes(`meal_${mc.meal}`),
+          }
+        : null;
+      set({
+        ...initialPersist(),
+        ...data,
+        mealCheck,
+        scene: "world",
+        nightDuty: null,
+        rollcall: null,
+        work: null,
+        toasts: [],
+        busy: false,
+      });
       teleportToBed(data.branch);
       return true;
     } catch {
@@ -1078,34 +1531,71 @@ export const useGame = create<Store>((set, get) => ({
   },
 
   hasSave: () => {
-    try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; }
+    try {
+      return !!localStorage.getItem(SAVE_KEY);
+    } catch {
+      return false;
+    }
   },
 
   wipe: () => {
-    try { localStorage.removeItem(SAVE_KEY); } catch { /* noop */ }
+    try {
+      localStorage.removeItem(SAVE_KEY);
+    } catch {
+      /* noop */
+    }
   },
 
   resetAll: () => {
     get().wipe();
-    set({ ...initialPersist(), scene: 'title', nightDuty: null, rollcall: null, work: null, toasts: [], busy: false });
+    set({
+      ...initialPersist(),
+      scene: "title",
+      nightDuty: null,
+      rollcall: null,
+      work: null,
+      toasts: [],
+      busy: false,
+    });
   },
 }));
 
 function teleportToBed(branch: BranchId) {
   const bed = getWorld(branch, BRANCHES[branch].trainArea).spots.bed;
-  teleport(bed.map, bed.x + 0.5, bed.y + 0.5, 'down');
+  teleport(bed.map, bed.x + 0.5, bed.y + 0.5, "down");
 }
 
 function buildMapSpotLabel(branch: BranchId, spot: SpotId): string {
   const labels: Record<SpotId, string> = {
-    bed: '1생활관 내 침상', barracks: '막사 1층 1생활관', mess: '병영식당', px: STORE_NAME[branch], admin: '막사 1층 행정반',
-    command: '막사 1층 지휘통제실', tv: '막사 2층 휴게실', cyber: '막사 2층 싸지방',
-    gym: '막사 2층 체단실', parade: '연병장', train: BRANCHES[branch].trainArea, post: '위병소 초소', gate: '위병소 정문',
-    maint: '막사 1층 정비실', library: '막사 2층 도서관', wc1: '막사 1층 화장실', wc2: '막사 2층 화장실',
-    laundry1: '막사 1층 세탁실', laundry2: '막사 2층 세탁실', water1: '막사 1층 정수기', water2: '막사 2층 정수기',
-    board1: '막사 1층 복도 게시판', board2: '막사 2층 복도 게시판',
-    kitchen: '병영식당 조리실', court: '농구장', recycle: '분리수거장', ammo: FACILITY_NAME[branch],
-    cairn: '분리수거장 구석 돌탑', ammoledger: '탄약고 수불 대장',
+    bed: "1생활관 내 침상",
+    barracks: "막사 1층 1생활관",
+    mess: "병영식당",
+    px: STORE_NAME[branch],
+    admin: "막사 1층 행정반",
+    command: "막사 1층 지휘통제실",
+    tv: "막사 2층 휴게실",
+    cyber: "막사 2층 싸지방",
+    gym: "막사 2층 체단실",
+    parade: "연병장",
+    train: BRANCHES[branch].trainArea,
+    post: "위병소 초소",
+    gate: "위병소 정문",
+    maint: "막사 1층 정비실",
+    library: "막사 2층 도서관",
+    wc1: "막사 1층 화장실",
+    wc2: "막사 2층 화장실",
+    laundry1: "막사 1층 세탁실",
+    laundry2: "막사 2층 세탁실",
+    water1: "막사 1층 정수기",
+    water2: "막사 2층 정수기",
+    board1: "막사 1층 복도 게시판",
+    board2: "막사 2층 복도 게시판",
+    kitchen: "병영식당 조리실",
+    court: "농구장",
+    recycle: "분리수거장",
+    ammo: FACILITY_NAME[branch],
+    cairn: "분리수거장 구석 돌탑",
+    ammoledger: "탄약고 수불 대장",
   };
   return labels[spot];
 }
@@ -1129,16 +1619,34 @@ export function questOffers(s: Store): QuestOffer[] {
   const out = new Map<string, QuestOffer>();
   const forgot = buddyForgot(s);
   for (const d of DIALOGUES) {
-    if (forgot && d.npc === 'buddy') continue;
-    const qids = [...new Set((d.choices ?? []).map((ch) => ch.effects?.quest).filter(Boolean) as string[])];
+    if (forgot && d.npc === "buddy") continue;
+    const qids = [
+      ...new Set(
+        (d.choices ?? [])
+          .map((ch) => ch.effects?.quest)
+          .filter(Boolean) as string[],
+      ),
+    ];
     for (const qid of qids) {
-      if (!QUESTS[qid] || s.quests.some((x) => x.id === qid) || s.doneQuests.includes(qid)) continue;
+      if (
+        !QUESTS[qid] ||
+        s.quests.some((x) => x.id === qid) ||
+        s.doneQuests.includes(qid)
+      )
+        continue;
       if (!npcPresent(d.npc, s.day)) continue;
       const seen = !!d.once && s.seen.includes(d.id);
       const open = !seen && (!d.when || d.when(c));
       const prev = out.get(qid);
       // 같은 퀘스트를 주는 대화가 여럿이면 받을 수 있는 쪽을 우선
-      if (!prev || (open && !prev.open)) out.set(qid, { questId: qid, giver: d.npc, dialogueId: d.id, open, missed: seen && !open });
+      if (!prev || (open && !prev.open))
+        out.set(qid, {
+          questId: qid,
+          giver: d.npc,
+          dialogueId: d.id,
+          open,
+          missed: seen && !open,
+        });
     }
   }
   return [...out.values()];
