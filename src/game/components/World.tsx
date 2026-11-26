@@ -2234,6 +2234,8 @@ export default function World() {
     };
     /** 마지막으로 다른 일(대화 · 장면 전환 · 식사)이 끝난 때. 곧바로 또 부르지 않고 숨 돌릴 틈을 준다 */
     let idleSince = performance.now();
+    /** 호출 · 보고 자리 앞에서 그 사람이 오기를 기다리기 시작한 때 */
+    let nearSince = 0;
     const iv = setInterval(() => {
       const st = useGame.getState();
       const p = runtime.player;
@@ -2268,8 +2270,12 @@ export default function World() {
           waitAt.current = { key: o.giver, map: at.map, x: at.giver[0], y: at.giver[1], dir: at.giver[2] };
         if (p.map !== at.map) return;
         if (Math.hypot(p.x - at.giver[0], p.y - at.giver[1]) > 3.4) return;
-        // 그 사람이 아직 자리에 닿지 못했으면(걸어오는 중) 기다린다
-        if (present && ge && (ge.map !== at.map || Math.hypot(ge.x - at.giver[0], ge.y - at.giver[1]) > 1.2)) return;
+        // 그 사람이 아직 자리에 닿지 못했으면(걸어오는 중) 기다린다. 다만 몇 초가 지나도 못 오면(길이 막힘 등) 더 기다리지 않고 자리에 세운다
+        if (present && ge && (ge.map !== at.map || Math.hypot(ge.x - at.giver[0], ge.y - at.giver[1]) > 1.2)) {
+          if (!nearSince) nearSince = performance.now();
+          if (performance.now() - nearSince < 4000) return;
+        }
+        nearSince = 0;
         waitAt.current = null;
         keys.current = {};
         p.moving = false;
@@ -6395,7 +6401,9 @@ export default function World() {
           n.targetKey = `${tg[0]}:${tg[1]},${tg[2]}`;
           continue;
         }
-        const follow = followsMe(id, st);
+        // 📢 나를 불러 놓고(또는 보고를 받으려고) 제자리에서 기다리는 동안에는, 함께 다니던 사람이라도 나를 따라오지 않는다.
+        // (같이 PX에 가던 선임이 생활관에서 부른 경우: 따라다니느라 자리에 서지 못하면 호출 장면이 영영 시작되지 않는다)
+        const follow = !(wa && wa.key === id) && followsMe(id, st);
         if (!follow) n.att = false;
         else if (followStep(n)) continue;
         if (n.path.length && !blocked) {
