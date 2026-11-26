@@ -72,7 +72,7 @@ export const PERSONALITY_QUIZ: QuizQuestion[] = [
     ],
   },
   {
-    q: '"군대 가기 싫다…" 그래도 가야 한다면?',
+    q: '‘군대 가기 싫다…’ 그래도 가야 한다면?',
     vision: { scene: 'quizGate', cast: [{ npc: 'sgt', emote: '❗' }, { npc: 'lt', scale: 1.15 }] },
     options: [
       { text: '어차피 갈 거면 제대로 해보자', type: 'leader' },
