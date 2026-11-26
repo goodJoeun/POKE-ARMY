@@ -23,9 +23,9 @@ export default function PuzzleInstrument({ kind, frequency }: { kind: 'dial' | '
           g.fillText(String(88 + i / 5), x, 13);
         }
       }
-      // Park the needle at the left until a frequency inside the scale has been entered.
-      const position = frequency !== undefined && frequency >= 88 && frequency <= 108 ? (frequency - 88) / 20 : 0;
-      const needle = 15 + 230 * position;
+      // 주파수를 넣기 전에는 바늘을 눈금 왼쪽 바깥(88 글자보다 앞)에 세워 둔다: 눈금 0 위에 세우면 "88"을 가린다
+      const tuned = frequency !== undefined && frequency >= 88 && frequency <= 108;
+      const needle = tuned ? 15 + 230 * ((frequency - 88) / 20) : 9;
       rect(g, '#ad4e3c', needle, 5, 2, 19);
       rect(g, '#663e34', needle - 1, 23, 4, 2);
     } else {
