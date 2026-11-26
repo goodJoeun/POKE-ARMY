@@ -49,3 +49,37 @@ export function gleam(g: Ink, x: number, y: number, size: number, color: string)
   rect(g, color, x - size, y, size * 2 + 1, 1);
   rect(g, '#fff2d4', x, y, 1, 1);
 }
+
+/**
+ * 픽셀 글씨: 도트 글꼴의 한 칸을 그림의 한 픽셀로 찍는다 (cx, cy = 글씨 잉크의 한가운데).
+ * 캔버스에 글꼴 크기 그대로 쓰면 브라우저가 가로로 번지게 그려서 (1px 획이 3·8·3처럼 퍼진다)
+ * "ㅐ"처럼 1px 간격인 두 획이 붙어 버린다. 그래서 8배로 크게 쓴 뒤 각 칸의 가운데만 읽는다.
+ * px는 그 글꼴이 픽셀 격자에 맞게 그려진 크기 (갈무리11 = 12, 갈무리9 = 10, 갈무리14 = 15).
+ */
+export function pixelText(g: Ink, text: string, cx: number, cy: number, color: string, family = 'Galmuri11', px = 12) {
+  const k = 8;
+  const c = document.createElement('canvas');
+  const m = c.getContext('2d');
+  if (!m) return;
+  const font = `${px * k}px ${family}, sans-serif`;
+  m.font = font;
+  const cols = Math.ceil(m.measureText(text).width / k) + 1, rows = px + 4;
+  c.width = cols * k; c.height = rows * k;
+  m.font = font;
+  m.textBaseline = 'alphabetic'; // 도트 글꼴은 기준선에 칸이 맞춰져 있다: 기준선을 칸 경계(위에서 px칸)에 둔다
+  m.fillStyle = '#fff';
+  m.fillText(text, 0, px * k);
+  const d = m.getImageData(0, 0, c.width, c.height).data;
+  const ink: [number, number][] = [];
+  let x1 = cols, x2 = -1, y1 = rows, y2 = -1;
+  for (let y = 0; y < rows; y++)
+    for (let x = 0; x < cols; x++)
+      if (d[((y * k + k / 2) * c.width + x * k + k / 2) * 4 + 3] > 127) {
+        ink.push([x, y]);
+        x1 = Math.min(x1, x); x2 = Math.max(x2, x); y1 = Math.min(y1, y); y2 = Math.max(y2, y);
+      }
+  if (!ink.length) return;
+  const x0 = Math.round(cx - (x2 - x1 + 1) / 2) - x1, y0 = Math.round(cy - (y2 - y1 + 1) / 2) - y1;
+  g.fillStyle = color;
+  for (const [x, y] of ink) g.fillRect(x0 + x, y0 + y, 1, 1);
+}

@@ -1,4 +1,4 @@
-import { type Ink, gleam, line, polygon, rect, seeded, sky, wash } from './pixels';
+import { type Ink, gleam, line, pixelText, polygon, rect, seeded, sky, wash } from './pixels';
 
 /**
  * 입대 전날 밤 꿈속 성격 분석 퀴즈: 질문마다 그 상황을 보여 주는 장면.
@@ -382,7 +382,8 @@ export function quizGate(g: Ink, w: number, h: number) {
   rect(g, '#2a4a32', gx - 6, top - 2, gw + 12, sh);
   rect(g, '#d8c070', gx - 6, top - 2, gw + 12, 2);
   rect(g, '#d8c070', gx - 6, top + sh - 4, gw + 12, 2);
-  for (let k = 0; k < 6; k++) rect(g, '#f2ecd8', gx + gw * 0.28 + k * (gw * 0.08), top + sh / 2 - 3, gw * 0.05, 5);
+  // 현판 글씨: 픽셀 글꼴로 또박또박 (군마다 이름이 다른 정문이라 공통인 "신병교육대")
+  pixelText(g, '신병교육대', gx + gw * 0.24 + (gw * 0.76 - 4) / 2, top + sh / 2 - 2, '#f2ecd8');
   const stx = Math.round(gx + gw * 0.14), sty = Math.round(top + sh / 2 - 1);
   polygon(g, '#f2d24a', [[stx, sty - 6], [stx + 2, sty - 1], [stx + 7, sty - 1], [stx + 3, sty + 2], [stx + 5, sty + 7], [stx, sty + 4], [stx - 5, sty + 7], [stx - 3, sty + 2], [stx - 7, sty - 1], [stx - 2, sty - 1]]);
   // 위병소 · 국기 게양대

@@ -40,6 +40,9 @@ export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof 
       }
     };
     paint();
+    // 글씨가 들어간 그림(정문 현판 등): 픽셀 글꼴이 아직 안 들어왔으면 준비된 뒤 다시 그린다
+    let alive = true;
+    document.fonts?.ready.then(() => { if (alive) paint(); });
     const observer = new ResizeObserver(paint);
     observer.observe(canvas);
     // The radio refreshes only its phosphor trace.
@@ -83,7 +86,7 @@ export default function SceneryCanvas({ scene, day = 1 }: { scene: keyof typeof 
         }
       }, 125);
     }
-    return () => { observer.disconnect(); window.clearInterval(timer); };
+    return () => { alive = false; observer.disconnect(); window.clearInterval(timer); };
   }, [scene, day]);
   return <canvas className="scenery-canvas" aria-hidden="true" ref={ref} />;
 }
