@@ -18,6 +18,25 @@ function terminal(g: Ink, w: number, h: number, dated: boolean) {
   rect(g, '#786c60', 0, desk - 1, w, h - desk + 1);
   for (let i = 0; i < w; i++) rect(g, '#b396772e', rand() * w, desk + rand() * (h - desk), 3 + rand() * 23, 1);
 
+  // 벽에 붙은 이용 수칙과 시계 (저녁 식사 직후 18:30). 휴대폰처럼 세로가 길면 모니터 위 빈 벽에 건다
+  {
+    const tall = h > w * 1.2, nw = 34, nh = 44;
+    const nx = Math.round(tall ? w * 0.62 - nw / 2 : cx + Math.min(1.1, w / 216, h / 200) * 100);
+    const ny = Math.round(tall ? desk * 0.42 : desk * 0.2);
+    rect(g, '#1f2b2f', nx + 2, ny + 2, nw, nh);
+    rect(g, '#cbc4a8', nx, ny, nw, nh);
+    rect(g, '#8a3a30', nx + 3, ny + 3, nw - 6, 5);
+    for (let i = 0; i < 7; i++) rect(g, '#7f7d6e', nx + 4, ny + 12 + i * 4, (i % 3 === 2 ? 0.55 : 0.82) * (nw - 8), 1);
+    rect(g, '#b9b39a', nx + nw / 2 - 1, ny - 1, 3, 2);
+    const kx = nx + nw / 2, ky = ny - 16, r = 7;
+    for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) {
+      const d = x * x + y * y;
+      if (d <= r * r) rect(g, d > (r - 1.5) ** 2 ? '#3b4a4c' : '#d8d1b8', kx + x, ky + y, 1, 1);
+    }
+    rect(g, '#2b3536', kx, ky, 1, 5);
+    line(g, '#2b3536', kx, ky, 1, 3);
+  }
+
   // Keep the envelope and its empty date cell legible on both phones and desktops.
   const scale = Math.min(1.1, w / 216, h / 200);
   g.save();
@@ -69,9 +88,28 @@ function terminal(g: Ink, w: number, h: number, dated: boolean) {
   }
   g.fillStyle = '#384f51';
   g.fillText('엄마', -39, -47);
-  rect(g, '#bba980', 21, -56, 31, 11);
-  rect(g, '#e9dcb3', 22, -55, 29, 9);
-  if (dated) g.fillText('11:00', 23, -47);
+  // 날짜 칸: 처음엔 비어 있고, P-06을 풀면 글자가 떠오르며 칸이 빛난다
+  if (dated) wash(g, 36, -51, 30, '#fff0b070');
+  rect(g, dated ? '#d9a650' : '#bba980', 19, -56, 34, 11);
+  rect(g, dated ? '#fff2c2' : '#e9dcb3', 20, -55, 32, 9);
+  if (dated) {
+    g.fillStyle = '#8a3324'; // rect()가 붓 색을 바꿔 두므로 글씨 색을 다시 정한다
+    g.fillText('11:00', 22, -47);
+    for (const [sx, sy] of [[52, -58], [18, -46]]) {
+      rect(g, '#fff8dc', sx - 2, sy, 5, 1);
+      rect(g, '#fff8dc', sx, sy - 2, 1, 5);
+    }
+  }
+  // 싸지방 이용 대장 (클립보드)과 마시다 둔 종이컵
+  polygon(g, '#3d3a33', [[-104, 10], [-76, 8], [-72, 34], [-101, 36]]);
+  polygon(g, '#b9ad8f', [[-102, 10], [-77, 9], [-74, 33], [-99, 34]]);
+  rect(g, '#6b6f6a', -93, 7, 9, 4);
+  for (let i = 0; i < 6; i++) line(g, '#8a8270', -98 + i * 0.12, 15 + i * 3, 19, -1);
+  rect(g, '#5b6f7e', -82, 13, 1, 18);
+  polygon(g, '#d6d0bf', [[72, -2], [82, -2], [81, 12], [73, 12]]);
+  rect(g, '#efe9d8', 72, -2, 10, 1);
+  rect(g, '#7b3a32', 73, 3, 8, 2);
+  rect(g, '#4f4a40', 72, 12, 10, 2);
   // Keyboard and coiled mouse lead pick up the light from the glass.
   polygon(g, '#4a5251', [[-55,6],[43,6],[53,24],[-64,24]]);
   polygon(g, '#a7aa99', [[-55,5],[42,5],[50,21],[-62,21]]);
