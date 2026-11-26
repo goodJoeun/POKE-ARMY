@@ -64,6 +64,8 @@ button.big:not(.primary) { background: #fff8e6; color: var(--ink); box-shadow: 0
   background: radial-gradient(circle at 50% 30%, #3a4a2a 0%, #1d2318 70%); color: #fff8e6;
 }
 .scene .hud-dim { color: #c8c0a8; }
+.ending-scene, .reality-scene { justify-content: safe center; }
+.ending-scene > *, .reality-scene > * { flex-shrink: 0; }
 .fade-in { animation: fadeIn 0.8s ease both; }
 .d1 { animation-delay: 1s; } .d2 { animation-delay: 2s; } .d3 { animation-delay: 3s; }
 .d4 { animation-delay: 4.2s; } .d5 { animation-delay: 5.4s; } .d6 { animation-delay: 6.6s; }
