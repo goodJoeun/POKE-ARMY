@@ -23,6 +23,11 @@ export interface DrawOpts {
    * 스프라이트의 실제 그림 영역(투명 여백 제외)을 재서 상자 안에 들어오도록 줄이고, 발을 baseY에 맞춘다.
    */
   fit?: { left: number; top: number; right: number; bottom: number };
+  /**
+   * 큰 화면에서도 필드의 걷기 그림(4방향 팔로워 시트)으로 그린다.
+   * 전투용 뒷모습 그림은 포켓몬마다 각도가 달라(비스듬한 옆모습 · 완전한 뒷모습) 나란히 세우면 서로 다른 곳을 보는 것처럼 보인다.
+   */
+  walkSheet?: boolean;
 }
 
 /** 스프라이트의 실제 그림 영역 (투명 여백 제외). 이미지마다 한 번만 잰다 */
@@ -81,7 +86,7 @@ export function drawMonster(g: CanvasRenderingContext2D, look: MonsterLook, cx: 
   // - 큰 화면(초상화 등): 도트 배틀 스프라이트를 또렷하게 확대
   // - 공식 일러스트는 o.art 로 명시할 때만
   const kind = o.art ? 'art' : dir === 'up' ? 'back' : 'front';
-  const field = !o.art && s < 70;
+  const field = !o.art && (s < 70 || !!o.walkSheet);
   // 필드: 2등신 아이콘으로 만든 방향별 걷기 스프라이트 (서기 / 왼발 / 서기 / 오른발)
   const walkStep = o.walking ? [1, 0, 2, 0][Math.floor(t * 8) % 4] : 0;
   const walk = field ? getWalkSprite(look.sprite, dir, walkStep) : null;

@@ -21,8 +21,9 @@ export function StoryBackdrop({ bg }: { bg: StoryBg }) {
       <SceneryCanvas scene={bg} day={s.day} />
       {bg === 'roof' && (
         <div className="story-bg-actors roof">
-          {me && <MonsterCanvas look={me} size={96} dir="up" cap={cap} />}
-          <MonsterCanvas look={buddy} size={96} dir="up" cap={cap} />
+          {/* 별을 올려다보는 뒷모습: 둘 다 같은 각도로 (전투용 뒷모습 그림은 포켓몬마다 각도가 다르다) */}
+          {me && <MonsterCanvas look={me} size={96} dir="up" cap={cap} walkSheet />}
+          <MonsterCanvas look={buddy} size={96} dir="up" cap={cap} walkSheet />
         </div>
       )}
       {(bg === 'library' || bg === 'patrolBoard') && (

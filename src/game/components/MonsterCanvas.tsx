@@ -17,9 +17,11 @@ interface Props {
   silhouette?: string;
   /** 1일차 거울을 보기 전의 나: 포켓몬 대신 물음표를 그린다 */
   unknown?: boolean;
+  /** 필드의 걷기 그림으로 그린다 (나란히 선 뒷모습을 같은 각도로) */
+  walkSheet?: boolean;
 }
 
-export default function MonsterCanvas({ look, size = 96, dir = 'down', cap = null, animate = true, walking = false, className, sleeping, silhouette, unknown }: Props) {
+export default function MonsterCanvas({ look, size = 96, dir = 'down', cap = null, animate = true, walking = false, className, sleeping, silhouette, unknown, walkSheet }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   // 이미지가 늦게 로드되면 정적 캔버스도 다시 그린다
   const [tick, setTick] = useState(0);
@@ -42,13 +44,13 @@ export default function MonsterCanvas({ look, size = 96, dir = 'down', cap = nul
       const pad = Math.max(2, size * 0.03);
       if (unknown) drawUnknownSelf(g, size / 2, size * 0.94, size * 0.82, { t, walking, sleeping });
       else drawMonster(g, look, size / 2, size * 0.94, size * 0.82, {
-        dir, t, cap, walking, sleeping, silhouette,
+        dir, t, cap, walking, sleeping, silhouette, walkSheet,
         fit: { left: pad, top: pad, right: size - pad, bottom: size - pad * 0.5 },
       });
       if (animate) raf = requestAnimationFrame(draw);
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  }, [look, size, dir, cap, animate, walking, sleeping, silhouette, unknown, tick]);
+  }, [look, size, dir, cap, animate, walking, sleeping, silhouette, unknown, walkSheet, tick]);
   return <canvas ref={ref} className={className} style={{ width: size, height: size }} />;
 }
