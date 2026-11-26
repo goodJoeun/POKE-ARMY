@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { playCue, playSfx, setBgmMood, type BgmMood, type CueId } from './audio';
+import { holdHush, isEerie, playCue, playSfx, releaseHush, setBgmMood, type BgmMood, type CueId } from './audio';
 
 /**
  * 글에 어울리는 소리를 고른다.
@@ -161,6 +161,11 @@ export function useLineSound(key: string | number, text: string, typed: number, 
     if (c) playCue(c, 0.9);
     else if (!first.current) playSfx('sfx_cursor', 0.35);
     first.current = false;
+    // 쎄한 소리가 울린 줄: 그 줄이 떠 있는 동안 곡이 멎고, 다음 줄로 넘어가면 천천히 돌아온다
+    if (c && isEerie(c)) {
+      holdHush();
+      return releaseHush;
+    }
     // 줄(key)이 바뀔 때만 울린다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, silent]);

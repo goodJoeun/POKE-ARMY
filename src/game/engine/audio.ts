@@ -5,6 +5,7 @@
  * - 브라우저 정책상 첫 클릭/키 입력 뒤에 소리가 나기 시작한다
  * - 어떤 곡을 틀지는 components/BgmDirector.tsx 가 게임 상태를 보고 정한다
  * - 장면이 곡을 직접 고를 땐 setBgmMood (대화·퍼즐·연출이 떠 있는 동안만)
+ * - 쎄한 효과음(EERIE)이 울리면 BGM이 뚝 끊겼다가 천천히 돌아온다 (hushBgm · holdHush)
  * - 대사 한 줄 · 알림 한 줄에 어울리는 소리는 engine/soundCues.ts 가 고른다
  */
 export type BgmId =
@@ -90,6 +91,10 @@ const MIX: Record<CueId, Mix> = {
   jingle_shock: { db: -2, hp: 30 },
 };
 
+/** 쎄한 소리: 울리는 순간 BGM이 뚝 끊긴다 (쎄한 깨달음 · 심장 · 비명 · 진자 · 안개 · 잡음) */
+const EERIE = new Set<CueId>(['sfx_suspicion', 'sfx_heartbeat', 'jingle_shock', 'sfx_pendulum_ticktock', 'sfx_fog_whiteout', 'sfx_radio_static']);
+export const isEerie = (id: CueId) => EERIE.has(id);
+
 /** 소리 이름과 파일 이름이 다른 경우: 평소 문은 실내 문 여는 소리, 원래의 묵직한 소리는 철문에 쓴다 */
 const CUE_FILE: Partial<Record<CueId, string>> = { sfx_door: 'sfx_door_open', sfx_door_iron: 'sfx_door' };
 
@@ -135,6 +140,7 @@ interface Playing { id: BgmId; src: AudioBufferSourceNode; gain: GainNode; start
 let ctx: AudioContext | null = null;
 let bgmBus: GainNode | null = null; // 설정의 BGM 음량
 let duckBus: GainNode | null = null; // 징글 중 줄이기
+let hushBus: GainNode | null = null; // 쎄한 효과음이 울리는 동안 끊기
 let sfxBus: GainNode | null = null; // 설정의 효과음 음량
 let current: Playing | null = null;
 let wanted: { id: BgmId; loop: boolean } | null = null;
@@ -193,6 +199,7 @@ function ensure(): AudioContext | null {
     ctx = new AC();
     bgmBus = ctx.createGain();
     duckBus = ctx.createGain();
+    hushBus = ctx.createGain();
     sfxBus = ctx.createGain();
     bgmBus.gain.value = bgmVol;
     sfxBus.gain.value = sfxVol;
@@ -202,7 +209,7 @@ function ensure(): AudioContext | null {
     const limiter = ctx.createWaveShaper();
     limiter.curve = limiterCurve();
     limitIn.connect(limiter).connect(ctx.destination);
-    duckBus.connect(bgmBus).connect(limitIn);
+    duckBus.connect(hushBus).connect(bgmBus).connect(limitIn);
     sfxBus.connect(limitIn);
   }
   return ctx;
@@ -297,6 +304,41 @@ export function bgmMood(): BgmMood | null {
   return mood;
 }
 
+// ───────── 쎄한 순간의 정적 ─────────
+const HUSH_CUT = 0.12; // 곡이 끊기는 데 걸리는 시간(초)
+const HUSH_MIN = 2.4; // 한 번 끊기면 적어도 이만큼은 조용하다
+const HUSH_HOLD = 3.6; // 대사 없이 울린 쎄한 소리: 이만큼 뒤에 곡이 돌아오기 시작한다
+const HUSH_BACK = 2.8; // 돌아올 땐 천천히 스며든다
+let hushFrom = 0; // 지금의 정적이 시작된 시각 (ctx 시간)
+let hushEnd = 0; // 곡이 돌아오기 시작하는 시각 (Infinity = 그 줄이 떠 있는 동안 붙잡는 중)
+function hushUntil(until: number) {
+  if (!ctx || !hushBus) return;
+  const t = ctx.currentTime;
+  if (t >= hushEnd) { hushFrom = t; note('(hush)'); } // 조용하지 않았다 → 여기서부터 새 정적
+  hushEnd = Math.max(until, hushFrom + HUSH_MIN, t + HUSH_CUT + 0.02);
+  const g = hushBus.gain;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(0, t + HUSH_CUT);
+  if (hushEnd !== Infinity) {
+    g.setValueAtTime(0, hushEnd);
+    g.linearRampToValueAtTime(1, hushEnd + HUSH_BACK);
+  }
+}
+/** BGM을 뚝 끊는다. 잠시 뒤 천천히 돌아온다 (쎄한 효과음이 울리면 저절로 불린다) */
+export function hushBgm(sec = HUSH_HOLD) {
+  if (!ctx || hushEnd === Infinity) return;
+  hushUntil(Math.max(ctx.currentTime + sec, hushEnd));
+}
+/** BGM을 끊고, releaseHush 를 부를 때까지 붙잡는다 (쎄한 줄이 화면에 떠 있는 동안) */
+export function holdHush() { hushUntil(Infinity); }
+/** 붙잡고 있던 정적을 놓는다 → 곡이 천천히 돌아온다 */
+export function releaseHush() {
+  if (!ctx || hushEnd !== Infinity) return;
+  hushEnd = ctx.currentTime + 1; // 아직 조용한 중이다 (정적이 시작된 시각은 그대로)
+  hushUntil(ctx.currentTime);
+}
+
 interface Shot { id: CueId; dur: number; src: AudioBufferSourceNode; gain: GainNode }
 async function oneShot(id: CueId, bus: GainNode | null, vol = 1, rate = 1): Promise<Shot | null> {
   const c = ensure();
@@ -328,6 +370,7 @@ async function oneShot(id: CueId, bus: GainNode | null, vol = 1, rate = 1): Prom
 let jingleNow: Shot | null = null;
 /** 징글: 울리는 동안 BGM을 줄였다가 되돌린다 */
 export async function playJingle(id: JingleId) {
+  if (EERIE.has(id)) hushBgm();
   const shot = await oneShot(id, sfxBus, 1);
   if (!shot || !ctx || !duckBus) return;
   const prev = jingleNow;
@@ -402,6 +445,7 @@ export function playSfx(id: SfxId, vol = 1, rate = 1) {
   if (now - (lastSfx[id] ?? -1e9) < (MIX[id].gap ?? 45)) return;
   lastSfx[id] = now;
   shotCount++;
+  if (EERIE.has(id)) hushBgm();
   void oneShot(id, sfxBus, vol, rate);
 }
 
@@ -449,5 +493,6 @@ export function audioLog() { return played; }
 
 /** 디버그: 지금 무슨 곡이 나오는지 */
 export function audioState() {
-  return { ctx: ctx?.state ?? 'none', wanted: wanted?.id ?? null, playing: current?.id ?? null, mood, bgmVol, sfxVol };
+  const hush = !ctx || ctx.currentTime >= hushEnd + HUSH_BACK ? null : hushEnd === Infinity ? 'held' : ctx.currentTime < hushEnd ? 'silent' : 'returning';
+  return { ctx: ctx?.state ?? 'none', wanted: wanted?.id ?? null, playing: current?.id ?? null, mood, hush, bgmGain: hushBus ? +hushBus.gain.value.toFixed(2) : 1, bgmVol, sfxVol };
 }
