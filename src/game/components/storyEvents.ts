@@ -11,7 +11,6 @@
  */
 import type { Choice, Line, LineWho, MonsterLook, NpcId, SpotId } from '../types';
 import type { MapId } from '../engine/map';
-import { runtime } from '../engine/runtime';
 import type { Dir } from '../engine/drawMonster';
 import type { SpeakerInfo } from '../engine/speakers';
 import type { DialogueScript } from './DialogueBox';
@@ -270,7 +269,7 @@ function d01(ctx: StoryCtx, retry = false) {
           me('"…입대 전날 밤, 별똥별에 빈 소원 때문이야."'),
           say('buddy', '……'),
           say('buddy', '나도… 그날 밤 별을 봤어.'),
-          say('buddy', '엄마 곁을 떠나기 싫다고 빌었어. 그거 하나는 확실히 기억나.'),
+          say('buddy', '엄마한텐 잘 다녀오겠다고 했는데, 막상 창문을 닫으려니까 겁나더라. 가서 나 혼자만 아니었으면 좋겠다고 빌었어.'),
           narr(`(${josa(buddyName(), '이', '가')} 주머니에서 꺼낸 별 조각이, 내 것과 똑같이 반짝인다.)`),
           say('buddy', '이거, 네가 가져. 너라면 끝까지 갈 것 같아.'),
           say('buddy', '…아, 그리고. 2층 계단 옆 옥상 문이 열려 있더라. 나중에 별 보러 가자.'),
@@ -730,7 +729,7 @@ function m11(ctx: StoryCtx) {
         say('npc', '지휘통제실 일지에 날짜를 적은 것도, 분리수거장에 편지를 둔 것도 나다. …다음 사람에게 주려고.'),
         say('npc', '너는… 가라. 내 몫까지.'),
         narr('마지막 장에 사람 이름 하나가 또박또박 적혀 있다. 「강민혁」. 일기장 사이에서 별 조각이 떨어진다.'),
-        me('(나중에 생활관으로 다시 찾아가자. 병장님께 꼭 들려드리고 싶은 이름이다.)'),
+        me('(다음에 병장님을 뵈면 이 이름으로 불러 드려야겠다.)'),
       ],
     },
     onDone: () => { const s = G(); s.findClue('C-13', reward); s.gainStar(4); withReport(ctx, 'M-11'); },
@@ -1314,13 +1313,13 @@ export function storyExtraOptions(id: string, ctx: StoryCtx): MenuOption[] {
       });
     } });
   }
-  if (id === 'room2a' && s.day < 12 && s.clues.includes('C-13') && !flag('calledMinhyeok') && runtime.player.map === 'room2') {
+  if (id === 'room2a' && s.day < 12 && s.clues.includes('C-13') && !flag('calledMinhyeok')) {
     opts.push({ label: '일기에서 읽은 이름을 부른다', onSelect: () => ctx.play({
       script: { custom: extraSpeaker('room2a'), lines: [
         me('"강민혁 병장님."'), narr('병장이 점호 때처럼 손을 들려다 말고 나를 본다.'),
         say('npc', '…나 부른 거냐?'), me('"예. 자꾸 불러 드리면 잊을 수가 없잖습니까."'),
-        narr('병장이 제 침상 명찰을 뒤집어 빈 뒷면에 이름 석 자를 쓴다.'),
-      ] }, onDone: () => { setFlag('calledMinhyeok'); G().log('2생활관에서 강민혁 병장님의 이름을 불렀다.'); },
+        narr('병장이 주머니에서 낡은 명찰을 꺼내더니, 빈 뒷면에 이름 석 자를 쓴다.'),
+      ] }, onDone: () => { setFlag('calledMinhyeok'); G().log('강민혁 병장님의 이름을 불렀다.'); },
     }) });
   }
   if (id === 'room2a' && isOpen('M-11')) {
