@@ -85,7 +85,9 @@ export function bedtime(g: Ink, w: number, h: number) {
   line(g, '#827e78', paperX + 2, deskY - 2, 10, 3);
   rect(g, '#946e69', paperX + 17, deskY - 2, 3, 2);
   // Pillow, cropped hair, turned-up quilt and the rail nearest the viewer.
-  const headX = w * 0.77, bedY = h * 0.54, foot = w * 0.29;
+  // The head is drawn at a fixed pixel size, so the bed length is fixed in pixels too (about six heads
+  // of body under the quilt, counting the pillow) instead of stretching with the screen width.
+  const headX = w * 0.77, bedY = h * 0.54, foot = Math.max(w * 0.29, headX - 92);
   polygon(g, '#202c3c', [[foot - 11, bedY + 43], [w * .88, bedY + 25], [w * .96, bedY + 32], [foot, bedY + 53]]);
   rect(g, '#313444', w * .938, bedY + 7, 5, h * .135);
   polygon(g, '#4b4955', [[foot - 12, bedY + 29], [w * .96, bedY + 6], [w * .96, bedY + 11], [foot - 12, bedY + 36]]);
@@ -97,10 +99,11 @@ export function bedtime(g: Ink, w: number, h: number) {
   line(g, '#715d60', headX - 6, bedY - 3, 2, 0);
   polygon(g, '#556881', [[foot + 17, bedY + 1], [headX - 24, bedY - 7], [headX - 13, bedY - 5], [headX - 6, bedY + 3], [headX + 7, bedY + 7], [headX + 6, bedY + 17], [foot - 9, bedY + 34], [foot - 14, bedY + 20]]);
   line(g, '#a4adad', foot + 17, bedY + 1, headX - foot - 40, -8, 2);
-  for (let i = 0; i < 8; i++) {
-    const u = i / 8, x = foot + 17 + (headX - foot - 36) * u, y = bedY + 2 - 8 * u;
+  const folds = Math.max(3, Math.round((headX - foot) / 22));
+  for (let i = 0; i < folds; i++) {
+    const u = i / folds, x = foot + 17 + (headX - foot - 36) * u, y = bedY + 2 - 8 * u;
     polygon(g, '#41546c', [[x, y], [x + 4, y + 3], [x - 8, y + 20], [x - 13, y + 23]]);
   }
-  line(g, '#656377', foot - 12, bedY + 32, w * 0.66, -16, 3);
+  line(g, '#656377', foot - 12, bedY + 32, w * 0.95 - foot, -16, 3);
   rect(g, '#303344', foot - 11, bedY + 35, 5, h * 0.22);
 }
