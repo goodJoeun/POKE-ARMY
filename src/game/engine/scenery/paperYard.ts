@@ -14,6 +14,24 @@ function bale(g: Ink, x: number, y: number, w: number, h: number) {
   }
 }
 
+/** 바닥에 떨어진 신문지 한 장: 비스듬히 누워 있고, 인쇄된 줄 몇 개와 그늘이 있다 */
+function scrap(g: Ink, x: number, y: number, k: number, rand: () => number) {
+  const w = 9 * k, d = 4 * k, tilt = (rand() - 0.5) * 6 * k;
+  const shade = ['#d8cfb4', '#c9c0a4', '#b9b49c', '#e0d6bb'][Math.floor(rand() * 4)];
+  polygon(g, '#6c695c', [[x + 1, y + 1], [x + w + 1, y + tilt + 1], [x + w + 1 - d * 0.4, y + tilt + d + 1], [x + 1 - d * 0.4, y + d + 1]]);
+  polygon(g, shade, [[x, y], [x + w, y + tilt], [x + w - d * 0.4, y + tilt + d], [x - d * 0.4, y + d]]);
+  for (let i = 1; i < 3; i++) line(g, '#8f8a74', x + 1 - i * 0.3, y + i * d / 3, w * (0.4 + rand() * 0.4), tilt * 0.5);
+}
+
+/** 바닥에 떨어진 봉투: 납작하게 눕혀 보이고, 접힌 날개 선이 있다 */
+function lyingEnvelope(g: Ink, x: number, y: number, k: number, shade: string) {
+  const w = 22 * k, d = 9 * k, sk = 3 * k;
+  polygon(g, '#3e4038', [[x + 1, y + 2], [x + w + 1, y + 2], [x + w + 1 - sk, y + d + 2], [x + 1 - sk, y + d + 2]]);
+  polygon(g, shade, [[x, y], [x + w, y], [x + w - sk, y + d], [x - sk, y + d]]);
+  line(g, '#9a846c', x, y, w / 2 - sk / 2, d * 0.6);
+  line(g, '#9a846c', x + w / 2 - sk / 2, y + d * 0.6, w / 2 + sk / 2, -d * 0.6);
+}
+
 export function paperYard(g: Ink, w: number, h: number) {
   const rand = seeded(610), fence = Math.round(h * .39), ground = Math.round(h * .54);
   sky(g, w, h, ['#8caaa6', '#d6caa9', '#b7a383']);
@@ -37,16 +55,40 @@ export function paperYard(g: Ink, w: number, h: number) {
     bale(g, x, top, 51, 18);
     if (x < w * .34 || x > w * .7) bale(g, x + 7, top - 13, 40, 14);
   }
-  // Foreground sorting bench, its ruler and the shadow under the warped lip.
-  const bench = Math.round(h * .62);
-  polygon(g, '#5d6053', [[0, bench + 9], [w, bench - 9], [w, h], [0, h]]);
-  for (let i = 0; i < 8; i++) {
-    const y = bench + 10 + i * (h - bench) / 7;
-    line(g, '#393f39', 0, y, w, -18, 2);
-    line(g, '#878774', 0, y + 2, w, -18);
+  // 앞마당: 흩어진 신문지 · 노끈 뭉치 · 폐지를 실은 손수레. 세로로 긴 화면에서도 바닥이 비지 않게 깊이별로 흩는다
+  const items: [number, () => void][] = [];
+  for (let i = 0; i < Math.round(w * 0.06 + (h - ground) * 0.08); i++) {
+    const v = rand(), y = ground + 8 + v * (h - ground - 10), k = 0.7 + v * 1.3, x = rand() * w;
+    items.push([y, () => scrap(g, x, y, k, rand)]);
   }
-  line(g, '#d2b679', 0, bench + 10, w, -18, 3);
-  for (let x = 3; x < w; x += 5) rect(g, '#655937', x, bench + 10 - x / w * 18, 1, x % 25 === 3 ? 3 : 1);
+  for (const u of [0.18, 0.47]) {
+    const y = ground + (h - ground) * (0.3 + u * 0.5), x = w * u, r = 3 + (y - ground) / (h - ground) * 4;
+    items.push([y, () => {
+      for (let a = 0; a < 3; a++) {
+        rect(g, '#7a6a48', x - r + a, y - a, (r - a) * 2, 1);
+        rect(g, '#b49a68', x - r + a + 1, y - a, (r - a) * 2 - 2, 1);
+      }
+    }]);
+  }
+  {
+    const cy = Math.round(ground + Math.min(h - ground, w * 0.5) * 0.62), k = Math.max(1, Math.min(1.6, w / 300));
+    const cx = Math.round(w * 0.76);
+    items.push([cy, () => {
+      const bw = Math.round(46 * k), wr = Math.round(7 * k);
+      line(g, '#4a4436', cx - bw / 2 - 26 * k, cy - 18 * k, 28 * k, 6 * k, 2);
+      rect(g, '#3e3a30', cx - bw / 2, cy - 14 * k, bw, 4 * k);
+      rect(g, '#5d5544', cx - bw / 2, cy - 15 * k, bw, 2);
+      bale(g, cx - bw / 2 + 2, cy - 31 * k, bw - 4, Math.round(16 * k));
+      bale(g, cx - bw / 2 + 6, cy - 43 * k, bw - 14, Math.round(12 * k));
+      for (let y = -wr; y <= wr; y++) for (let x = -wr; x <= wr; x++) {
+        const d = x * x + y * y;
+        if (d <= wr * wr && d >= (wr - 2) * (wr - 2)) rect(g, '#2f3130', cx + x, cy - wr + y, 1, 1);
+      }
+      rect(g, '#8a8a80', cx - 1, cy - wr - 1, 3, 3);
+      rect(g, '#00000030', cx - bw / 2, cy + 1, bw + 4, 2);
+    }]);
+  }
+  items.sort((a, b) => a[0] - b[0]).forEach(([, draw]) => draw());
 }
 
 export function unsentLetters(g: Ink, w: number, h: number) {
@@ -75,6 +117,17 @@ export function unsentLetters(g: Ink, w: number, h: number) {
     polygon(g, '#e0cbaa', [[x, y], [x + 64, y], [x + 33, y + 19]]);
     line(g, '#ac957b', x, y, 32, 19);
     line(g, '#ac957b', x + 32, y + 19, 32, -19);
+  }
+  // 쏟아진 봉투들이 앞바닥까지 흩어져 있고, 한 통은 열려서 편지지가 비어져 나왔다
+  for (const [u, v, shade] of [[0.08, 0.1, '#c6ae8b'], [0.3, 0.32, '#d2bea0'], [0.62, 0.14, '#b7a087'], [0.8, 0.42, '#c6ae8b'], [0.46, 0.62, '#b7a087']] as const) {
+    const y = lip + 6 + v * Math.min(h - lip - 12, 90), k = 0.9 + v * 0.9;
+    lyingEnvelope(g, w * u, y, k, shade);
+  }
+  {
+    const lx = w * 0.18, ly = lip + 6 + 0.5 * Math.min(h - lip - 12, 90);
+    polygon(g, '#3e4038', [[lx + 2, ly + 2], [lx + 30, ly - 1], [lx + 32, ly + 15], [lx + 4, ly + 18]]);
+    polygon(g, '#e8dcc0', [[lx, ly], [lx + 28, ly - 3], [lx + 30, ly + 13], [lx + 2, ly + 16]]);
+    for (let i = 0; i < 4; i++) for (let x = 0; x < 22; x += 2) rect(g, '#6b6a78', lx + 4 + x, ly + 1 + i * 3.4 - x * 0.1 + (x % 4 ? 0 : 1), 2, 1);
   }
   wash(g, cx + 3, cy - 12, 58, '#ffe0a726');
 }
