@@ -36,6 +36,49 @@ export function radio(g: Ink, w: number, h: number) {
     rect(g, '#505b54', x, y, 20, 11); rect(g, '#718075', x, y, 20, 1);
     rect(g, '#a89f84', x + 3, y + 3, 8, 3); rect(g, '#313c37', x + 6, y + 8, 8, 2);
   }
+  // 휴대폰처럼 세로가 긴 화면: 공구판 위 빈 벽에 천장 배관 · 선반(유류통 · 상자 · 전선 뭉치) · 배선도를 건다
+  if (h > w * 1.2) {
+    const pipeY = Math.round(h * 0.05);
+    rect(g, '#141c1e', 0, pipeY, w, 5);
+    rect(g, '#55605a', 0, pipeY, w, 1);
+    for (let x = 12; x < w; x += 46) rect(g, '#2a3434', x, pipeY - 3, 3, 9);
+    for (let x = 0; x < w * 0.45; x++) rect(g, '#1a2222', x, pipeY + 6 + Math.round(Math.sin(x / w * 7) * 3 + x * 0.04), 1, 1);
+    const shelfY = Math.round(bench - 103 - Math.max(34, (bench - 103 - pipeY) * 0.38));
+    rect(g, '#1b2526', 0, shelfY + 3, w, 2);
+    rect(g, '#5d655a', 0, shelfY, w, 3);
+    rect(g, '#8a8f7c', 0, shelfY, w, 1);
+    for (const u of [0.12, 0.88]) line(g, '#28322f', w * u, shelfY + 10, 7, -7, 2);
+    for (const x of [w * 0.06, w * 0.06 + 17]) {
+      rect(g, '#2d3a2c', x, shelfY - 19, 15, 19);
+      rect(g, '#4b5c44', x + 1, shelfY - 18, 13, 17);
+      line(g, '#34432f', x + 2, shelfY - 16, 10, 13);
+      line(g, '#34432f', x + 12, shelfY - 16, -10, 13);
+      rect(g, '#2d3a2c', x + 3, shelfY - 23, 8, 4);
+      rect(g, '#6c7a5c', x + 4, shelfY - 22, 6, 1);
+    }
+    const boxX = Math.round(w * 0.46);
+    rect(g, '#4f4234', boxX, shelfY - 15, 30, 15);
+    rect(g, '#7a6650', boxX, shelfY - 15, 30, 2);
+    rect(g, '#c4b893', boxX + 9, shelfY - 10, 12, 5);
+    const coilX = Math.round(w * 0.78), coilY = shelfY - 6;
+    for (let r = 7; r >= 3; r -= 2) for (let a = 0; a < 24; a++) {
+      const t = (a / 24) * Math.PI * 2;
+      rect(g, r % 4 === 3 ? '#1b1f1e' : '#3b2f2a', coilX + Math.cos(t) * r * 1.3, coilY + Math.sin(t) * r * 0.8, 1, 1);
+    }
+    const sx = Math.round(w * 0.56), sy = Math.round(shelfY + 16), sw = Math.round(w * 0.3), sh = Math.round(Math.min(46, (bench - 103 - sy) * 0.8));
+    if (sh > 18) {
+      rect(g, '#141c1c', sx + 2, sy + 2, sw, sh);
+      rect(g, '#8f9a8c', sx, sy, sw, sh);
+      rect(g, '#2f4a4f', sx + 3, sy + 3, sw - 6, 4);
+      for (let i = 0; i < 4; i++) {
+        const y = sy + 11 + i * ((sh - 14) / 4);
+        line(g, '#3f5251', sx + 4, y, sw * 0.4, 0);
+        rect(g, '#3f5251', sx + 4 + sw * 0.4, y - 2, 4, 4);
+        line(g, '#3f5251', sx + 8 + sw * 0.4, y, sw * 0.3, 0);
+      }
+      rect(g, '#b3443a', sx + sw / 2 - 1, sy - 1, 3, 3);
+    }
+  }
   rect(g, '#4b4039', 0, bench - 7, w, h);
   for (let i = 0; i < w * 2; i++) rect(g, i % 3 ? '#665348' : '#393432', rand() * w, bench - 6 + rand() * (h - bench + 6), 2 + rand() * 15, 1);
   for (let y = bench + 8; y < h; y += 16) { rect(g, '#2c2c2a', 0, y, w, 2); rect(g, '#7b6451', 0, y + 2, w, 1); }
