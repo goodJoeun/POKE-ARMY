@@ -19,6 +19,8 @@ export interface Settings {
   sfxVolume: number;
   /** 시제품: 실내 맵을 그림 파일(타일셋)로 그린다. 끄면 기존처럼 코드로 그린다 */
   tilesetProto: boolean;
+  /** 📱 안드로이드: 페이지를 열고 처음 화면을 누를 때 전체 화면으로 (engine/fullscreen.ts) */
+  autoFullscreen: boolean;
 }
 
 export const MAP_ZOOM_MIN = 0.6;
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bgmVolume: 60,
   sfxVolume: 70,
   tilesetProto: true,
+  autoFullscreen: true,
 };
 
 /** 대사 타자 속도: [간격 ms, 한 번에 나오는 글자 수] */
@@ -78,7 +81,7 @@ function persist(s: Settings) {
       textSpeed: s.textSpeed,
       screenShake: s.screenShake, showTips: s.showTips, mapZoom: s.mapZoom,
       testerMode: s.testerMode, bgmVolume: s.bgmVolume, sfxVolume: s.sfxVolume,
-      tilesetProto: s.tilesetProto,
+      tilesetProto: s.tilesetProto, autoFullscreen: s.autoFullscreen,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
   } catch { /* noop */ }

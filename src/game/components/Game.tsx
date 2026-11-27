@@ -14,6 +14,7 @@ import BgmDirector from './BgmDirector';
 import { STORY_MISSIONS, dreamPending, missionState } from '../data/story';
 import { errandNow } from '../data/errands';
 import { ORDERS } from '../data/orders';
+import { autoFullscreenOnFirstTap } from '../engine/fullscreen';
 
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   // 개발용 디버그 핸들 (콘솔에서 __game.getState() 등)
@@ -53,6 +54,9 @@ export default function Game() {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [tester]);
+
+  // 📱 안드로이드: 처음 화면을 누를 때 전체 화면으로 (설정 → 화면 · 대사 → 전체 화면)
+  useEffect(() => autoFullscreenOnFirstTap(() => useSettings.getState().autoFullscreen), []);
 
   // 🖐️ 끌어다 놓기 · 글자 선택 · 길게 누르기 메뉴 막기 (글자를 쓰는 칸은 예외). CSS(globals.css)와 같이 막아 둔다:
   // 일부 모바일 브라우저는 user-select만으로는 길게 누른 뒤 끄는 동작을 선택 · 드래그로 잡는다

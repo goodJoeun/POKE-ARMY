@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useGame } from '../state/store';
 import { MAP_ZOOM_MAX, MAP_ZOOM_MIN, stepMapZoom, useSettings, type Settings } from '../state/settings';
 import { playSfx } from '../engine/audio';
+import { enterFullscreen, exitFullscreen, fullscreenSupported, isFullscreen, isHomeScreenApp, onFullscreenChange } from '../engine/fullscreen';
 
 interface Option<V> { value: V; label: string }
 
@@ -35,6 +36,51 @@ function ZoomRow() {
         <button className="on" onClick={() => set('mapZoom', 1)} title="기본 배율로">{Math.round(zoom * 100)}%</button>
         <button onClick={() => step(1)} disabled={zoom >= MAP_ZOOM_MAX}>＋ 확대</button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 전체 화면: 브라우저 탭 줄 · 주소창을 걷어 내 화면 높이를 다 쓴다 (폰을 가로로 눕혔을 때 특히).
+ * 안드로이드 크롬 · 아이패드는 버튼으로 켜고 끈다. 고른 값은 기억해서, 안드로이드에선 다음에 열 때 첫 터치에 다시 켠다.
+ * 아이폰 사파리는 웹 페이지의 전체 화면을 막아 두어서 "홈 화면에 추가"로 여는 법을 알려 준다
+ * (그렇게 열면 주소창 없이 뜬다: app/manifest.ts). 이미 홈 화면에서 연 앱이면 줄 자체를 보이지 않는다.
+ */
+function FullscreenRow() {
+  const set = useSettings((s) => s.set);
+  const [state, setState] = useState<{ supported: boolean; app: boolean; on: boolean } | null>(null);
+  useEffect(() => {
+    const sync = () => setState({ supported: fullscreenSupported(), app: isHomeScreenApp(), on: isFullscreen() });
+    sync();
+    return onFullscreenChange(sync);
+  }, []);
+  if (!state || state.app) return null;
+
+  const toggle = (on: boolean) => {
+    set('autoFullscreen', on);
+    if (on) enterFullscreen();
+    else exitFullscreen();
+  };
+  const android = /Android/i.test(navigator.userAgent);
+
+  return (
+    <div className="set-row">
+      <div>
+        <b>📱 전체 화면</b>
+        <div className="hud-dim">
+          {!state.supported
+            ? '이 브라우저는 전체 화면을 지원하지 않아요 (아이폰 사파리 등). 공유 버튼 → "홈 화면에 추가"로 만든 아이콘으로 열면 주소창 없이 열립니다'
+            : android
+              ? '브라우저 탭 줄 · 주소창을 숨겨 화면을 넓게 씁니다. 켜 두면 게임을 열고 처음 화면을 누를 때 저절로 전체 화면이 돼요'
+              : '브라우저 탭 줄 · 주소창을 숨겨 화면을 넓게 씁니다 (폰을 가로로 눕혔을 때 좋아요)'}
+        </div>
+      </div>
+      {state.supported && (
+        <div className="seg">
+          <button className={state.on ? 'on' : ''} onClick={() => toggle(true)}>켜기</button>
+          <button className={state.on ? '' : 'on'} onClick={() => toggle(false)}>끄기</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -113,6 +159,7 @@ export default function SettingsMenu() {
 
           <section>
             <h4>화면 · 대사</h4>
+            <FullscreenRow />
             <ZoomRow />
             <div className="set-row">
               <div><b>🧱 타일셋 그래픽 (시제품)</b><div className="hud-dim">부대 맵을 그림 파일로 그립니다. 끄면 기존 화면</div></div>
