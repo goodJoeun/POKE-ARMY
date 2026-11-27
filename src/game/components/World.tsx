@@ -615,7 +615,8 @@ function questCompanion(
   if (
     st.minute < 6 * 60 + 15 ||
     st.minute >= 21 * 60 ||
-    st.rollcall
+    st.rollcall ||
+    sceneAway.has(key)
   )
     return false;
   if (companionOf(st) !== key) return false;
@@ -636,6 +637,7 @@ function companionOf(st: ReturnType<typeof useGame.getState>): string | null {
 }
 /** 지금 나와 동행하는 사람인지: 야간 근무 사수·부사수 / 함께 하는 퀘스트의 상대 (한 명) */
 const followsMe = (key: string, st: ReturnType<typeof useGame.getState>) => {
+  if (sceneAway.has(key)) return false;
   const nd = st.nightDuty;
   if (nd)
     return (
@@ -703,7 +705,9 @@ function dutyOfficerNow(day: number): NpcId {
 }
 /** 지금 보이는 주요 NPC: 소등 후엔 당직 간부만 남고 다른 간부는 퇴근 */
 function visibleNpcs(day: number, minute: number): NpcId[] {
-  const ps = presentNpcs(day).filter((id) => !sceneAlone.hideNpc.has(id));
+  const ps = presentNpcs(day).filter(
+    (id) => !sceneAlone.hideNpc.has(id) && !(sceneAlone.map && sceneAway.has(id)),
+  );
   if (minute < LIGHTS_OUT) return ps;
   const duty = dutyOfficerNow(day);
   return ps.filter((id) => !NPC_ROLES[id].officer || id === duty);
@@ -729,7 +733,7 @@ function extraSpeakerInfo(def: ExtraDef, branch: BranchId): SpeakerInfo {
 /** 엑스트라: 밤에 안 보임(자기 부대 막사로) / 침상에 누움 */
 const extraHiddenAtNight = (id: string, minute: number) => {
   // 🎬 둘만 남는 장면 동안 자리를 비운 사람
-  if (sceneAlone.hide.has(id)) return true;
+  if (sceneAlone.hide.has(id) || (sceneAlone.map && sceneAway.has(`x:${id}`))) return true;
   if (minute < LIGHTS_OUT) return false;
   // 위병소 교대 후: 이전 근무자(위병)는 막사로 돌아갔다
   const nd = useGame.getState().nightDuty;
@@ -904,6 +908,13 @@ const NIGHT_CLERK_ODD = [
  * hide = 숨긴 엑스트라 id · hideNpc = 숨긴 주요 인물
  */
 const sceneAlone: { map: MapId | null; hide: Set<string>; hideNpc: Set<string> } = { map: null, hide: new Set(), hideNpc: new Set() };
+/**
+ * 🎬 둘만 남는 장면 동안 자리를 비켜 준 동행 (함께 하는 퀘스트 상대 등. 엑스트라는 "x:" 키).
+ * 장면이 이어지는 동안(나오는 길의 보고 장면까지) 나를 따라오지 않고, 그 방에 있는 동안엔 보이지도 않는다.
+ * 장면이 다 끝나 내가 다시 움직일 수 있게 되면 풀려서, 있던 자리에서 걸어서 나를 찾아온다.
+ */
+const sceneAway = new Set<string>();
+let sceneAwayIdle = 0;
 const WALK_SPEED = 6;
 const DASH_SPEED = 10.5;
 
@@ -1003,6 +1014,8 @@ export default function World() {
     sceneAlone.map = null;
     sceneAlone.hide = new Set();
     sceneAlone.hideNpc = new Set();
+    sceneAway.clear();
+    sceneAwayIdle = 0;
   }, []);
 
   // 정적 맵 렌더 (야외 + 모든 건물 내부)
@@ -2032,6 +2045,15 @@ export default function World() {
       },
       meTile: () => [Math.floor(runtime.player.x), Math.floor(runtime.player.y)],
       alone: (map, keep) => {
+        const st = useGame.getState();
+        // 나를 뒤따라오던 사람(함께 하는 퀘스트 상대 등)은 이 장면에 끼지 않고 자리를 비켜 준다.
+        // (그냥 두면 장면으로 옮겨지는 순간 문을 지나 내 뒤로 들어서 버린다)
+        const tagging = (key: string, e: NpcRt) => !keep.includes(key) && (!!e.att || followsMe(key, st));
+        for (const [id, n] of Object.entries(npcs.current))
+          if (n && tagging(id, n)) { sceneAway.add(id); n.att = false; }
+        for (const [id, e] of Object.entries(extras.current))
+          if (tagging(`x:${id}`, e)) { sceneAway.add(`x:${id}`); e.att = false; }
+        sceneAwayIdle = 0;
         sceneAlone.map = map;
         sceneAlone.hide = new Set(
           Object.entries(extras.current)
@@ -6312,6 +6334,15 @@ export default function World() {
         sceneAlone.map = null;
         sceneAlone.hide = new Set();
         sceneAlone.hideNpc = new Set();
+      }
+      // 🎬 자리를 비켜 준 동행: 장면이 다 끝나(나오는 길의 보고 장면까지) 내가 잠시 자유롭게 움직이면 다시 따라온다
+      if (sceneAway.size) {
+        const busy = !!sceneAlone.map || !!overlayRef.current || holdRef.current || fading;
+        sceneAwayIdle = busy ? 0 : sceneAwayIdle + dt;
+        if (sceneAwayIdle > 1) {
+          sceneAway.clear();
+          sceneAwayIdle = 0;
+        }
       }
       // 🎬 대화가 끝났으면 세워 둔 사람들을 풀어 준다
       if (staged.current.size && !overlayRef.current && !holdRef.current) {
