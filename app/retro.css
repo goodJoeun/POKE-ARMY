@@ -860,8 +860,10 @@ canvas { image-rendering: pixelated; }
   .world .modal-backdrop:has(> .menu:not(.puzzle)) { padding-left: 160px; padding-right: 160px; }
 }
 
-/* ───── 좁은 화면: 대화창을 한 단계 작게 ───── */
-@media (max-width: 760px) {
+/* ───── 좁은 화면 · 낮은 화면: 대화창을 한 단계 작게 ─────
+   낮은 화면 = 가로로 눕힌 폰. 사파리는 탭 줄 · 주소창 때문에 높이가 300px대까지 줄어든다.
+   너비만 보고 큰 대화창(160px · 초상화 130px)을 띄우면 화면 절반을 덮고 아래 버튼 줄이 반쯤 삐져나왔다 */
+@media (max-width: 760px), (max-height: 500px) {
   .dialogue { min-height: 82px; padding: 10px 12px 9px; gap: 9px; margin-top: 18px; border-width: 3px; }
   .portrait { width: 64px; height: 64px; border-width: 2px; }
   .portrait canvas { width: 60px !important; height: 60px !important; }
@@ -873,6 +875,30 @@ canvas { image-rendering: pixelated; }
   .choice::before { left: 6px; font-size: 10px; }
   .choices { margin-top: 2px; }
   .tip-card { font-size: 13px; padding: 6px 10px; margin-bottom: 6px; }
+}
+
+/* ───── 낮은 화면: 상태창 · 목표 안내를 한 단계 작게 (맵이 보일 높이를 남긴다) ───── */
+@media (max-height: 500px) {
+  .hud-top { top: 6px; left: 8px; right: 8px; gap: 6px; }
+  .hud-box { padding: 4px 10px; font-size: 13px; }
+  .hud-box .hud-dim { font-size: 11px; }
+  .hud-day { font-size: 18px; }
+  .clock { font-size: 20px; }
+  .hud-clock { min-width: 0; }
+  .hud-rank .hud-dim { display: none; }
+  .stat-track { height: 6px; }
+  .hud-objective, .hud-objective.urgent { top: 52px; font-size: 13px; padding: 5px 12px; }
+}
+/* 낮은 터치 화면(폰 가로): 아래 버튼은 낮게, 글쇠 안내는 빼고, 위치는 상태창 줄로 (왼쪽 아래는 방향패드 자리) */
+@media (pointer: coarse) and (max-height: 500px) {
+  .hud-buttons { right: 8px; bottom: 6px; gap: 6px; }
+  .hud-buttons button { padding: 5px 10px; font-size: 12px; }
+  .hud-buttons kbd { display: none; }
+  .touchpad { bottom: 46px; }
+  .hud-place { display: flex; align-items: center; margin-left: auto; font-weight: 700; }
+  .location-badge { display: none; }
+  /* 대화 중엔 아래 버튼 줄이 대화창 뒤에서 반쯤 삐져나온다 → 대화가 끝날 때까지 숨긴다 */
+  .world:has(.dialogue-wrap) .hud-buttons { visibility: hidden; }
 }
 
 /* ───── 설정 버튼: 오른쪽 위 구석 ─────
