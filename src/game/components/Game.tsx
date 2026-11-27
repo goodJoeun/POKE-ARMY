@@ -15,6 +15,7 @@ import { STORY_MISSIONS, dreamPending, missionState } from '../data/story';
 import { errandNow } from '../data/errands';
 import { ORDERS } from '../data/orders';
 import { autoFullscreenOnFirstTap } from '../engine/fullscreen';
+import { preloadQuizCast, preloadUnitCast } from '../data/castSprites';
 
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   // 개발용 디버그 핸들 (콘솔에서 __game.getState() 등)
@@ -37,6 +38,15 @@ export default function Game() {
   const scene = useGame((s) => s.scene);
   const day = useGame((s) => s.day);
   const tester = useSettings((s) => s.testerMode);
+  const branch = useGame((s) => s.branch);
+  const speciesId = useGame((s) => s.speciesId);
+  // 🖼️ 군이 정해진 뒤(내 방에서 입영통지서를 본 뒤)부터, 그 군에서 만날 포켓몬의 그림을 앞당겨 받는다.
+  // 오프닝이 흐르는 동안 받아 두므로 부대에 처음 들어설 때도, 처음 말을 걸 때도 임시 그림이 비치지 않는다.
+  useEffect(() => {
+    if (scene === 'title' || scene === 'home') return;
+    if (scene === 'intro' || scene === 'quiz') preloadQuizCast(branch);
+    preloadUnitCast(branch, day, speciesId);
+  }, [scene, branch, day, speciesId]);
   // 하루 끝 결산 전에 오늘 밤 꿈(별의 언덕)을 먼저 본다
   const dreaming = useGame((s) => s.scene === 'dayEnd' && dreamPending(s));
 

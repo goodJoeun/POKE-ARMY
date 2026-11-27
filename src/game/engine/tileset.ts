@@ -20,7 +20,8 @@ export function loadTileAtlas(): Promise<HTMLImageElement> {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => { atlasPromise = null; reject(new Error('타일 아틀라스를 불러오지 못했습니다')); };
-    img.src = manifest.image;
+    // 주소에 그림 버전을 붙인다 (next.config.mjs): 오래 캐시해 두어도 그림이 바뀌면 새로 받는다
+    img.src = process.env.NEXT_PUBLIC_ASSET_V ? `${manifest.image}?v=${process.env.NEXT_PUBLIC_ASSET_V}` : manifest.image;
   });
   return atlasPromise;
 }

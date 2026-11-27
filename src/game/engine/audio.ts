@@ -157,8 +157,16 @@ const buffers = new Map<string, Promise<AudioBuffer>>();
 /** 곡마다 멈춘 위치 — 다시 틀 때 이어서 재생 (장소를 오갈 때 매번 처음부터 나오지 않게) */
 const resumeAt: Partial<Record<BgmId, number>> = {};
 
+/**
+ * public/audio에 .m4a 사본도 올려 두었는지. 지금은 .ogg뿐이라 꺼 둔다:
+ * 켜 두면 없는 .m4a를 찾는 요청이 파일마다 한 번씩 헛돈다 (OGG를 못 읽는 브라우저에서는 매번).
+ */
+const HAS_M4A = false;
+/** 주소에 붙이는 버전 (next.config.mjs): 음원이 바뀌면 값이 달라져, 오래 캐시해 두어도 새 파일을 받는다 */
+const ASSET_Q = process.env.NEXT_PUBLIC_ASSET_V ? `?v=${process.env.NEXT_PUBLIC_ASSET_V}` : '';
 /** OGG를 못 읽는 브라우저는 같은 이름의 .m4a를 먼저 찾는다 (한쪽이 실패하면 다른 쪽으로) */
 function audioExts(): string[] {
+  if (!HAS_M4A) return ['ogg'];
   const canOgg = typeof Audio !== 'undefined' && !!new Audio().canPlayType('audio/ogg; codecs="opus"');
   return canOgg ? ['ogg', 'm4a'] : ['m4a', 'ogg'];
 }
@@ -166,7 +174,7 @@ async function fetchDecoded(id: string): Promise<AudioBuffer> {
   let last: unknown = new Error(`audio ${id}: not found`);
   for (const ext of audioExts()) {
     try {
-      const r = await fetch(`${BASE}${id}.${ext}`);
+      const r = await fetch(`${BASE}${id}.${ext}${ASSET_Q}`);
       if (!r.ok) throw new Error(`audio ${id}.${ext}: ${r.status}`);
       return await ctx!.decodeAudioData(await r.arrayBuffer());
     } catch (e) { last = e; }

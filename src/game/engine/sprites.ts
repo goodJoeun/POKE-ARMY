@@ -83,48 +83,104 @@ function trim(img: HTMLImageElement): HTMLCanvasElement {
   return out;
 }
 
+type Manifest = Record<string, Partial<Record<SpriteKind, string>>>;
+/** 받아 온 목록 (아직이면 null). 불러오다 실패한 그림은 여기서 지워, 비슷한 다른 그림으로 넘어가게 한다 */
+let manifest: Manifest | null = null;
+/** 이미 요청한 그림 (`키/종류`) */
+const requested = new Set<string>();
+/** 목록이 오기 전에 미리 받아 두라고 한 것 */
+let pendingPreload: [string, SpriteKind[]][] = [];
+/** 그림 주소에 붙이는 버전 (next.config.mjs): 그림이 바뀌면 값이 달라져, 오래 캐시해 두어도 새 그림을 받는다 */
+const ASSET_Q = process.env.NEXT_PUBLIC_ASSET_V ? `?v=${process.env.NEXT_PUBLIC_ASSET_V}` : '';
+
+const has = (key: string, kind: SpriteKind) => !!manifest?.[key]?.[kind];
+const notify = () => { version++; listeners.forEach((f) => f()); };
+
+/**
+ * 그림 한 장을 받는다 (이미 요청했으면 아무것도 하지 않는다).
+ * 그림은 화면에 그리려는 순간에만 받는다: 목록의 수백 장을 접속할 때마다 한꺼번에 받지 않는다.
+ */
+function request(key: string, kind: SpriteKind) {
+  const file = manifest?.[key]?.[kind];
+  const id = `${key}/${kind}`;
+  if (!file || requested.has(id)) return;
+  requested.add(id);
+  const img = new Image();
+  img.onload = () => {
+    if (kind === 'follower') {
+      // 팔로워 시트는 4x4 칸 구조를 지켜야 하므로 자르지 않는다
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d')!.drawImage(img, 0, 0);
+      sheets.set(key, c);
+    } else if (img.naturalWidth >= img.naturalHeight * 1.5) {
+      // 어나더 레드 애니메이션 띠 → 첫 프레임은 정지 이미지로, 띠는 애니메이션용으로
+      const { anim, first } = sliceStrip(img);
+      anims.set(id, anim);
+      trimmed.set(id, first);
+    } else {
+      trimmed.set(id, trim(img));
+    }
+    notify();
+  };
+  img.onerror = () => {
+    if (manifest?.[key]) delete manifest[key][kind];
+    notify();
+  };
+  img.src = `/sprites/${file}${ASSET_Q}`;
+}
+
+/** 필드에서 걷는 모습에 쓰는 그림: 팔로워 시트가 있으면 그것만, 없으면 2등신 아이콘 */
+function requestWalk(key: string) {
+  if (has(key, 'follower')) request(key, 'follower');
+  else request(key, 'icon');
+}
+
+/**
+ * 곧 화면에 나올 포켓몬의 그림을 미리 받아 둔다 (처음 그릴 때 임시 그림이 잠깐 비치지 않게).
+ * kinds의 'follower'는 "필드에서 걷는 모습"을 뜻한다 (시트가 없으면 아이콘).
+ */
+export function preloadSprites(keys: (string | undefined)[], kinds: SpriteKind[]) {
+  for (const key of keys) {
+    if (!key) continue;
+    if (!manifest) { pendingPreload.push([key, kinds]); continue; }
+    for (const kind of kinds) {
+      if (kind === 'follower') requestWalk(key);
+      else request(key, kind);
+    }
+  }
+}
+
 export function initSprites() {
   if (started || typeof window === 'undefined') return;
   started = true;
-  fetch('/sprites/manifest.json')
+  fetch(`/sprites/manifest.json${ASSET_Q}`)
     .then((r) => (r.ok ? r.json() : {}))
     .then((m: Record<string, string | Partial<Record<SpriteKind, string>>>) => {
-      for (const [key, v] of Object.entries(m)) {
-        const entry = typeof v === 'string' ? { front: v } : v;
-        for (const [kind, file] of Object.entries(entry) as [SpriteKind, string][]) {
-          const img = new Image();
-          img.onload = () => {
-            if (kind === 'follower') {
-              // 팔로워 시트는 4x4 칸 구조를 지켜야 하므로 자르지 않는다
-              const c = document.createElement('canvas');
-              c.width = img.naturalWidth; c.height = img.naturalHeight;
-              c.getContext('2d')!.drawImage(img, 0, 0);
-              sheets.set(key, c);
-            } else if (img.naturalWidth >= img.naturalHeight * 1.5) {
-              // 어나더 레드 애니메이션 띠 → 첫 프레임은 정지 이미지로, 띠는 애니메이션용으로
-              const { anim, first } = sliceStrip(img);
-              anims.set(`${key}/${kind}`, anim);
-              trimmed.set(`${key}/${kind}`, first);
-            } else {
-              trimmed.set(`${key}/${kind}`, trim(img));
-            }
-            version++;
-            listeners.forEach((f) => f());
-          };
-          img.src = `/sprites/${file}`;
-        }
-      }
+      const next: Manifest = {};
+      for (const [key, v] of Object.entries(m)) next[key] = typeof v === 'string' ? { front: v } : { ...v };
+      manifest = next;
+      const queued = pendingPreload;
+      pendingPreload = [];
+      for (const [key, kinds] of queued) preloadSprites([key], kinds);
+      // 목록이 오기 전에 그리려던 화면들이 다시 그리면서 필요한 그림을 요청한다
+      notify();
     })
     .catch(() => { /* 매니페스트 없음 → 절차적 드로잉만 사용 */ });
 }
 
-/** 원하는 종류가 없으면 비슷한 것으로 대체 */
-export function getSprite(key: string | undefined, kind: SpriteKind): HTMLCanvasElement | null {
+/**
+ * 원하는 종류가 없으면 비슷한 것으로 대체.
+ * 아직 받지 않았다면 가장 알맞은 한 장을 요청해 두고, 그동안은 이미 받아 둔 비슷한 그림(없으면 null)을 돌려준다.
+ */
+export function getSprite(key: string | undefined, kind: SpriteKind, load = true): HTMLCanvasElement | null {
   if (!key) return null;
   const order: SpriteKind[] = kind === 'icon' ? ['icon'] : kind === 'art' ? ['art', 'front'] : kind === 'back' ? ['back', 'front'] : ['front', 'art'];
+  let asked = !load;
   for (const k of order) {
     const c = trimmed.get(`${key}/${k}`);
     if (c) return c;
+    if (!asked && has(key, k)) { request(key, k); asked = true; }
   }
   return null;
 }
@@ -264,6 +320,7 @@ function followerFrame(key: string, dir: Dir4, frame: number): HTMLCanvasElement
  */
 export function getWalkSprite(key: string | undefined, dir: Dir4, frame: number): HTMLCanvasElement | null {
   if (!key) return null;
+  requestWalk(key);
   const fromSheet = followerFrame(key, dir, frame);
   if (fromSheet) return fromSheet;
   const icon = trimmed.get(`${key}/icon`);
@@ -293,7 +350,8 @@ const dots = new Map<string, HTMLCanvasElement>();
  */
 export function getDot(key: string | undefined, kind: SpriteKind): HTMLCanvasElement | null {
   if (!key) return null;
-  const src = getSprite(key, kind === 'art' || kind === 'icon' ? 'front' : kind);
+  // 걷는 그림(시트 · 아이콘)이 따로 있는 포켓몬은 그쪽을 기다린다: 그 잠깐을 메우려고 배틀 스프라이트까지 받지 않는다
+  const src = getSprite(key, kind === 'art' || kind === 'icon' ? 'front' : kind, !has(key, 'follower') && !has(key, 'icon'));
   if (!src) return null;
   const id = `${key}/${kind}/${src.width}x${src.height}`;
   const cached = dots.get(id);
