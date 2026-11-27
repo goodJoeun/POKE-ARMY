@@ -3,7 +3,8 @@ import SceneryCanvas from "./SceneryCanvas";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Archetype, BranchId, NpcId } from "../types";
 import { useGame, presentNpcs, fmtDelta } from "../state/store";
-import { TEXT_SPEED, useSettings } from "../state/settings";
+import { useSettings } from "../state/settings";
+import { useTypewriter } from "../engine/typewriter";
 import { hasGuardNight, hasNightDuty } from "../data/schedule";
 import {
   BRANCHES,
@@ -250,7 +251,6 @@ export function Quiz() {
     diligent: 0,
     social: 0,
   });
-  const [typeMs, typeStep] = TEXT_SPEED[useSettings((st) => st.textSpeed)];
   const q = PERSONALITY_QUIZ[qi];
 
   const line: DreamLine =
@@ -262,19 +262,7 @@ export function Quiz() {
           ? { who: "voice", text: reaction }
           : { who: "voice", text: `"${q.q}"` };
 
-  const [typed, setTyped] = useState(0);
-  useEffect(() => {
-    if (typeMs === 0) {
-      setTyped(line.text.length);
-      return;
-    }
-    setTyped(0);
-    const iv = setInterval(
-      () => setTyped((t) => (t >= line.text.length ? t : t + typeStep)),
-      typeMs,
-    );
-    return () => clearInterval(iv);
-  }, [line.text, typeMs, typeStep]);
+  const [typed, finishTyping] = useTypewriter(`${phase}-${idx}-${qi}`, line.text);
   const done = typed >= line.text.length;
   // 🔊 빛의 목소리는 높고 맑은 타자 소리 · 질문이 나올 땐 반짝
   useLineSound(`${phase}-${idx}-${qi}`, line.text, typed, {
@@ -285,7 +273,7 @@ export function Quiz() {
 
   const advance = () => {
     if (!done) {
-      setTyped(line.text.length);
+      finishTyping();
       return;
     }
     if (phase === "opening") {
@@ -327,7 +315,7 @@ export function Quiz() {
         }
         if (!done && (e.key === "Enter" || e.key === " " || e.key === "e")) {
           e.preventDefault();
-          setTyped(line.text.length);
+          finishTyping();
         }
         return;
       }

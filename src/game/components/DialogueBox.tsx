@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Choice, Line, NpcId } from '../types';
 import { useGame } from '../state/store';
-import { TEXT_SPEED, useSettings } from '../state/settings';
+import { useSettings } from '../state/settings';
+import { useTypewriter } from '../engine/typewriter';
 import { fmt } from '../engine/text';
 import { npcSpeaker, playerSpeaker, type SpeakerInfo } from '../engine/speakers';
 import MonsterCanvas from './MonsterCanvas';
@@ -34,7 +35,6 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
   const [idx, setIdx] = useState(0);
   const [phase, setPhase] = useState<'lines' | 'choices' | 'reply'>('lines');
   const [picked, setPicked] = useState<Choice | null>(null);
-  const [typed, setTyped] = useState(0);
   // 선택지 커서: ↑↓(방향패드)로 옮기고 확인(E · Enter · 터치 확인 버튼)으로 고른다
   const [sel, setSel] = useState(0);
   const choicesAt = useRef(0);
@@ -43,16 +43,9 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
   const line = lines[idx];
   const text = line ? fmt(line.text, ctx) : '';
 
-  const [typeMs, typeStep] = TEXT_SPEED[useSettings((st) => st.textSpeed)];
+  const [typed, finishTyping] = useTypewriter(`${phase}-${idx}`, text);
   const showTips = useSettings((st) => st.showTips);
   const tester = useSettings((st) => st.testerMode);
-  useEffect(() => {
-    if (!text) { setTyped(0); return; }
-    if (typeMs === 0) { setTyped(text.length); return; } // 즉시 표시
-    setTyped(0);
-    const iv = setInterval(() => setTyped((t) => (t >= text.length ? t : t + typeStep)), typeMs);
-    return () => clearInterval(iv);
-  }, [text, idx, phase, typeMs, typeStep]);
 
   // 🔊 새 줄 · 타자 소리 (선택지를 고르는 동안은 조용히)
   useLineSound(`${phase}-${idx}`, text, typed, { cue: line?.sfx, hush: line?.hush, silent: phase === 'choices', spoken: !!line && line.who !== 'narr' });
@@ -69,11 +62,11 @@ export default function DialogueBox({ script, onChoice, onClose }: Props) {
 
   const advance = useCallback(() => {
     if (phase === 'choices') return;
-    if (typed < text.length) { setTyped(text.length); return; }
+    if (typed < text.length) { finishTyping(); return; }
     if (idx < lines.length - 1) { setIdx(idx + 1); return; }
     if (phase === 'lines' && script.choices && script.choices.length > 0) { setPhase('choices'); return; }
     onClose();
-  }, [phase, typed, text.length, idx, lines.length, script.choices, onClose]);
+  }, [phase, typed, text.length, finishTyping, idx, lines.length, script.choices, onClose]);
 
   const choose = useCallback((c: Choice) => {
     // 🔊 고른 말에 어울리는 소리 (노크 등) → 없으면 선택음, 나쁜 대답이면 낮은 소리

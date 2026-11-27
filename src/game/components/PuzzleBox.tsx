@@ -55,18 +55,9 @@ function stroopItems(n: number) {
   });
 }
 
-/**
- * 칠교판 창문 (4×4). 큰 세모 자리는 위쪽(뾰족한 끝이 아래)과 왼쪽(뾰족한 끝이 오른쪽) 둘이다.
- * rot: 손에 든 조각의 뾰족한 끝 방향 (0 위 · 1 오른쪽 · 2 아래 · 3 왼쪽)
- */
-const TANGRAM_OUTLINES = [
-  '0,0 4,0 2,2', '0,0 0,4 2,2', '4,0 4,2 3,1', '2,2 3,1 4,2 3,3', '2,2 3,3 1,3', '0,4 1,3 3,3 2,4', '2,4 4,4 4,2',
-];
-const TANGRAM_SLOTS = [
-  { name: '위쪽 자리', points: '0,0 4,0 2,2', rot: 2 },
-  { name: '왼쪽 자리', points: '0,0 0,4 2,2', rot: 1 },
-];
-const ROT_NAME = ['위', '오른쪽', '아래', '왼쪽'];
+/** 첫 조각(P-01)을 처음 손에 쥐었을 때의 방향: 두 번 돌려야 맨 위 꼭짓점에 맞는다 */
+const FIRST_PIECE_ROT = 2;
+const ROT_NAME = ['위', '오른쪽 위', '오른쪽 아래', '왼쪽 아래', '왼쪽 위'];
 
 /**
  * ⭐ 일곱 조각 별: 별 조각 일곱 개로 별 모양 창문을 완성한다 (P-21, 1일차 P-01에서 맨 위 꼭짓점을 끼워 둔 그 창문).
@@ -99,26 +90,28 @@ const TAN7_PIECES: { kind: TanKind; rot: number }[] = [
   { kind: 'tip', rot: 3 }, { kind: 'trap', rot: 3 }, { kind: 'cap', rot: 2 },
 ];
 
+/**
+ * 첫 번째 조각 (P-01): 별 모양 창문(P-21과 같은 틀)의 맨 위 꼭짓점에 조각 하나를 돌려 끼운다.
+ * rot: 손에 든 조각의 뾰족한 끝 방향 (한 번 돌릴 때마다 72도). 0이어야 맨 위 꼭짓점에 맞는다.
+ */
 function TangramWindow({ rot, placed, onSlot }: { rot: number; placed: number | null; onSlot: (i: number) => void }) {
+  const top = TAN7_SLOTS[0];
   return (
     <div className="pz-tangram">
-      <svg viewBox="-0.15 -0.15 4.3 4.3" className="pz-tan-frame" role="group" aria-label="일곱 조각의 자리가 그려진 정사각형 창문 틀">
-        <rect x={0} y={0} width={4} height={4} fill="#141a38" stroke="#5a4030" strokeWidth={0.16} />
-        {TANGRAM_OUTLINES.map((pts, i) => <polygon key={i} points={pts} fill="none" stroke="#8890c0" strokeWidth={0.03} strokeDasharray="0.1 0.08" />)}
-        {TANGRAM_SLOTS.map((sl, i) => (
-          <polygon
-            key={i} points={sl.points} className={`pz-tan-slot ${placed === i ? 'on' : ''}`}
-            role="button" tabIndex={0} aria-label={`${i + 1}번: ${sl.name}에 끼우기`}
-            onClick={() => onSlot(i)}
-          />
-        ))}
-        <text x={2} y={0.75} className="pz-tan-num">1</text>
-        <text x={0.6} y={2.15} className="pz-tan-num">2</text>
+      <svg viewBox="-2.25 -2.25 4.5 4.15" className="pz-tan-frame" role="group" aria-label="일곱 조각의 자리가 그려진 별 모양 창문 틀">
+        <polygon points={STAR_OUTLINE} fill="#141a38" stroke="#5a4030" strokeWidth={0.14} strokeLinejoin="round" />
+        {TAN7_SLOTS.slice(1).map((sl, i) => <polygon key={i} points={sl.points} fill="none" stroke="#8890c0" strokeWidth={0.03} strokeDasharray="0.1 0.08" />)}
+        <polygon
+          points={top.points} className={`pz-tan-slot lined ${placed === 0 ? 'on' : ''}`}
+          role="button" tabIndex={0} aria-label={`1번: ${top.name}에 끼우기`}
+          onClick={() => onSlot(0)}
+        />
+        {placed === null && <text x={top.cx} y={top.cy} className="pz-tan-num">1</text>}
       </svg>
       {placed === null && (
         <div className="pz-tan-hand">
-          <svg viewBox="-2.4 -2.4 4.8 4.8" aria-label={`손에 든 큰 세모 조각. 뾰족한 끝이 ${ROT_NAME[rot]}를 향한다.`} role="img">
-            <polygon points="0,-1.2 2,0.8 -2,0.8" fill="#ffe890" stroke="#c89820" strokeWidth={0.12} style={{ transform: `rotate(${rot * 90}deg)`, transition: 'transform 0.15s' }} />
+          <svg viewBox="-2.4 -2.4 4.8 4.8" aria-label={`손에 든 별 조각. 뾰족한 끝이 ${ROT_NAME[rot]}를 향한다.`} role="img">
+            <polygon points={TAN_SHAPE.tip.points} fill="#ffe890" stroke="#c89820" strokeWidth={0.12} style={{ transform: `rotate(${rot * TAN_DEG}deg)`, transition: 'transform 0.15s' }} />
           </svg>
           <div className="hud-dim">뾰족한 끝: {ROT_NAME[rot]}</div>
         </div>
@@ -221,7 +214,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
   const [steps, setSteps] = useState(0);
   const [mazeText, setMazeText] = useState('');
   /** 조각 끼우기: 조각 방향 · 끼운 자리 · 안 맞았을 때 한마디 */
-  const [rot, setRot] = useState(0);
+  const [rot, setRot] = useState(FIRST_PIECE_ROT);
   const [placed, setPlaced] = useState<number | null>(null);
   const [bump, setBump] = useState(false);
   /** 숫자 칸 */
@@ -314,11 +307,11 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
 
   /** 조각 끼우기: 방향이 맞는 자리에만 들어간다 (틀려도 오답으로 세지 않는다) */
   const fit = useCallback((i: number) => {
-    if (solved || input?.type !== 'tangram1' || !TANGRAM_SLOTS[i]) return;
-    if (TANGRAM_SLOTS[i].rot === rot) { setPlaced(i); setBump(false); win(); }
+    if (solved || input?.type !== 'tangram1' || i !== 0) return;
+    if (rot === TAN7_SLOTS[0].rot) { setPlaced(0); setBump(false); win(); }
     else setBump(true);
   }, [solved, input, rot, win]);
-  const rotate = useCallback((d: number) => { if (!solved) { setRot((r) => (r + d + 4) % 4); setBump(false); } }, [solved]);
+  const rotate = useCallback((d: number) => { if (!solved) { setRot((r) => (r + d + TAN_STEPS) % TAN_STEPS); setBump(false); } }, [solved]);
 
   /** 안농의 원: 한 번 움직이고, 목표와 같아지면 정답 */
   const ringMove = useCallback((op: RingOp) => {
@@ -788,7 +781,7 @@ export default function PuzzleBox({ id, onSolved, onClose, mustSolve: mustSolveP
               <div className="pz-answer">
                 <button onClick={() => rotate(-1)}>↺ 돌리기 (Q)</button>
                 <button onClick={() => rotate(1)}>↻ 돌리기 (E)</button>
-                <span className="hud-dim">돌린 뒤 자리를 누르거나 숫자키 1 · 2로 끼운다</span>
+                <span className="hud-dim">돌린 뒤 맨 위 자리를 누르거나 숫자키 1로 끼운다</span>
               </div>
             )}
             {bump && !solved && <div className="pz-result wrong">…모양이 맞지 않아 튕겨 나온다. 조각을 돌려 보자.</div>}

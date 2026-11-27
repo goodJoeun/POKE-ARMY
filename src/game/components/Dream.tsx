@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGame } from '../state/store';
-import { TEXT_SPEED, useSettings } from '../state/settings';
+import { useTypewriter } from '../engine/typewriter';
 import { fmt } from '../engine/text';
 import { DREAMS, DREAM_FADED, type DreamLine } from '../data/story';
 import SceneryCanvas from './SceneryCanvas';
@@ -48,18 +48,10 @@ export default function Dream() {
     ...(reply ? [{ who: 'narr' as const, text: reply, scene: 'hill' as const }] : []),
   ], [dream, faded, reply]);
   const [idx, setIdx] = useState(0);
-  const [typed, setTyped] = useState(0);
   const ctx = { branch: s.branch, name: s.name, day: s.day };
   const line = lines[idx];
   const text = line ? fmt(line.text, ctx) : '';
-  const [typeMs, typeStep] = TEXT_SPEED[useSettings((st) => st.textSpeed)];
-
-  useEffect(() => {
-    if (typeMs === 0) { setTyped(text.length); return; }
-    setTyped(0);
-    const iv = setInterval(() => setTyped((t) => (t >= text.length ? t : t + typeStep)), typeMs);
-    return () => clearInterval(iv);
-  }, [text, typeMs, typeStep]);
+  const [typed, finishTyping] = useTypewriter(idx, text);
 
   // 🔊 꿈의 소리: 엄마 목소리엔 심장 소리, 빛의 목소리는 높고 맑게. 소등한 생활관 장면은 곡 없이 조용하다
   // ✨ 빛이 모습을 드러내는 연출 (data/story.ts DreamLine.fx): reveal 줄부터는 지라치가 보인다
@@ -83,12 +75,12 @@ export default function Dream() {
   const puzzleAt = lines.findIndex((l) => l.scene === 'hill');
   const advance = useCallback(() => {
     if (puzzle || choosing) return;
-    if (typed < text.length) { setTyped(text.length); return; }
+    if (typed < text.length) { finishTyping(); return; }
     if (s.day === 1 && idx === puzzleAt && !useGame.getState().puzzles['P-01']?.solved) { setPuzzle(true); return; }
     if (idx < lines.length - 1) setIdx(idx + 1);
     else if (decision && !s.flags[`return_${s.day}`] && !s.flags[`stay_${s.day}`]) setChoosing(true);
     else useGame.getState().finishDream();
-  }, [puzzle, choosing, typed, text.length, idx, lines.length, s.day, s.flags, decision, puzzleAt]);
+  }, [puzzle, choosing, typed, text.length, finishTyping, idx, lines.length, s.day, s.flags, decision, puzzleAt]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
