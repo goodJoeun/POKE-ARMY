@@ -338,6 +338,13 @@ canvas { image-rendering: pixelated; }
 .qt-item.done .qt-next { color: #2e8a46; }
 .qt-more { font-size: 13px; color: var(--ink-dim); }
 @media (max-width: 760px) { .quest-tracker { display: none; } }
+/* 1100px 이하에선 목표 안내가 상태창 아래 한 줄로 내려온다 → 트래커가 그 줄을 덮지 않게 상태창 바로 아래부터
+   (--hud-bottom은 Hud가 재서 넣는다. 태블릿 세로 · 폰 가로에서 목표 안내를 가렸다) */
+@media (max-width: 1100px) {
+  .quest-tracker { top: calc(var(--hud-bottom, 132px) + 8px); max-height: calc(100% - var(--hud-bottom, 132px) - 96px); }
+}
+/* 가로로 누운 폰: 왼쪽 아래는 방향패드 자리라 트래커를 펼 곳이 없다 (퀘스트 창 · 목표 안내로 충분) */
+@media (pointer: coarse) and (max-height: 500px) { .quest-tracker { display: none; } }
 .questlog {
   width: min(920px, 100%); max-height: min(860px, 94vh); display: flex; flex-direction: column;
   background: var(--win-bg); color: var(--win-ink); border: 4px solid var(--win-frame); border-radius: 8px;
@@ -779,8 +786,15 @@ canvas { image-rendering: pixelated; }
   }
   .hud-objective.urgent { animation: pulseFlat 1s infinite; }
 }
-/* 터치: 상호작용 안내는 방향패드 위로 */
-@media (pointer: coarse) { .prompt { bottom: 204px; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; } }
+/* 터치: 상호작용 안내는 방향패드 위로. 화면보다 긴 안내("저녁 점호 시작하기 (자유 시간을 마치고 21:30로)")는
+   잘라 내지 않고 두 줄까지 접는다 (flex 안의 글자에는 말줄임표가 붙지 않아, 글이 중간에서 뚝 잘려 보였다) */
+@media (pointer: coarse) {
+  .prompt { bottom: 204px; width: max-content; max-width: calc(100% - 24px); white-space: normal; }
+  .prompt-text {
+    min-width: 0; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  }
+}
 /* 터치 + 가로로 누운 화면: 방향패드와 버튼 사이 빈 자리에 */
 @media (pointer: coarse) and (max-height: 500px) { .prompt { bottom: 70px; max-width: calc(100% - 330px); } }
 @media (max-width: 760px) {

@@ -7931,7 +7931,7 @@ export default function World() {
           className={`prompt ${prompt.kind === "event" ? "urgent" : ""}`}
           onClick={interact}
         >
-          <kbd>E</kbd> {fmt(prompt.label, ctx)}
+          <kbd>E</kbd> <span className="prompt-text">{fmt(prompt.label, ctx)}</span>
         </div>
       )}
       <TouchPad keys={keys} />
