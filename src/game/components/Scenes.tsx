@@ -590,6 +590,29 @@ export function Promotion() {
       '진급·전입·휴가 등은 지휘관에게 "신고"를 한다. 형식: "경례! 신고합니다. 계급 성명은 ○○부로 ○○을 명받았습니다. 이에 신고합니다. 경례!"',
     );
   };
+  const leave = () => {
+    s.go("world");
+    s.save();
+  };
+  // ⌨️ 숫자키로 신고 문장을 고르고, 중대장의 답을 들은 뒤에는 Enter로 생활관에 돌아간다 (진화 연출 중에는 그쪽이 키를 받는다)
+  useEffect(() => {
+    if (!evolved) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (answered === null) {
+        const o = opts[Number(e.key) - 1];
+        if (o) {
+          e.preventDefault();
+          answer(o.ok);
+        }
+      } else if (e.key === "Enter" || e.key === " " || e.key === "e") {
+        e.preventDefault();
+        leave();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   if (!evolved) {
     return (
       <Evolution
@@ -651,10 +674,7 @@ export function Promotion() {
       ) : (
         <button
           className="primary big"
-          onClick={() => {
-            s.go("world");
-            s.save();
-          }}
+          onClick={leave}
         >
           새 계급장을 달고 생활관으로 ▶
         </button>
